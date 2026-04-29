@@ -1,0 +1,302 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap');
+
+:root {
+  --font-sans: 'Inter Tight', system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter Tight', system-ui, sans-serif;
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --bg: #070a14;
+  --bg-panel: #0e1322;
+  --bg-elev: #141a2e;
+  --line: #1f2638;
+  --line-strong: #2c3650;
+  --text: #eef0f7;
+  --text-muted: #9aa1b8;
+  --text-faint: #6c7388;
+  --accent: #7c9cff;
+  --accent-glow: #a78bfa;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: var(--font-sans);
+  color: var(--text);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 1200px 800px at 75% -10%, rgba(124, 156, 255, 0.10), transparent 60%),
+    radial-gradient(ellipse 900px 700px at 8% 110%, rgba(167, 139, 250, 0.08), transparent 60%);
+  background-attachment: fixed;
+  background-repeat: no-repeat, no-repeat;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "kern", "liga";
+}
+
+/* ── Markdown prose ─────────────────────────────────────────────────── */
+.prose-body {
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.prose-body > * + * { margin-top: 0.9em; }
+.prose-body > :first-child { margin-top: 0; }
+
+.prose-body h1, .prose-body h2, .prose-body h3,
+.prose-body h4, .prose-body h5, .prose-body h6 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.prose-body h1 { font-size: 24px; margin-top: 1.4em; line-height: 1.25; }
+.prose-body h2 { font-size: 19px; margin-top: 1.6em; line-height: 1.3; }
+.prose-body h3 { font-size: 16px; margin-top: 1.4em; line-height: 1.35; }
+.prose-body h4 { font-size: 15px; margin-top: 1.2em; }
+
+.prose-body p { margin: 0.9em 0; }
+.prose-body strong { font-weight: 600; color: #f2f4fa; }
+.prose-body em { font-style: italic; }
+
+.prose-body a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 0.5px;
+  text-underline-offset: 2.5px;
+  transition: color 0.1s;
+}
+.prose-body a:hover { color: #a8baff; }
+
+.prose-body a.wiki-link {
+  color: var(--accent);
+  text-decoration: none;
+  background: rgba(124, 156, 255, 0.10);
+  padding: 0.5px 4px;
+  border-radius: 3px;
+  border-bottom: 1px solid rgba(124, 156, 255, 0.32);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.prose-body a.wiki-link:hover {
+  background: rgba(124, 156, 255, 0.18);
+  border-bottom-color: rgba(124, 156, 255, 0.6);
+}
+.prose-body a.wiki-link.broken {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.10);
+  border-bottom-color: rgba(251, 113, 133, 0.4);
+  border-bottom-style: dashed;
+}
+
+.prose-body ul, .prose-body ol {
+  padding-left: 1.4em;
+  margin: 0.7em 0;
+}
+.prose-body ul { list-style: disc; }
+.prose-body ol { list-style: decimal; }
+.prose-body li { margin: 0.25em 0; }
+.prose-body li > p { margin: 0.2em 0; }
+.prose-body ul ul, .prose-body ol ol,
+.prose-body ul ol, .prose-body ol ul { margin: 0.2em 0; }
+.prose-body li::marker { color: var(--text-muted); }
+
+.prose-body blockquote {
+  margin: 1em 0;
+  padding: 0.4em 0 0.4em 1em;
+  border-left: 3px solid rgba(124, 156, 255, 0.35);
+  color: #c8ccd8;
+  font-style: italic;
+}
+
+.prose-body hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  margin: 1.6em 0;
+}
+
+.prose-body table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+}
+.prose-body table th,
+.prose-body table td {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  padding: 6px 11px;
+  text-align: left;
+  vertical-align: top;
+}
+.prose-body table th {
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 500;
+}
+
+/* Inline code and code blocks */
+.prose-body :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 1.5px 5px;
+  border-radius: 3px;
+  background: rgba(124, 156, 255, 0.10);
+  color: #c9d3ff;
+  border: 1px solid rgba(124, 156, 255, 0.18);
+}
+.prose-body pre {
+  font-family: var(--font-mono);
+  background: #0a0f1e;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 11px 13px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 1em 0;
+  color: var(--text);
+}
+.prose-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  border-radius: 0;
+  border: 0;
+}
+
+/* GitHub-style task lists */
+.prose-body ul li.task-list-item { list-style: none; margin-left: -1.4em; }
+.prose-body ul li.task-list-item input[type="checkbox"] {
+  margin-right: 0.5em; vertical-align: middle;
+}
+
+/* ── Highlight.js theme (dark/space) ────────────────────────────────── */
+.hljs { background: transparent; color: var(--text); }
+.hljs-comment, .hljs-quote { color: var(--text-faint); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-meta { color: #c084fc; }
+.hljs-string, .hljs-attr, .hljs-doctag { color: #86efac; }
+.hljs-number, .hljs-literal { color: #fb7185; }
+.hljs-built_in, .hljs-class .hljs-title, .hljs-title.class_ { color: #fbbf24; }
+.hljs-title.function_, .hljs-section, .hljs-name { color: #7c9cff; }
+.hljs-variable, .hljs-template-variable { color: var(--text); }
+.hljs-type, .hljs-symbol { color: #fbbf24; }
+.hljs-tag { color: #7c9cff; }
+.hljs-attribute { color: #c084fc; }
+.hljs-regexp { color: #86efac; }
+.hljs-deletion { background: rgba(251, 113, 133, 0.15); }
+.hljs-addition { background: rgba(52, 211, 153, 0.15); }
+
+/* ── Diff rendering ─────────────────────────────────────────────────── */
+.diff-line { display: block; padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
+.diff-add { background: rgba(52, 211, 153, 0.16); }
+.diff-add::before { content: '+'; color: #34d399; margin-right: 8px; opacity: 0.85; }
+.diff-del { background: rgba(251, 113, 133, 0.14); }
+.diff-del::before { content: '−'; color: #fb7185; margin-right: 8px; opacity: 0.85; }
+.diff-ctx::before { content: ' '; margin-right: 8px; }
+.diff-ctx { color: var(--text-muted); }
+
+/* ── Scrollbars ─────────────────────────────────────────────────────── */
+.scroll-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 3px; }
+.scroll-thin::-webkit-scrollbar-thumb:hover { background: rgba(124, 156, 255, 0.40); }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Badges ─────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a8aebd;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.badge.open      { background: rgba(52, 211, 153, 0.13); color: #34d399; border-color: rgba(52, 211, 153, 0.22); }
+.badge.locked    { background: rgba(251, 113, 133, 0.14); color: #fb7185; border-color: rgba(251, 113, 133, 0.24); }
+.badge.proposed  { background: rgba(251, 191, 36, 0.14); color: #fbbf24; border-color: rgba(251, 191, 36, 0.24); }
+.badge.draft     { background: rgba(255, 255, 255, 0.06); color: #9aa0b3; }
+.badge.accepted  { background: rgba(52, 211, 153, 0.13); color: #34d399; border-color: rgba(52, 211, 153, 0.22); }
+.badge.rejected  { background: rgba(251, 113, 133, 0.14); color: #fb7185; border-color: rgba(251, 113, 133, 0.24); }
+.badge.superseded{ background: rgba(255, 255, 255, 0.04); color: #6e7484; }
+
+/* ── Form elements ──────────────────────────────────────────────────── */
+.form-input {
+  width: 100%; height: 36px; padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text);
+  font-size: 13.5px; outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+}
+.form-input::placeholder { color: var(--text-faint); }
+.form-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.18);
+  background: #161c33;
+}
+.form-textarea { font-family: var(--font-mono); resize: vertical; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 12px;
+  font-size: 12.5px; font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.btn:hover {
+  background: #1c2440;
+  border-color: var(--line-strong);
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: #93aaff;
+  border-color: #93aaff;
+  color: var(--bg);
+}
+.btn-icon { width: 32px; padding: 0; color: var(--text-muted); }
+.btn-icon:hover { color: var(--text); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Native form controls inherit bg from .form-input; <select> needs an
+   explicit dark background or the dropdown chrome flashes white. */
+select.form-input, select.h-8 {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+select option { background: var(--bg-panel); color: var(--text); }
+
+/* ── Dark-theme inversion for Tailwind black/X tints used as
+   borders/dividers/hovers. Keeps the locked components (FileTree,
+   GraphView) and any unedited chrome reading correctly without
+   editing them directly. ─────────────────────────────────────────── */
+.bg-black\/5            { background-color: rgba(255, 255, 255, 0.05); }
+.bg-black\/\[0\.02\]    { background-color: rgba(255, 255, 255, 0.03); }
+.hover\:bg-black\/5:hover{ background-color: rgba(255, 255, 255, 0.05); }
+.border-black\/5        { border-color: rgba(255, 255, 255, 0.05); }
+.border-black\/8        { border-color: rgba(255, 255, 255, 0.07); }
+.border-black\/10       { border-color: rgba(255, 255, 255, 0.10); }
+.border-black\/12       { border-color: rgba(255, 255, 255, 0.12); }
+
+/* The modal scrim sits on top of the dark background; the black/40
+   default would be invisible. Tint it deeper instead. */
+.bg-black\/40           { background-color: rgba(2, 4, 10, 0.72); backdrop-filter: blur(2px); }
