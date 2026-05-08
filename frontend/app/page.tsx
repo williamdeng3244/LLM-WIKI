@@ -2,11 +2,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
-  Bell, Bot, Pencil, Inbox, Search, BookOpen, Sliders,
+  Bell, Plug, Pencil, Inbox, Search, BookOpen, Sliders,
   SquarePen, FolderPlus, ArrowDownAZ, ArrowDownZA,
   ChevronsDownUp, ChevronsUpDown,
   Copy, Clipboard, History, Bookmark, FolderInput, Trash2,
-  ExternalLink, FilePlus,
+  ExternalLink, FilePlus, Files, BookText, ShieldCheck,
 } from 'lucide-react';
 import FileTree, {
   type FileTreeHandle, type SortMode, type ContextMenuInfo,
@@ -23,10 +23,13 @@ import PageView from '@/components/PageView';
 import ProposeDialog from '@/components/ProposeDialog';
 import ReviewQueue from '@/components/ReviewQueue';
 import ChatPanel from '@/components/ChatPanel';
-import AgentManager from '@/components/AgentManager';
+import MCPAccessPanel from '@/components/MCPAccessPanel';
 import SearchResults from '@/components/SearchResults';
 import NotificationsPanel from '@/components/NotificationsPanel';
 import QuickSwitcher, { pushRecent } from '@/components/QuickSwitcher';
+import SourcesPanel from '@/components/SourcesPanel';
+import SchemaEditor from '@/components/SchemaEditor';
+import LintPanel from '@/components/LintPanel';
 import { api, type Page, type Role, type User } from '@/lib/api';
 import { useGraphSettings } from '@/lib/graphSettings';
 
@@ -46,7 +49,10 @@ export default function Home() {
   // the active tab is on — used by the "New note" toolbar buttons.
   const [proposeAsNew, setProposeAsNew] = useState(false);
   const [showReview, setShowReview] = useState(false);
-  const [showAgents, setShowAgents] = useState(false);
+  const [showMcp, setShowMcp] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const [showSchema, setShowSchema] = useState(false);
+  const [showLint, setShowLint] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showGraphSettings, setShowGraphSettings] = useState(false);
@@ -472,10 +478,36 @@ export default function Home() {
 
           <button
             className="btn btn-icon"
-            onClick={() => setShowAgents(true)}
-            title="Manage agents"
+            onClick={() => setShowSources(true)}
+            title="Raw sources"
           >
-            <Bot size={14} />
+            <Files size={14} />
+          </button>
+
+          <button
+            className="btn btn-icon"
+            onClick={() => setShowSchema(true)}
+            title="Agent playbook (schema)"
+          >
+            <BookText size={14} />
+          </button>
+
+          {user?.role === 'admin' && (
+            <button
+              className="btn btn-icon"
+              onClick={() => setShowLint(true)}
+              title="Wiki lint (admin)"
+            >
+              <ShieldCheck size={14} />
+            </button>
+          )}
+
+          <button
+            className="btn btn-icon"
+            onClick={() => setShowMcp(true)}
+            title="MCP access — connect external LLM clients"
+          >
+            <Plug size={14} />
           </button>
 
           <div className="text-[11.5px] text-muted ml-1.5 truncate max-w-[120px]" title={user?.email}>
@@ -665,7 +697,26 @@ export default function Home() {
           }}
         />
       )}
-      {showAgents && <AgentManager onClose={() => setShowAgents(false)} />}
+      {showMcp && <MCPAccessPanel onClose={() => setShowMcp(false)} currentUser={user} />}
+      {showSources && (
+        <SourcesPanel
+          onClose={() => setShowSources(false)}
+          currentUser={user}
+          users={usersById}
+        />
+      )}
+      {showSchema && <SchemaEditor onClose={() => setShowSchema(false)} />}
+      {showLint && (
+        <LintPanel
+          onClose={() => setShowLint(false)}
+          onNavigate={(path) => navigate(path)}
+          onSuggestEdit={(path) => {
+            navigate(path);
+            setProposeAsNew(false);
+            setShowPropose(true);
+          }}
+        />
+      )}
       {showQuickSwitcher && (
         <QuickSwitcher
           pages={pages}

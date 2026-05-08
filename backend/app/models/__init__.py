@@ -7,6 +7,13 @@ from app.models.flag import Flag, FlagKind, FlagStatus
 from app.models.link_chunk import Link, Chunk
 from app.models.audit import AuditLog
 from app.models.notification import Notification
+from app.models.raw_source import RawSource, IngestStatus
+from app.models.provenance import RevisionProvenance
+from app.models.ingest_run import IngestRun, IngestRunStatus
+from app.models.lint import (
+    LintReport, LintReportStatus, LintIssue, LintIssueKind,
+    LintIssueSeverity, LintIssueStatus,
+)
 
 __all__ = [
     "User", "ApiToken", "Role", "ROLE_RANK",
@@ -14,4 +21,8 @@ __all__ = [
     "Revision", "RevisionStatus", "ReviewAction",
     "Comment", "Flag", "FlagKind", "FlagStatus",
     "Link", "Chunk", "AuditLog", "Notification",
+    "RawSource", "IngestStatus", "RevisionProvenance",
+    "IngestRun", "IngestRunStatus",
+    "LintReport", "LintReportStatus", "LintIssue", "LintIssueKind",
+    "LintIssueSeverity", "LintIssueStatus",
 ]

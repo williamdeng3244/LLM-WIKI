@@ -1,74 +1,47 @@
-"""Embeddings: Voyage AI when configured, sentence-transformers fallback otherwise.
+"""Local embeddings via sentence-transformers (no external API).
 
-The interface is identical so callers don't care which is used.
+Uses `all-MiniLM-L6-v2` (384-dim). The model is downloaded once on first
+use (~90 MB) and cached inside the backend container, then runs on CPU
+inside the same process — no network calls per chunk.
+
+Interface kept stable so callers don't change: `embed_texts(list[str])`
+returns `list[list[float]]`, `embed_query(str)` returns `list[float]`.
 """
+import asyncio
 import logging
-from typing import Optional
-
-from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
-# Lazy imports — neither library is required at module import time
-_voyage_client = None
-_st_model = None
+_model = None
+_lock = asyncio.Lock()
 
 
-def _provider() -> str:
-    return "voyage" if settings.voyage_api_key else "local"
+def _load_model():
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        log.info("Loading local embedding model: all-MiniLM-L6-v2 (384-dim)…")
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        log.info("Embedding model ready.")
+    return _model
+
+
+def _encode_sync(texts: list[str]) -> list[list[float]]:
+    model = _load_model()
+    arr = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+    return [v.tolist() for v in arr]
 
 
 async def embed_texts(texts: list[str], input_type: str = "document") -> list[list[float]]:
+    # `input_type` kept in the signature for backward compatibility with the
+    # old Voyage-flavored interface; sentence-transformers ignores it.
+    del input_type
     if not texts:
         return []
-    if _provider() == "voyage":
-        return await _embed_voyage(texts, input_type)
-    return _embed_local(texts)
+    async with _lock:  # serialize CPU-bound encodes; cheap given small batches
+        return await asyncio.to_thread(_encode_sync, texts)
 
 
 async def embed_query(text: str) -> list[float]:
     vecs = await embed_texts([text], input_type="query")
     return vecs[0]
-
-
-async def _embed_voyage(texts: list[str], input_type: str) -> list[list[float]]:
-    global _voyage_client
-    import voyageai
-    if _voyage_client is None:
-        _voyage_client = voyageai.AsyncClient(api_key=settings.voyage_api_key)
-    out: list[list[float]] = []
-    for i in range(0, len(texts), 128):
-        batch = texts[i:i + 128]
-        result = await _voyage_client.embed(
-            batch, model=settings.embedding_model, input_type=input_type,
-        )
-        out.extend(result.embeddings)
-    return out
-
-
-def _embed_local(texts: list[str]) -> list[list[float]]:
-    """sentence-transformers fallback (~384-dim by default model).
-
-    We pad/truncate to settings.embedding_dim so the same Vector column works
-    regardless of provider. This is crude but lets the schema stay stable.
-    """
-    global _st_model
-    from sentence_transformers import SentenceTransformer
-    if _st_model is None:
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
-        log.warning(
-            "Using local sentence-transformers (384-dim, padded to %d). "
-            "Set VOYAGE_API_KEY for production-quality embeddings.",
-            settings.embedding_dim,
-        )
-    raw = _st_model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
-    out = []
-    target = settings.embedding_dim
-    for v in raw:
-        v = v.tolist()
-        if len(v) < target:
-            v = v + [0.0] * (target - len(v))
-        elif len(v) > target:
-            v = v[:target]
-        out.append(v)
-    return out

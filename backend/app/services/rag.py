@@ -11,9 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models import Chunk, Page
+from app.models import Chunk, Page, Revision
 from app.services.claude_client import get_client
 from app.services.embeddings import embed_query
+from app.services.linker import extract_links, normalize_link_target
 
 
 SYSTEM_PROMPT = """You are the AI assistant for an internal company wiki. Answer the user's question using ONLY the SOURCES provided.
@@ -144,5 +145,142 @@ async def answer(
                 "chunk_id": r.chunk_id, "chunk_type": r.chunk_type,
                 "snippet": snippet, "language": r.language, "symbol": r.symbol,
                 "line_start": r.line_start, "line_end": r.line_end,
+            })
+    return answer_text, citations
+
+
+# ── Wiki-mode synthesis (Phase 5) ───────────────────────────────────────────
+
+WIKI_SYSTEM_PROMPT = """You are the AI assistant for an internal company wiki. Answer the user's question by synthesizing across the WIKI PAGES provided below.
+
+This wiki is the *compiled* knowledge base — pages have been deduplicated, cross-linked, and curated. Trust the pages as the source of truth; don't fall back to raw chunk-level fragments.
+
+Citation rules:
+- Every factual claim MUST end with a citation marker like [1], [2], etc., that maps to one of the WIKI PAGES.
+- Stack markers when multiple pages support a claim: "[1][3]".
+- If the wiki does not contain the answer, say so plainly. Do NOT invent facts.
+- When pages disagree, surface the disagreement explicitly instead of silently picking one.
+- Prefer concise synthesis over per-page summaries.
+"""
+
+# How many distinct pages to seed from chunk-search hits.
+WIKI_SEED_PAGES = 5
+# Maximum 1-hop neighbour pages added by following [[wikilinks]].
+WIKI_MAX_NEIGHBOURS = 4
+# Body length cap per page (keeps prompt size sane on long pages).
+WIKI_BODY_TRUNCATE = 2500
+
+
+async def wiki_synthesize(
+    session: AsyncSession, message: str, history: Optional[list[dict]] = None,
+) -> tuple[str, list[dict]]:
+    """Karpathy-style chat: read full wiki pages, follow wikilinks, cite at
+    page granularity instead of chunk granularity."""
+    history = history or []
+
+    # 1. Find candidate pages via chunk retrieval, dedupe by page_id.
+    rows = await retrieve(session, message, k=20)
+    if not rows:
+        return "I don't have any indexed content to answer from yet.", []
+
+    seen_page_ids: set[int] = set()
+    seed_pages: list[RetrievedChunk] = []
+    for r in rows:
+        if r.page_id in seen_page_ids:
+            continue
+        seen_page_ids.add(r.page_id)
+        seed_pages.append(r)
+        if len(seed_pages) >= WIKI_SEED_PAGES:
+            break
+
+    # 2. Load the full bodies of every seed page in chunk-search order so
+    #    the [N] indices line up predictably.
+    sources: list[dict] = []  # ordered list shown to Claude
+    by_page_id: dict[int, dict] = {}
+    for sp in seed_pages:
+        page = await session.get(Page, sp.page_id)
+        if page is None or page.current_revision_id is None:
+            continue
+        rev = await session.get(Revision, page.current_revision_id)
+        if rev is None:
+            continue
+        body = rev.body[:WIKI_BODY_TRUNCATE]
+        item = {
+            "page_id": page.id, "path": page.path, "title": page.title,
+            "body": body, "linked_from_n": None,
+        }
+        sources.append(item)
+        by_page_id[page.id] = item
+
+    # 3. 1-hop expansion: follow [[wikilinks]] in seed bodies.
+    all_paths = [r[0] for r in (await session.execute(select(Page.path))).all()]
+    neighbours_added = 0
+    for src_idx, item in enumerate(list(sources)):
+        if neighbours_added >= WIKI_MAX_NEIGHBOURS:
+            break
+        for raw_link in extract_links(item["body"]):
+            if neighbours_added >= WIKI_MAX_NEIGHBOURS:
+                break
+            target = normalize_link_target(raw_link, all_paths)
+            if not target:
+                continue
+            tp = (await session.execute(
+                select(Page).where(Page.path == target)
+            )).scalar_one_or_none()
+            if tp is None or tp.id in by_page_id or tp.current_revision_id is None:
+                continue
+            tr = await session.get(Revision, tp.current_revision_id)
+            if tr is None:
+                continue
+            ndata = {
+                "page_id": tp.id, "path": tp.path, "title": tp.title,
+                "body": tr.body[:WIKI_BODY_TRUNCATE],
+                # Reference the seed page by its 1-indexed source position.
+                "linked_from_n": src_idx + 1,
+            }
+            sources.append(ndata)
+            by_page_id[tp.id] = ndata
+            neighbours_added += 1
+
+    # 4. Build prompt.
+    parts = []
+    for i, s in enumerate(sources, 1):
+        header = f"[{i}] {s['path']} — \"{s['title']}\""
+        if s["linked_from_n"]:
+            header += f"  (linked from [{s['linked_from_n']}])"
+        parts.append(f"{header}\n\n{s['body']}")
+    sources_block = "\n\n---\n\n".join(parts)
+    user_message = f"WIKI PAGES:\n\n{sources_block}\n\n---\n\nQUESTION: {message}"
+
+    client = get_client()
+    msg = await client.messages.create(
+        model=settings.chat_model,
+        max_tokens=1500,
+        system=WIKI_SYSTEM_PROMPT,
+        messages=[*history, {"role": "user", "content": user_message}],
+    )
+    answer_text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
+
+    # 5. Build citations for the [N] markers Claude actually used.
+    used = sorted({int(m.group(1)) for m in CITE_RE.finditer(answer_text)})
+    citations: list[dict] = []
+    for n in used:
+        if 1 <= n <= len(sources):
+            s = sources[n - 1]
+            snippet = s["body"][:300] + ("…" if len(s["body"]) > 300 else "")
+            citations.append({
+                "n": n,
+                "page_path": s["path"],
+                "page_title": s["title"],
+                # Page-level citations don't have a chunk; encode that with
+                # chunk_id=0 and chunk_type='page' so the frontend can
+                # render appropriately (no line-range, click → page top).
+                "chunk_id": 0,
+                "chunk_type": "page",
+                "snippet": snippet,
+                "language": None,
+                "symbol": None,
+                "line_start": 0,
+                "line_end": 0,
             })
     return answer_text, citations

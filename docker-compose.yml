@@ -33,7 +33,6 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wiki}:${POSTGRES_PASSWORD:-wiki}@db:5432/${POSTGRES_DB:-wiki}
       REDIS_URL: redis://redis:6379/0
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       VAULT_PATH: /vault
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-prod}
       AUTH_MODE: ${AUTH_MODE:-stub}
@@ -42,6 +41,8 @@ services:
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
     volumes:
       - ./vault:/vault
+      - ./raw:/raw
+      - ./config:/config
       - ./backend:/app
     ports:
       - "8000:8000"
@@ -58,10 +59,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wiki}:${POSTGRES_PASSWORD:-wiki}@db:5432/${POSTGRES_DB:-wiki}
       REDIS_URL: redis://redis:6379/0
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       VAULT_PATH: /vault
     volumes:
       - ./vault:/vault
+      - ./raw:/raw
+      - ./config:/config
       - ./backend:/app
 
   frontend:

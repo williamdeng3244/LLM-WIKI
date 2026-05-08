@@ -12,3 +12,8 @@ db_data/
 .vscode/
 dist/
 .pytest_cache/
+
+# User-uploaded raw input documents (each install accumulates its own).
+raw/*
+!raw/.gitkeep
+

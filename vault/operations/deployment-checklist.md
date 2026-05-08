@@ -1,6 +1,8 @@
 ---
+tags:
+- ops
+- runbook
 title: Deployment checklist
-tags: [ops, runbook]
 ---
 
 # Deployment checklist

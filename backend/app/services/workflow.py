@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.permissions import can_review
 from app.models import (
     AuditLog, Notification, Page, PageStability,
-    Revision, RevisionStatus, User,
+    Revision, RevisionProvenance, RevisionStatus, User,
 )
 from app.services.indexer import reindex_page, resolve_all_links
 from app.services.vault import write_file
@@ -44,8 +44,12 @@ async def create_draft(
 
 
 async def submit_for_review(
-    session: AsyncSession, revision: Revision, author: User,
+    session: AsyncSession, revision: Revision, author: User, *,
+    force_review: bool = False,
 ) -> Revision:
+    """Submit a draft. With force_review=True the open-stability auto-publish
+    shortcut is skipped — used for agent-authored drafts so every change
+    enters the review queue regardless of page trust dial."""
     if revision.author_id != author.id:
         raise HTTPException(403, "Only the author can submit a draft.")
     if revision.status != RevisionStatus.draft:
@@ -54,7 +58,8 @@ async def submit_for_review(
     assert page is not None
 
     # Open pages auto-publish (the trust dial says "let it through")
-    if page.stability == PageStability.open:
+    # unless the caller has asked for force-review.
+    if page.stability == PageStability.open and not force_review:
         return await _publish(session, revision, page, reviewer=author, comment=None)
 
     revision.status = RevisionStatus.proposed
@@ -71,7 +76,9 @@ async def submit_for_review(
 
 async def review(
     session: AsyncSession, revision: Revision, reviewer: User,
-    decision: str, comment: Optional[str] = None,
+    decision: str, comment: Optional[str] = None, *,
+    reject_reason: Optional[str] = None,
+    reject_notes: Optional[str] = None,
 ) -> Revision:
     page = await session.get(Page, revision.page_id)
     assert page is not None
@@ -88,10 +95,24 @@ async def review(
         return await _publish(session, revision, page, reviewer=reviewer, comment=comment)
     if decision == "reject":
         revision.status = RevisionStatus.rejected
+        # Phase 3.6: persist reviewer's structured feedback on the
+        # provenance row when the rejected revision was agent-authored.
+        # This is the corpus future ingest prompts will learn from.
+        if reject_reason or reject_notes:
+            prov = (await session.execute(
+                select(RevisionProvenance)
+                .where(RevisionProvenance.revision_id == revision.id)
+            )).scalar_one_or_none()
+            if prov is not None:
+                prov.reject_reason = reject_reason
+                prov.reject_notes = reject_notes
         session.add(AuditLog(
             actor_id=reviewer.id, action="revision.reject",
             target_type="revision", target_id=revision.id,
-            payload={"page_id": page.id, "comment": comment},
+            payload={
+                "page_id": page.id, "comment": comment,
+                "reject_reason": reject_reason,
+            },
         ))
         session.add(Notification(
             user_id=revision.author_id, kind="revision_rejected",

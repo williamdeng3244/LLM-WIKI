@@ -7,9 +7,9 @@ from app.core.auth import current_user
 from app.core.db import get_session
 from app.core.permissions import can_review
 from app.models import (
-    CategoryEditor, Page, Revision, RevisionStatus, Role, User,
+    CategoryEditor, Page, Revision, RevisionProvenance, RevisionStatus, Role, User,
 )
-from app.schemas import RevisionOut, ReviewBody
+from app.schemas import RevisionOut, RevisionProvenanceOut, ReviewBody
 from app.services.workflow import review, submit_for_review
 
 router = APIRouter()
@@ -74,6 +74,21 @@ async def get_revision(
     return rev
 
 
+@router.get("/{revision_id}/provenance", response_model=RevisionProvenanceOut)
+async def get_revision_provenance(
+    revision_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),  # noqa: ARG001
+):
+    """Agent-authored revisions only. Returns 404 for human drafts."""
+    row = (await session.execute(
+        select(RevisionProvenance).where(RevisionProvenance.revision_id == revision_id)
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(404, "No provenance for this revision")
+    return row
+
+
 @router.post("/{revision_id}/submit", response_model=RevisionOut)
 async def submit(
     revision_id: int,
@@ -97,7 +112,11 @@ async def post_review(
         raise HTTPException(404, "Not found")
     if payload.decision not in ("accept", "reject", "request_changes"):
         raise HTTPException(400, "Invalid decision")
-    return await review(session, rev, user, payload.decision, payload.comment)
+    return await review(
+        session, rev, user, payload.decision, payload.comment,
+        reject_reason=payload.reject_reason,
+        reject_notes=payload.reject_notes,
+    )
 
 
 @router.put("/{revision_id}", response_model=RevisionOut)

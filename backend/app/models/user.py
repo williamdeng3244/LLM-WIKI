@@ -38,7 +38,13 @@ class User(Base):
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.contributor)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Agent ownership: agents are users owned by a human
+    # MCP接入开关:每个真人用户可独立控制是否允许通过MCP协议接入。
+    # 默认开启;管理员可在用户管理界面单独关闭某个用户。
+    # 全局开关settings.mcp_enabled优先级更高。
+    mcp_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Agent ownership: 历史遗留(已弃用)。新方案下agent通过MCP协议以
+    # 真人身份接入,不再创建独立的agent user。保留这两列以兼容旧数据。
     is_agent: Mapped[bool] = mapped_column(Boolean, default=False)
     owner_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True

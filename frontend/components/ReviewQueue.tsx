@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { X, Check, RotateCcw } from 'lucide-react';
+import { X, Check, RotateCcw, Bot, Quote, AlertTriangle } from 'lucide-react';
 import Markdown from './Markdown';
 import Diff from './Diff';
 import { api, type Revision, type User } from '@/lib/api';
@@ -20,6 +20,9 @@ export default function ReviewQueue({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [tab, setTab] = useState<Tab>('diff');
   const [comment, setComment] = useState('');
+  // Phase 3.6: optional reviewer feedback fields when rejecting agent drafts.
+  const [rejectReason, setRejectReason] = useState<string>('');
+  const [rejectNotes, setRejectNotes] = useState<string>('');
 
   async function load() {
     const list = await api.reviewQueue();
@@ -54,15 +57,37 @@ export default function ReviewQueue({
     () => (parentId ? api.getRevision(parentId) : null),
   );
 
+  // Provenance: only present for agent-authored revisions; 404 for human drafts.
+  const { data: provenance } = useSWR(
+    selected ? `prov:${selected.id}` : null,
+    async () => {
+      if (!selected) return null;
+      try {
+        return await api.getRevisionProvenance(selected.id);
+      } catch {
+        return null; // not agent-authored, or no provenance row
+      }
+    },
+    { revalidateOnFocus: false },
+  );
+
   useEffect(() => {
     setComment('');
     setTab('diff');
+    setRejectReason('');
+    setRejectNotes('');
   }, [selectedId]);
 
   async function review(decision: 'accept' | 'reject' | 'request_changes') {
     if (!selected) return;
     try {
-      await api.reviewRevision(selected.id, decision, comment || undefined);
+      // Phase 3.6: include the structured reject feedback only when
+      // rejecting an agent-authored draft. For human drafts these stay null.
+      const isAgentDraft = !!provenance?.is_agent_authored;
+      const extras = (decision === 'reject' && isAgentDraft)
+        ? { reject_reason: rejectReason || undefined, reject_notes: rejectNotes || undefined }
+        : undefined;
+      await api.reviewRevision(selected.id, decision, comment || undefined, extras);
       await load();
     } catch (e: unknown) {
       alert((e as Error).message);
@@ -137,7 +162,57 @@ export default function ReviewQueue({
                 <div className="text-[18px] font-medium mt-1">{selected.title}</div>
                 {selected.rationale && (
                   <div className="mt-3 text-[13px] italic text-ink/85 bg-amber-500/[0.08] border-l-2 border-amber-400 px-3 py-2 rounded-r">
-                    "{selected.rationale}"
+                    &ldquo;{selected.rationale}&rdquo;
+                  </div>
+                )}
+
+                {provenance && provenance.is_agent_authored && (
+                  <div className="mt-3 bg-accent/[0.08] border border-accent/30 rounded-md px-3 py-2.5 text-[12px]">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Bot size={12} className="text-accent" />
+                      <span className="font-medium text-ink">Agent-authored</span>
+                      {provenance.edit_kind && (
+                        <span className="badge ml-1">{provenance.edit_kind}</span>
+                      )}
+                      {provenance.confidence && (
+                        <span
+                          className={`badge ml-1 ${
+                            provenance.confidence === 'high' ? 'accepted'
+                            : provenance.confidence === 'low' ? 'rejected'
+                            : 'proposed'
+                          }`}
+                        >
+                          confidence: {provenance.confidence}
+                        </span>
+                      )}
+                    </div>
+                    {provenance.conflict_notes && (
+                      <div className="flex items-start gap-1.5 mb-2 text-rose-300">
+                        <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                        <span><strong>Conflict:</strong> {provenance.conflict_notes}</span>
+                      </div>
+                    )}
+                    {provenance.source_refs && provenance.source_refs.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="text-[10.5px] uppercase tracking-[0.18em] text-muted">
+                          Source grounding
+                        </div>
+                        {provenance.source_refs.map((r, i) => (
+                          <div key={i} className="flex items-start gap-1.5 text-muted">
+                            <Quote size={11} className="shrink-0 mt-0.5 text-accent" />
+                            <div>
+                              <div className="text-ink/85 italic">&ldquo;{r.quote_or_excerpt}&rdquo;</div>
+                              {r.location && (
+                                <div className="text-[10.5px] text-muted/80 mt-0.5">
+                                  {r.location}
+                                  {r.source_id != null && <> · raw source #{r.source_id}</>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="mt-3 flex bg-black/5 rounded-md p-0.5 w-fit">
@@ -171,6 +246,42 @@ export default function ReviewQueue({
                   </pre>
                 )}
               </div>
+
+              {/* Phase 3.6: optional reviewer feedback for agent-authored
+                  drafts. Surfaced only when this is an agent draft so human
+                  reviews don't carry extra friction. */}
+              {provenance?.is_agent_authored && (
+                <div className="px-6 py-3 border-t border-white/[0.04] bg-accent/[0.04]">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2">
+                    Reviewer feedback (optional, agent drafts only)
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      className="form-input h-8 max-w-[260px]"
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                    >
+                      <option value="">— Reject reason —</option>
+                      <option value="wrong_page">Wrong page</option>
+                      <option value="unsupported_claim">Unsupported claim</option>
+                      <option value="bad_summary">Bad summary</option>
+                      <option value="duplicate">Duplicate</option>
+                      <option value="wrong_tags">Wrong tags</option>
+                      <option value="too_broad">Too broad</option>
+                      <option value="too_speculative">Too speculative</option>
+                      <option value="permission_concern">Permission concern</option>
+                      <option value="formatting_issue">Formatting issue</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <input
+                      className="form-input flex-1 h-8 text-[12.5px]"
+                      placeholder="Notes (consumed by future ingest prompts)"
+                      value={rejectNotes}
+                      onChange={(e) => setRejectNotes(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Decision bar */}
               <div className="px-6 py-3 border-t border-black/10 flex items-center gap-3">

@@ -16,6 +16,7 @@ export type FlagStatus = 'open' | 'resolved' | 'dismissed';
 export type User = {
   id: number; email: string; name: string; role: Role;
   is_agent: boolean; owner_id: number | null;
+  mcp_enabled?: boolean; is_active?: boolean;
 };
 export type Category = {
   id: number; slug: string; name: string; description: string | null;
@@ -62,6 +63,95 @@ export type SearchResult = {
   page_id: number; page_path: string; page_title: string;
   chunk_id: number; chunk_type: string; snippet: string;
   line_start: number; line_end: number; score: number;
+};
+
+export type IngestStatus = 'pending' | 'ingesting' | 'done' | 'failed';
+
+export type LintReportStatus = 'planning' | 'done' | 'failed';
+export type LintIssueKind = 'orphan' | 'broken_link' | 'conflict' | 'stale' | 'source_drift' | 'other';
+export type LintIssueSeverity = 'low' | 'medium' | 'high';
+export type LintIssueStatus = 'open' | 'dismissed' | 'acted';
+
+export type LintReport = {
+  id: number;
+  triggered_by_id: number | null;
+  status: LintReportStatus;
+  summary: string | null;
+  error: string | null;
+  provider_model: string | null;
+  retrieval_strategy: string | null;
+  total_issues: number;
+  started_at: string;
+  finished_at: string | null;
+};
+
+export type LintIssue = {
+  id: number;
+  report_id: number;
+  kind: LintIssueKind;
+  severity: LintIssueSeverity;
+  title: string;
+  description: string | null;
+  affected_paths: string[] | null;
+  suggested_action: string | null;
+  status: LintIssueStatus;
+  dismissed_by_id: number | null;
+  dismissed_at: string | null;
+  dismiss_note: string | null;
+  created_at: string;
+};
+export type IngestRunStatus =
+  | 'planning' | 'pending_review' | 'applying'
+  | 'done' | 'dismissed' | 'superseded' | 'failed' | 'partially_failed';
+
+export type IngestEdit = {
+  kind: 'edit_existing' | 'create_new' | 'source_summary' | 'conflict';
+  path: string;
+  title: string;
+  body: string;
+  tags?: string[];
+  category_slug?: string;
+  stability?: 'open' | 'stable' | 'locked';
+  rationale: string;
+  confidence?: 'high' | 'medium' | 'low';
+  source_refs?: { source_id?: number | null; quote_or_excerpt: string; location?: string | null }[];
+  conflict_notes?: string;
+};
+
+export type IngestRun = {
+  id: number;
+  raw_source_id: number;
+  triggered_by_id: number | null;
+  agent_user_id: number | null;
+  status: IngestRunStatus;
+  plan_json: { summary?: string; edits?: IngestEdit[] } | null;
+  approved_edit_indices: number[] | null;
+  retrieval_strategy: string | null;
+  provider_model: string | null;
+  summary: string | null;
+  error: string | null;
+  edits_count: number;
+  skipped_count: number;
+  conflict_count: number;
+  applied_count: number;
+  failed_count: number;
+  started_at: string;
+  planned_at: string | null;
+  applied_at: string | null;
+  finished_at: string | null;
+};
+export type RawSource = {
+  id: number;
+  title: string;
+  description: string | null;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  ingest_status: IngestStatus;
+  last_ingested_at: string | null;
+  last_ingest_notes: string | null;
+  uploaded_by_id: number | null;
+  uploaded_at: string;
 };
 
 // ── Auth helpers ─────────────────────────────────────────────────────
@@ -122,9 +212,15 @@ export const api = {
   getRevision: (id: number) => call<Revision>(`/revisions/${id}`),
   submitRevision: (id: number) =>
     call<Revision>(`/revisions/${id}/submit`, { method: 'POST' }),
-  reviewRevision: (id: number, decision: 'accept' | 'reject' | 'request_changes', comment?: string) =>
+  reviewRevision: (
+    id: number,
+    decision: 'accept' | 'reject' | 'request_changes',
+    comment?: string,
+    extras?: { reject_reason?: string; reject_notes?: string },
+  ) =>
     call<Revision>(`/revisions/${id}/review`, {
-      method: 'POST', body: JSON.stringify({ decision, comment }),
+      method: 'POST',
+      body: JSON.stringify({ decision, comment, ...(extras || {}) }),
     }),
   updateDraft: (id: number, title: string, body: string, tags: string[], rationale?: string) => {
     const params = new URLSearchParams();
@@ -152,9 +248,13 @@ export const api = {
   // Graph + search + chat
   graph: () => call<GraphData>('/graph'),
   search: (q: string) => call<SearchResult[]>(`/search?q=${encodeURIComponent(q)}`),
-  chat: (message: string, history: { role: string; content: string }[] = []) =>
+  chat: (
+    message: string,
+    history: { role: string; content: string }[] = [],
+    mode: 'sources' | 'wiki' = 'sources',
+  ) =>
     call<ChatResponse>('/chat', {
-      method: 'POST', body: JSON.stringify({ message, history }),
+      method: 'POST', body: JSON.stringify({ message, history, mode }),
     }),
 
   // Users + agents (admin)
@@ -162,12 +262,34 @@ export const api = {
   setRole: (id: number, role: Role) =>
     call<User>(`/users/${id}/role?role=${role}`, { method: 'POST' }),
 
-  // Personal agents
-  listAgents: () => call<User[]>('/agents'),
-  createAgent: (name: string) =>
-    call<{ raw_token: string; id: number; name: string }>(
-      '/agents', { method: 'POST', body: JSON.stringify({ name }) },
+  // Personal MCP tokens (agents connect through MCP using these)
+  listMcpTokens: () =>
+    call<{ id: number; name: string; last_used_at: string | null;
+           expires_at: string | null; created_at: string;
+           revoked_at: string | null }[]>('/mcp-tokens'),
+  createMcpToken: (name: string) =>
+    call<{ raw_token: string; id: number; name: string;
+           last_used_at: string | null; expires_at: string | null;
+           created_at: string; revoked_at: string | null }>(
+      '/mcp-tokens', { method: 'POST', body: JSON.stringify({ name }) },
     ),
+  revokeMcpToken: (id: number) =>
+    call<{ ok: boolean }>(`/mcp-tokens/${id}`, { method: 'DELETE' }),
+  setUserMcpAccess: (userId: number, enabled: boolean) =>
+    call<User>(`/users/${userId}/mcp-access?enabled=${enabled}`, { method: 'POST' }),
+
+  // Lint pipeline (Phase 4)
+  listLintReports: () => call<LintReport[]>('/admin/lint/reports'),
+  getLintReport: (id: number) => call<LintReport>(`/admin/lint/reports/${id}`),
+  listLintIssues: (reportId: number) =>
+    call<LintIssue[]>(`/admin/lint/reports/${reportId}/issues`),
+  runLint: () => call<LintReport>('/admin/lint/run', { method: 'POST' }),
+  dismissLintIssue: (id: number, note?: string) =>
+    call<LintIssue>(`/admin/lint/issues/${id}/dismiss`, {
+      method: 'POST', body: JSON.stringify({ note }),
+    }),
+  markLintIssueActed: (id: number) =>
+    call<LintIssue>(`/admin/lint/issues/${id}/act`, { method: 'POST' }),
 
   // Notifications
   listNotifications: (only_unread = false) =>
@@ -176,4 +298,63 @@ export const api = {
     call(`/notifications/${id}/read`, { method: 'POST' }),
   markAllRead: () =>
     call('/notifications/read-all', { method: 'POST' }),
+
+  // Schema layer — agents.md (Karpathy's "idea file")
+  getIdeaFile: () => call<{
+    path: string; content: string; last_modified: string; can_edit: boolean;
+  }>('/admin/idea-file'),
+  updateIdeaFile: (content: string) => call<{
+    path: string; content: string; last_modified: string; can_edit: boolean;
+  }>('/admin/idea-file', { method: 'PUT', body: JSON.stringify({ content }) }),
+
+  // Revision provenance (only present for agent-authored revisions)
+  getRevisionProvenance: (id: number) =>
+    call<{
+      revision_id: number;
+      raw_source_id: number | null;
+      confidence: 'high' | 'medium' | 'low' | null;
+      source_refs: { source_id: number | null; quote_or_excerpt: string; location: string | null }[] | null;
+      conflict_notes: string | null;
+      edit_kind: string | null;
+      is_agent_authored: boolean;
+    }>(`/revisions/${id}/provenance`),
+
+  // Raw sources (Karpathy-style raw layer)
+  listRawSources: () => call<RawSource[]>('/raw'),
+  ingestRawSource: (id: number) =>
+    call<IngestRun>(`/raw/${id}/ingest`, { method: 'POST' }),
+  rawSourcePendingDrafts: (id: number) =>
+    call<{ revision_id: number; page_path: string; page_title: string; status: string; ingest_run_id: number | null }[]>(
+      `/raw/${id}/pending-drafts`,
+    ),
+  rawSourceRuns: (id: number) =>
+    call<IngestRun[]>(`/raw/${id}/runs`),
+
+  // Ingest runs
+  getIngestRun: (id: number) => call<IngestRun>(`/ingest-runs/${id}`),
+  applyIngestRun: (id: number, approved_indices?: number[]) =>
+    call<IngestRun>(`/ingest-runs/${id}/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ approved_indices: approved_indices ?? null }),
+    }),
+  dismissIngestRun: (id: number) =>
+    call<IngestRun>(`/ingest-runs/${id}/dismiss`, { method: 'POST' }),
+  retryIngestRun: (id: number) =>
+    call<IngestRun>(`/ingest-runs/${id}/retry`, { method: 'POST' }),
+  uploadRawSource: async (file: File, title?: string, description?: string): Promise<RawSource> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (title) fd.append('title', title);
+    if (description) fd.append('description', description);
+    const res = await fetch(`${API_BASE}/raw`, {
+      method: 'POST', body: fd, headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  },
+  updateRawSource: (id: number, body: { title?: string; description?: string }) =>
+    call<RawSource>(`/raw/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRawSource: (id: number) =>
+    call<void>(`/raw/${id}`, { method: 'DELETE' }),
+  rawSourceDownloadURL: (id: number) => `${API_BASE}/raw/${id}/download`,
 };

@@ -62,3 +62,26 @@ async def deactivate(
     await session.commit()
     await session.refresh(target)
     return target
+
+
+@router.post("/{user_id}/mcp-access", response_model=UserOut)
+async def set_mcp_access(
+    user_id: int, enabled: bool = True,
+    session: AsyncSession = Depends(get_session),
+    admin: User = Depends(require_role(Role.admin)),
+):
+    """Admin toggle: grant or revoke MCP接入 for a specific user."""
+    target = await session.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    prev = target.mcp_enabled
+    target.mcp_enabled = enabled
+    session.add(AuditLog(
+        actor_id=admin.id,
+        action="user.mcp_access_grant" if enabled else "user.mcp_access_revoke",
+        target_type="user", target_id=target.id,
+        payload={"from": prev, "to": enabled},
+    ))
+    await session.commit()
+    await session.refresh(target)
+    return target

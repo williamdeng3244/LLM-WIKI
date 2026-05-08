@@ -10,7 +10,7 @@ from app.core.auth import current_user
 from app.core.db import get_session
 from app.models import User
 from app.schemas import ChatRequest, ChatResponse
-from app.services.rag import answer
+from app.services.rag import answer, wiki_synthesize
 
 router = APIRouter()
 
@@ -19,7 +19,14 @@ router = APIRouter()
 async def chat(
     payload: ChatRequest,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(current_user),
+    user: User = Depends(current_user),  # noqa: ARG001
 ):
-    text, citations = await answer(session, payload.message, payload.history)
+    if payload.mode == "wiki":
+        text, citations = await wiki_synthesize(
+            session, payload.message, payload.history,
+        )
+    else:
+        text, citations = await answer(
+            session, payload.message, payload.history,
+        )
     return ChatResponse(answer=text, citations=citations)
