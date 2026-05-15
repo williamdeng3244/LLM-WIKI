@@ -57,14 +57,17 @@ user whose token they hold — no separate "agent users".
 
 ## Quickstart
 
-You need **Docker** + **Docker Compose** + an **Anthropic API key** with credit.
-Nothing else on your host.
+You need **Docker** + **Docker Compose** and a chat-LLM provider (Anthropic
+or any OpenAI-compatible endpoint). Nothing else on your host.
 
 ```bash
 git clone https://github.com/williamdeng3244/LLM-WIKI.git
 cd LLM-WIKI
 cp .env.example .env
-# Edit .env and set ANTHROPIC_API_KEY=sk-ant-… (required for chat + ingest + lint).
+# Edit .env. Either:
+#   LLM_PROVIDER=anthropic + ANTHROPIC_API_KEY=sk-ant-…
+# or:
+#   LLM_PROVIDER=openai + OPENAI_API_KEY=… (+ OPENAI_BASE_URL for non-OpenAI endpoints).
 docker compose up --build
 ```
 
@@ -80,6 +83,77 @@ Then:
 First boot of the backend container downloads the embedding model
 (`all-MiniLM-L6-v2`, ~90 MB) into the container's torch cache. Subsequent
 boots reuse it. If you `docker compose down -v` it'll re-download.
+
+## Choosing an LLM provider
+
+The chat panel, the ingest agent, and the lint pass all go through a
+single provider abstraction (`backend/app/services/llm_client.py`). Flip
+`LLM_PROVIDER` in `.env` and restart `backend` + `worker` — no code change.
+
+### Anthropic (default)
+
+```env
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+CHAT_MODEL=claude-sonnet-4-6
+```
+
+### OpenAI
+
+```env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_MODEL=gpt-4o-mini
+```
+
+### OpenAI-compatible endpoints
+
+Anything that speaks the Chat Completions API works — set `OPENAI_BASE_URL`
+to the alternate endpoint and pick a model your endpoint serves. Tested-shape
+configs:
+
+| Provider        | `OPENAI_BASE_URL`                                  | `OPENAI_CHAT_MODEL` example       |
+|-----------------|----------------------------------------------------|-----------------------------------|
+| Azure OpenAI    | `https://<resource>.openai.azure.com/openai/v1`    | `gpt-4o-mini` (deployment name)   |
+| Together AI     | `https://api.together.xyz/v1`                      | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| Groq            | `https://api.groq.com/openai/v1`                   | `llama-3.3-70b-versatile`         |
+| OpenRouter      | `https://openrouter.ai/api/v1`                     | `anthropic/claude-3.5-sonnet`     |
+| DeepSeek        | `https://api.deepseek.com/v1`                      | `deepseek-chat` (V4, supports tools) |
+| Moonshot / Kimi | `https://api.moonshot.cn/v1` (CN) · `https://api.moonshot.ai/v1` (intl) | `moonshot-v1-128k` or `kimi-k2-0711-preview` |
+| MiniMax         | `https://api.minimaxi.com/v1` (intl) · `https://api.minimax.chat/v1` (legacy) | `MiniMax-Text-01` (new) or `abab6.5s-chat` (legacy) |
+| Ollama          | `http://host.docker.internal:11434/v1`             | `llama3.1:8b-instruct`            |
+| vLLM            | `http://host.docker.internal:8000/v1`              | depends on served model           |
+| LM Studio       | `http://host.docker.internal:1234/v1`              | depends on loaded model           |
+
+Provider-specific notes:
+
+- **DeepSeek** — use `deepseek-chat` for ingest and lint (the alias always
+  resolves to the latest chat model — V4 at time of writing). The reasoning
+  variant `deepseek-reasoner` does **not** support tool/function calling, so
+  it will fail on ingest + lint; it works for chat-only setups but the agent
+  surfaces will error out.
+- **Moonshot / Kimi** — long-context shines for ingest of large source files
+  (`moonshot-v1-128k`); tool calling supported across the v1 series. Use the
+  `.cn` endpoint from inside China, `.ai` outside.
+- **MiniMax** — `MiniMax-Text-01` is the current default with native function
+  calling; the legacy `abab6.5s-chat` also works but `MiniMax-Text-01` is
+  preferred for new deployments. International endpoint is `minimaxi.com`,
+  legacy China endpoint is `minimax.chat`.
+
+Caveats with non-Anthropic providers:
+
+- **Tool calling is required** for ingest + lint (both use forced function
+  calls). Pick a model that supports tools — most modern hosted models do;
+  some local models do not.
+- **PDF ingest** uses Anthropic's native document block. On OpenAI providers
+  the backend falls back to text extraction via `pypdf` — scanned/image-only
+  PDFs degrade to "[no extractable text]". Convert to markdown first for best
+  results.
+- **Image ingest** is sent as a data-URI `image_url` block; only vision-capable
+  models will read it.
+- Embeddings are local (sentence-transformers, 384-dim) and unaffected by the
+  provider switch.
 
 ## Connecting Claude Desktop / Claude Code via MCP
 

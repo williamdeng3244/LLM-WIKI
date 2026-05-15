@@ -10,7 +10,19 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://wiki:wiki@localhost:5432/wiki"
     redis_url: str = "redis://localhost:6379/0"
 
+    # ── LLM provider selection ─────────────────────────────────────────
+    # 'anthropic' uses the Anthropic Messages API.
+    # 'openai' uses the OpenAI Chat Completions API — also compatible
+    # with any provider that mirrors that surface (Azure OpenAI, Together
+    # AI, Groq, Ollama, vLLM, LM Studio, OpenRouter, ...). Set
+    # OPENAI_BASE_URL to point at the alternate endpoint.
+    llm_provider: Literal["anthropic", "openai"] = "anthropic"
+
     anthropic_api_key: str = ""
+
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_chat_model: str = "gpt-4o-mini"
 
     vault_path: Path = Path("/vault")
     raw_path: Path = Path("/raw")  # immutable raw input documents

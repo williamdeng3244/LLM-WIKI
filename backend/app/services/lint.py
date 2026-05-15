@@ -25,7 +25,7 @@ from app.models import (
     LintIssueStatus, LintReport, LintReportStatus,
     Link, Page, Revision, User,
 )
-from app.services.claude_client import get_client
+from app.services.llm_client import active_model, tool_call as llm_tool_call
 
 log = logging.getLogger(__name__)
 
@@ -128,8 +128,7 @@ async def _gather_wiki_snapshot(session: AsyncSession) -> dict[str, Any]:
     return {"pages": snapshot, "page_count": len(pages), "link_count": len(links)}
 
 
-async def _call_claude(snapshot: dict[str, Any]) -> dict:
-    client = get_client()
+async def _call_llm(snapshot: dict[str, Any]) -> dict:
     system_prompt = (
         "You are a wiki-maintenance lint agent. Read the playbook below and "
         "scan the wiki snapshot for issues. Output ONLY via the "
@@ -161,22 +160,14 @@ async def _call_claude(snapshot: dict[str, Any]) -> dict:
             f"body:\n{p['body']}\n"
         )
 
-    response = await client.messages.create(
-        model=settings.chat_model,
-        max_tokens=8000,
+    return await llm_tool_call(
         system=system_prompt,
-        tools=[{
-            "name": LINT_TOOL_NAME,
-            "description": "Submit the lint findings as a structured report.",
-            "input_schema": LINT_TOOL_SCHEMA,
-        }],
-        tool_choice={"type": "tool", "name": LINT_TOOL_NAME},
-        messages=[{"role": "user", "content": [{"type": "text", "text": instruction}]}],
+        messages=[{"role": "user", "content": instruction}],
+        tool_name=LINT_TOOL_NAME,
+        tool_description="Submit the lint findings as a structured report.",
+        tool_schema=LINT_TOOL_SCHEMA,
+        max_tokens=8000,
     )
-    for block in response.content:
-        if getattr(block, "type", None) == "tool_use" and block.name == LINT_TOOL_NAME:
-            return block.input  # type: ignore[no-any-return]
-    raise RuntimeError("Claude did not return tool_use; refusing to proceed.")
 
 
 async def run_lint(
@@ -189,7 +180,7 @@ async def run_lint(
 
     try:
         snapshot = await _gather_wiki_snapshot(session)
-        result = await _call_claude(snapshot)
+        result = await _call_llm(snapshot)
 
         issues = result.get("issues") or []
         for it in issues:
@@ -214,7 +205,7 @@ async def run_lint(
 
         report.summary = result.get("summary")
         report.total_issues = len(issues)
-        report.provider_model = settings.chat_model
+        report.provider_model = active_model()
         report.retrieval_strategy = "full-snapshot"
         report.status = LintReportStatus.done
         report.finished_at = datetime.now(timezone.utc)

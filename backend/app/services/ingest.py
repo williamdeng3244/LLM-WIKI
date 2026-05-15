@@ -29,7 +29,7 @@ from app.models import (
     Page, PageStability, RawSource, Revision, RevisionProvenance,
     RevisionStatus, Role, User,
 )
-from app.services.claude_client import get_client
+from app.services.llm_client import active_model, tool_call as llm_tool_call
 from app.services.retrieval import RetrievalContext, gather_context
 from app.services.workflow import create_draft, submit_for_review
 
@@ -188,7 +188,9 @@ async def _recent_reject_feedback(session: AsyncSession) -> str:
     return "\n".join(lines)
 
 
-# ── Raw source -> Anthropic content blocks ─────────────────────────────────
+# ── Raw source -> provider-neutral content block ───────────────────────────
+# The block shape here matches `services.llm_client` generic blocks, not any
+# specific vendor SDK. The LLM client translates to Anthropic/OpenAI shapes.
 
 def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]]:
     path = Path(settings.raw_path) / rs.disk_filename
@@ -210,21 +212,15 @@ def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]
     if mime == PDF_MIME:
         return {
             "type": "document",
-            "source": {
-                "type": "base64",
-                "media_type": "application/pdf",
-                "data": base64.b64encode(raw_bytes).decode("ascii"),
-            },
+            "media_type": "application/pdf",
+            "data_base64": base64.b64encode(raw_bytes).decode("ascii"),
         }, None
 
     if mime.startswith("image/"):
         return {
             "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": mime,
-                "data": base64.b64encode(raw_bytes).decode("ascii"),
-            },
+            "media_type": mime,
+            "data_base64": base64.b64encode(raw_bytes).decode("ascii"),
         }, None
 
     return None, f"Unsupported MIME type: {mime} — convert to PDF/markdown/text first."
@@ -263,11 +259,10 @@ def _assemble_user_message(
     ]
 
 
-async def _call_claude(
+async def _call_llm(
     rs: RawSource, ctx: RetrievalContext, source_block: dict,
     *, reject_feedback: str = "",
 ) -> dict:
-    client = get_client()
     system_prompt = (
         "You are an LLM-Wiki ingest agent. Your job is to merge a raw input "
         "document into an existing wiki by proposing edits. Strictly follow "
@@ -277,22 +272,14 @@ async def _call_claude(
     if reject_feedback:
         system_prompt += "\n\n" + reject_feedback
     user_blocks = _assemble_user_message(rs, ctx, source_block)
-    response = await client.messages.create(
-        model=settings.chat_model,
-        max_tokens=8000,
+    return await llm_tool_call(
         system=system_prompt,
-        tools=[{
-            "name": INGEST_TOOL_NAME,
-            "description": "Submit the proposed wiki edits for human review.",
-            "input_schema": INGEST_TOOL_SCHEMA,
-        }],
-        tool_choice={"type": "tool", "name": INGEST_TOOL_NAME},
         messages=[{"role": "user", "content": user_blocks}],
+        tool_name=INGEST_TOOL_NAME,
+        tool_description="Submit the proposed wiki edits for human review.",
+        tool_schema=INGEST_TOOL_SCHEMA,
+        max_tokens=8000,
     )
-    for block in response.content:
-        if getattr(block, "type", None) == "tool_use" and block.name == INGEST_TOOL_NAME:
-            return block.input  # type: ignore[no-any-return]
-    raise RuntimeError("Claude did not return tool_use; refusing to proceed.")
 
 
 # ── PLAN PHASE ─────────────────────────────────────────────────────────────
@@ -324,7 +311,7 @@ async def run_plan_phase(
         # Phase 3.6 closed: surface recent reviewer rejections (with notes)
         # so the agent learns from prior failures instead of repeating them.
         reject_feedback = await _recent_reject_feedback(session)
-        result = await _call_claude(
+        result = await _call_llm(
             rs, ctx, source_block, reject_feedback=reject_feedback,
         )
 
@@ -347,7 +334,7 @@ async def run_plan_phase(
         run.plan_json = result
         run.summary = result.get("summary")
         run.retrieval_strategy = ctx.strategy
-        run.provider_model = settings.chat_model
+        run.provider_model = active_model()
         run.status = IngestRunStatus.pending_review
         run.planned_at = datetime.now(timezone.utc)
 

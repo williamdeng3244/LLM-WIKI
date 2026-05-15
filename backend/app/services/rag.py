@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import Chunk, Page, Revision
-from app.services.claude_client import get_client
 from app.services.embeddings import embed_query
 from app.services.linker import extract_links, normalize_link_target
+from app.services.llm_client import chat as llm_chat
 
 
 SYSTEM_PROMPT = """You are the AI assistant for an internal company wiki. Answer the user's question using ONLY the SOURCES provided.
@@ -125,14 +125,11 @@ async def answer(
 
     sources = _format_sources(rows)
     user_message = f"SOURCES:\n\n{sources}\n\n---\n\nQUESTION: {message}"
-    client = get_client()
-    msg = await client.messages.create(
-        model=settings.chat_model,
-        max_tokens=1024,
+    answer_text = await llm_chat(
         system=SYSTEM_PROMPT,
         messages=[*history, {"role": "user", "content": user_message}],
+        max_tokens=1024,
     )
-    answer_text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
 
     used = sorted({int(m.group(1)) for m in CITE_RE.finditer(answer_text)})
     citations = []
@@ -252,14 +249,11 @@ async def wiki_synthesize(
     sources_block = "\n\n---\n\n".join(parts)
     user_message = f"WIKI PAGES:\n\n{sources_block}\n\n---\n\nQUESTION: {message}"
 
-    client = get_client()
-    msg = await client.messages.create(
-        model=settings.chat_model,
-        max_tokens=1500,
+    answer_text = await llm_chat(
         system=WIKI_SYSTEM_PROMPT,
         messages=[*history, {"role": "user", "content": user_message}],
+        max_tokens=1500,
     )
-    answer_text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
 
     # 5. Build citations for the [N] markers Claude actually used.
     used = sorted({int(m.group(1)) for m in CITE_RE.finditer(answer_text)})
