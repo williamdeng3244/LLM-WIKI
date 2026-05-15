@@ -1,0 +1,29 @@
+# Override to run the published images from GitHub Container Registry
+# instead of building locally. Use with:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Pin TAG in .env (TAG=v0.1.0) to lock to a specific release; defaults
+# to the latest stable tag.
+services:
+  backend:
+    build: !reset null
+    image: ghcr.io/williamdeng3244/llm-wiki-backend:${TAG:-latest}
+    # The published image bakes in the source; mount only writable data.
+    volumes: !override
+      - ./vault:/vault
+      - ./raw:/raw
+      - ./config:/config
+
+  worker:
+    build: !reset null
+    image: ghcr.io/williamdeng3244/llm-wiki-backend:${TAG:-latest}
+    volumes: !override
+      - ./vault:/vault
+      - ./raw:/raw
+      - ./config:/config
+
+  frontend:
+    build: !reset null
+    image: ghcr.io/williamdeng3244/llm-wiki-frontend:${TAG:-latest}
+    volumes: !override []
