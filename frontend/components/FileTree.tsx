@@ -86,7 +86,7 @@ export type ContextMenuInfo =
   | { kind: 'folder'; x: number; y: number; name: string; folderPath: string; isEmpty: boolean };
 
 function NodeRow({
-  node, selected, onSelect, openSet, toggleOpen, onContextMenu,
+  node, selected, onSelect, openSet, toggleOpen, onContextMenu, onHover,
 }: {
   node: TreeNode;
   selected: string | null;
@@ -94,6 +94,10 @@ function NodeRow({
   openSet: Set<string>;
   toggleOpen: (k: string) => void;
   onContextMenu?: (info: ContextMenuInfo) => void;
+  // Hover signal to the graph view: emit the folder prefix being hovered
+  // (or the file's own path for files) so the graph can light up the
+  // corresponding nodes. Pass null on leave.
+  onHover?: (info: { kind: 'file' | 'folder'; path: string } | null) => void;
 }) {
   if (node.isFile) {
     const isSel = node.pagePath === selected;
@@ -107,6 +111,8 @@ function NodeRow({
             : 'hover:bg-white/[0.05] text-muted hover:text-ink'
         }`}
         onClick={() => onSelect(node.pagePath!)}
+        onMouseEnter={() => onHover?.({ kind: 'file', path: node.pagePath! })}
+        onMouseLeave={() => onHover?.(null)}
         onContextMenu={(e) => {
           e.preventDefault();
           onContextMenu?.({
@@ -130,6 +136,8 @@ function NodeRow({
       <button
         className="w-full text-left px-2 py-[3px] rounded text-[12.5px] font-medium flex items-center gap-1.5 hover:bg-white/[0.05] text-ink select-none transition-colors"
         onClick={() => toggleOpen(node.path)}
+        onMouseEnter={() => onHover?.({ kind: 'folder', path: node.path })}
+        onMouseLeave={() => onHover?.(null)}
         onContextMenu={(e) => {
           e.preventDefault();
           onContextMenu?.({
@@ -158,6 +166,7 @@ function NodeRow({
               openSet={openSet}
               toggleOpen={toggleOpen}
               onContextMenu={onContextMenu}
+              onHover={onHover}
             />
           ))}
         </div>
@@ -222,6 +231,10 @@ const FileTree = forwardRef<FileTreeHandle, {
   onPendingFolderCancel?: () => void;
   onOpenChange?: (count: number) => void;
   onContextMenu?: (info: ContextMenuInfo) => void;
+  // Hover bridge: fires for every row mouseenter/mouseleave. Page.tsx
+  // forwards this to GraphView so hovering a folder/file in the tree
+  // lights up the corresponding node(s) in the graph.
+  onHover?: (info: { kind: 'file' | 'folder'; path: string } | null) => void;
 }>(function FileTree({
   pages, selected, onSelect,
   sort = 'asc',
@@ -231,6 +244,7 @@ const FileTree = forwardRef<FileTreeHandle, {
   onPendingFolderCancel,
   onOpenChange,
   onContextMenu,
+  onHover,
 }, ref) {
   const tree = useMemo(
     () => buildTree(pages, sort, customFolders),
@@ -298,6 +312,7 @@ const FileTree = forwardRef<FileTreeHandle, {
           openSet={openSet}
           toggleOpen={toggle}
           onContextMenu={onContextMenu}
+          onHover={onHover}
         />
       ))}
     </div>

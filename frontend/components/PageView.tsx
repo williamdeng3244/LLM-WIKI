@@ -193,7 +193,7 @@ export default function PageView({
   }
 
   return (
-    <div className="h-full flex flex-col bg-[rgba(7,10,20,0.55)] backdrop-blur-[2px]">
+    <div className="h-full flex flex-col reading-wash">
       {/* Header */}
       <header className="px-8 pt-12 pb-8 border-b border-black/8">
         <div className="max-w-[68ch] mx-auto">

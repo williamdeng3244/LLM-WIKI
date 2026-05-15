@@ -300,3 +300,181 @@ select option { background: var(--bg-panel); color: var(--text); }
 /* The modal scrim sits on top of the dark background; the black/40
    default would be invisible. Tint it deeper instead. */
 .bg-black\/40           { background-color: rgba(2, 4, 10, 0.72); backdrop-filter: blur(2px); }
+
+/* ── Themed surfaces (used by VideoBackground + PageView) ─────────── */
+
+/* The scrim that sits over the looping background video. Light theme
+   gets a much lighter tint so the warm video shows through and dark
+   text on top of chrome remains readable. */
+.theme-scrim { background-color: rgba(7, 10, 20, 0.40); }
+
+/* The wash behind reading prose. Same idea — invert for light mode. */
+.reading-wash {
+  background-color: rgba(7, 10, 20, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+/* ── LIGHT THEME OVERRIDES ────────────────────────────────────────── */
+/* Triggered by setting `data-theme="light"` on <html>. We override the
+   subset of tokens that actually carry visible chrome. Body / page
+   backgrounds are invisible under the video most of the time, so the
+   override list intentionally focuses on chrome surfaces. */
+
+[data-theme="light"] {
+  --bg: #f5f1e8;
+  --bg-panel: #ffffff;
+  --bg-elev: #ffffff;
+  --line: rgba(0, 0, 0, 0.10);
+  --line-strong: rgba(0, 0, 0, 0.18);
+  --text: #1a1a1a;
+  --text-muted: #5a6273;
+  --text-faint: #9aa1b8;
+}
+
+[data-theme="light"] body {
+  color: var(--text);
+  background-color: var(--bg);
+  /* Hide the nebula gradients under light theme — they read as muddy
+     greens against the warm light video. */
+  background-image: none;
+}
+
+[data-theme="light"] .theme-scrim { background-color: rgba(255, 255, 255, 0.28); }
+[data-theme="light"] .reading-wash { background-color: rgba(255, 255, 255, 0.72); }
+
+/* Chrome surface colors: panel = white card; elev = same as panel but
+   slightly more opaque for raised elements. */
+[data-theme="light"] .bg-panel        { background-color: rgba(255, 255, 255, 0.92); }
+[data-theme="light"] .bg-panel\/85    { background-color: rgba(255, 255, 255, 0.85); }
+[data-theme="light"] .bg-panel\/80    { background-color: rgba(255, 255, 255, 0.80); }
+[data-theme="light"] .bg-panel\/60    { background-color: rgba(255, 255, 255, 0.62); }
+[data-theme="light"] .bg-panel\/55    { background-color: rgba(255, 255, 255, 0.55); }
+[data-theme="light"] .bg-panel\/40    { background-color: rgba(255, 255, 255, 0.45); }
+[data-theme="light"] .bg-elev         { background-color: #ffffff; }
+[data-theme="light"] .bg-elev\/40     { background-color: rgba(255, 255, 255, 0.55); }
+[data-theme="light"] .bg-elev\/80     { background-color: rgba(255, 255, 255, 0.80); }
+
+/* Borders flip from white-on-dark to black-on-light. */
+[data-theme="light"] .border-line     { border-color: rgba(0, 0, 0, 0.10); }
+[data-theme="light"] .border-white\/\[0\.04\] { border-color: rgba(0, 0, 0, 0.05); }
+[data-theme="light"] .border-white\/\[0\.06\] { border-color: rgba(0, 0, 0, 0.08); }
+[data-theme="light"] .border-white\/\[0\.08\] { border-color: rgba(0, 0, 0, 0.10); }
+[data-theme="light"] .border-white\/10        { border-color: rgba(0, 0, 0, 0.10); }
+
+/* The black/X tints I originally inverted to white for dark mode now
+   flip BACK to black for light mode. */
+[data-theme="light"] .bg-black\/5            { background-color: rgba(0, 0, 0, 0.05); }
+[data-theme="light"] .bg-black\/\[0\.02\]    { background-color: rgba(0, 0, 0, 0.03); }
+[data-theme="light"] .hover\:bg-black\/5:hover { background-color: rgba(0, 0, 0, 0.05); }
+[data-theme="light"] .border-black\/5        { border-color: rgba(0, 0, 0, 0.05); }
+[data-theme="light"] .border-black\/8        { border-color: rgba(0, 0, 0, 0.08); }
+[data-theme="light"] .border-black\/10       { border-color: rgba(0, 0, 0, 0.10); }
+[data-theme="light"] .border-black\/12       { border-color: rgba(0, 0, 0, 0.12); }
+[data-theme="light"] .bg-white\/\[0\.02\]    { background-color: rgba(0, 0, 0, 0.02); }
+[data-theme="light"] .bg-white\/\[0\.03\]    { background-color: rgba(0, 0, 0, 0.03); }
+[data-theme="light"] .bg-white\/\[0\.04\]    { background-color: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .bg-white\/\[0\.05\]    { background-color: rgba(0, 0, 0, 0.05); }
+[data-theme="light"] .bg-white\/\[0\.06\]    { background-color: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover { background-color: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover { background-color: rgba(0, 0, 0, 0.05); }
+[data-theme="light"] .hover\:bg-white\/\[0\.06\]:hover { background-color: rgba(0, 0, 0, 0.06); }
+
+/* Modal scrim — lighten in light mode so chrome behind shows through. */
+[data-theme="light"] .bg-black\/40 { background-color: rgba(50, 55, 70, 0.35); }
+
+/* Token colors via Tailwind classes — flip via variable rebinds when
+   possible, override directly for any class that hard-coded a hex. */
+[data-theme="light"] .text-ink        { color: #1a1a1a; }
+[data-theme="light"] .text-muted      { color: #5a6273; }
+[data-theme="light"] .text-ink\/85    { color: rgba(26, 26, 26, 0.85); }
+[data-theme="light"] .text-ink\/80    { color: rgba(26, 26, 26, 0.80); }
+[data-theme="light"] .text-muted\/70  { color: rgba(90, 98, 115, 0.70); }
+[data-theme="light"] .text-muted\/80  { color: rgba(90, 98, 115, 0.80); }
+[data-theme="light"] .text-muted\/85  { color: rgba(90, 98, 115, 0.85); }
+
+/* Prose body gets dark text + a soft cream code background. */
+[data-theme="light"] .prose-body              { color: #1a1a1a; }
+[data-theme="light"] .prose-body strong       { color: #0c0c0c; }
+[data-theme="light"] .prose-body blockquote   { color: #4a4a44; border-left-color: rgba(24, 95, 165, 0.45); }
+[data-theme="light"] .prose-body hr           { border-top-color: rgba(0, 0, 0, 0.12); }
+[data-theme="light"] .prose-body :not(pre) > code {
+  background: rgba(24, 95, 165, 0.10);
+  color: #0a3c70;
+  border-color: rgba(24, 95, 165, 0.18);
+}
+[data-theme="light"] .prose-body pre {
+  background: #f5f3ee;
+  color: #1a1a1a;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .prose-body table th { background: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .prose-body table th,
+[data-theme="light"] .prose-body table td { border-color: rgba(0, 0, 0, 0.12); }
+[data-theme="light"] .prose-body li::marker { color: #5a6273; }
+
+/* hljs theme tweaks for paper background. */
+[data-theme="light"] .hljs                 { color: #1a1a1a; }
+[data-theme="light"] .hljs-comment,
+[data-theme="light"] .hljs-quote           { color: #919189; }
+[data-theme="light"] .hljs-keyword,
+[data-theme="light"] .hljs-selector-tag    { color: #7c4ad8; }
+[data-theme="light"] .hljs-string,
+[data-theme="light"] .hljs-attr            { color: #1d7d4a; }
+[data-theme="light"] .hljs-number,
+[data-theme="light"] .hljs-literal         { color: #b04a59; }
+[data-theme="light"] .hljs-title.function_ { color: #185fa5; }
+
+/* Badges keep their hues but get a lighter base so they sit cleanly on
+   white panels. */
+[data-theme="light"] .badge          { background: rgba(0, 0, 0, 0.06); color: #4a5266; border-color: rgba(0, 0, 0, 0.04); }
+[data-theme="light"] .badge.open,
+[data-theme="light"] .badge.accepted { background: rgba(29, 158, 117, 0.14); color: #0e6d4d; border-color: rgba(29, 158, 117, 0.30); }
+[data-theme="light"] .badge.locked,
+[data-theme="light"] .badge.rejected { background: rgba(212, 83, 126, 0.16); color: #ad2e57; border-color: rgba(212, 83, 126, 0.34); }
+[data-theme="light"] .badge.proposed { background: rgba(186, 117, 23, 0.16); color: #82540f; border-color: rgba(186, 117, 23, 0.34); }
+[data-theme="light"] .badge.draft,
+[data-theme="light"] .badge.superseded { background: rgba(0, 0, 0, 0.06); color: #6b7280; }
+
+/* Form controls + buttons on light surfaces. */
+[data-theme="light"] .form-input {
+  background: #ffffff;
+  color: #1a1a1a;
+  border-color: rgba(0, 0, 0, 0.16);
+}
+[data-theme="light"] .form-input::placeholder { color: #9aa1b8; }
+[data-theme="light"] .form-input:focus {
+  border-color: var(--accent);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.20);
+}
+[data-theme="light"] .btn {
+  background: #ffffff;
+  color: #1a1a1a;
+  border-color: rgba(0, 0, 0, 0.14);
+}
+[data-theme="light"] .btn:hover { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.22); }
+[data-theme="light"] .btn-primary {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+[data-theme="light"] .btn-primary:hover { background: #6488ff; border-color: #6488ff; color: #ffffff; }
+[data-theme="light"] .btn-icon { color: #4a5266; }
+[data-theme="light"] .btn-icon:hover { color: #1a1a1a; }
+[data-theme="light"] select.form-input, [data-theme="light"] select.h-8 {
+  background: #ffffff; color: #1a1a1a;
+}
+[data-theme="light"] select option { background: #ffffff; color: #1a1a1a; }
+
+/* Scrollbar */
+[data-theme="light"] .scroll-thin::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); }
+[data-theme="light"] .scroll-thin::-webkit-scrollbar-thumb:hover { background: rgba(124, 156, 255, 0.50); }
+
+/* Code-block dark surfaces hardcoded as bg-[#0a0f1e] across various
+ * modals (ReviewQueue raw view, Diff, IngestPlanPreview body expander,
+ * MCPAccessPanel token/config snippets) — flip them to cream paper in
+ * light mode so the contained dark text stays readable. */
+[data-theme="light"] .bg-\[\#0a0f1e\] { background-color: #f5f3ee; color: #1a1a1a; }
+[data-theme="light"] .bg-\[\#0a0f1e\] .text-emerald-200 { color: #0e6d4d; }
+[data-theme="light"] .bg-\[\#0a0f1e\] .text-ink\/85 { color: rgba(26, 26, 26, 0.88); }
+

@@ -24,26 +24,37 @@ type Props = {
 
 export default function ContextMenu({ x, y, items, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  // Latest onClose without retriggering the effect when a parent passes
+  // an inline `() => setX(null)` and changes identity each render. Older
+  // code did `useEffect(..., [onClose])` which tore down and re-attached
+  // listeners every render, occasionally swallowing outside clicks.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    function isOutside(target: EventTarget | null): boolean {
+      return !!ref.current && !ref.current.contains(target as Node);
     }
-    function onCtx(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    function maybeClose(e: Event) {
+      if (isOutside(e.target)) onCloseRef.current();
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     }
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('contextmenu', onCtx);
+    // Capture phase + multiple event names: covers left-click, touch,
+    // right-click reopen elsewhere, and any inner element that calls
+    // stopPropagation on its own click handler.
+    document.addEventListener('pointerdown', maybeClose, true);
+    document.addEventListener('mousedown', maybeClose, true);
+    document.addEventListener('contextmenu', maybeClose, true);
     window.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('contextmenu', onCtx);
+      document.removeEventListener('pointerdown', maybeClose, true);
+      document.removeEventListener('mousedown', maybeClose, true);
+      document.removeEventListener('contextmenu', maybeClose, true);
       window.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, []);
 
   // Keep within the viewport once we know our size.
   useLayoutEffect(() => {

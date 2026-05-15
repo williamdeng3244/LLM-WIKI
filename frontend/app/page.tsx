@@ -6,7 +6,7 @@ import {
   SquarePen, FolderPlus, ArrowDownAZ, ArrowDownZA,
   ChevronsDownUp, ChevronsUpDown,
   Copy, Clipboard, History, Bookmark, FolderInput, Trash2,
-  ExternalLink, FilePlus, Files, BookText, ShieldCheck,
+  ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon,
 } from 'lucide-react';
 import FileTree, {
   type FileTreeHandle, type SortMode, type ContextMenuInfo,
@@ -30,6 +30,7 @@ import QuickSwitcher, { pushRecent } from '@/components/QuickSwitcher';
 import SourcesPanel from '@/components/SourcesPanel';
 import SchemaEditor from '@/components/SchemaEditor';
 import LintPanel from '@/components/LintPanel';
+import { useTheme } from '@/lib/theme';
 import { api, type Page, type Role, type User } from '@/lib/api';
 import { useGraphSettings } from '@/lib/graphSettings';
 
@@ -50,6 +51,7 @@ export default function Home() {
   const [proposeAsNew, setProposeAsNew] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
+  const { theme, toggle: toggleTheme } = useTheme();
   const [showSources, setShowSources] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
   const [showLint, setShowLint] = useState(false);
@@ -88,6 +90,12 @@ export default function Home() {
     x: number; y: number; items: MenuItem[];
   } | null>(null);
   const [historyForPath, setHistoryForPath] = useState<string | null>(null);
+
+  // Tree → graph hover bridge: hovering a folder or file in the left
+  // sidebar lights up the matching node(s) in the active graph view.
+  const [hoveredTree, setHoveredTree] = useState<
+    { kind: 'file' | 'folder'; path: string } | null
+  >(null);
 
   const [graphSettings, setGraphSettings] = useGraphSettings();
 
@@ -408,6 +416,14 @@ export default function Home() {
 
         {/* Actions */}
         <div className="ml-auto flex items-center gap-1.5">
+          <button
+            className="btn btn-icon"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
           {/* Dev: role switcher */}
           <select
             className="h-8 px-2 text-[11.5px] border border-line rounded-md bg-elev text-ink"
@@ -596,6 +612,7 @@ export default function Home() {
             onPendingFolderCancel={() => setPendingFolder(null)}
             onOpenChange={setTreeOpenCount}
             onContextMenu={onTreeContextMenu}
+            onHover={setHoveredTree}
           />
         </aside>
 
@@ -637,6 +654,8 @@ export default function Home() {
                   mode={activeTab.graphMode}
                   onSelect={navigate}
                   settings={graphSettings}
+                  treeHover={hoveredTree}
+                  pages={pages}
                 />
               ) : (
                 <div className="h-full flex items-center justify-center text-muted text-sm">

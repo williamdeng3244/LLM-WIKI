@@ -16,7 +16,7 @@ from __future__ import annotations
 import base64
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -118,6 +118,76 @@ def _load_idea_file() -> str:
         return "(idea file unreadable)"
 
 
+# ── Reviewer-feedback loop (Phase 3.6 closed) ────────────────────────────────
+
+# Window over which past rejections are surfaced to the agent. 90 days keeps
+# the feedback relevant without anchoring forever on old mistakes.
+REJECT_FEEDBACK_WINDOW_DAYS = 90
+# Per-reason quote cap. We always show aggregate counts; only the most recent
+# rejections get verbatim notes pasted in.
+REJECT_FEEDBACK_MAX_EXAMPLES = 6
+
+
+async def _recent_reject_feedback(session: AsyncSession) -> str:
+    """Aggregate recent rejected agent drafts into a prompt section.
+
+    Pulls `revision_provenance` rows where the linked revision was rejected
+    and a `reject_reason` was captured by the reviewer (Phase 3.6 surface).
+    Returns a markdown block the caller appends to the system prompt; the
+    agent uses it to avoid repeating its own historical failure patterns.
+
+    Empty string if there are no recent rejections — keeps the prompt clean
+    on a fresh install.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=REJECT_FEEDBACK_WINDOW_DAYS)
+    rows = (await session.execute(
+        select(RevisionProvenance, Revision, Page)
+        .join(Revision, RevisionProvenance.revision_id == Revision.id)
+        .join(Page, Page.id == Revision.page_id)
+        .where(
+            RevisionProvenance.is_agent_authored.is_(True),
+            RevisionProvenance.reject_reason.isnot(None),
+            Revision.status == RevisionStatus.rejected,
+            Revision.reviewed_at.isnot(None),
+            Revision.reviewed_at >= cutoff,
+        )
+        .order_by(Revision.reviewed_at.desc())
+        .limit(200)
+    )).all()
+    if not rows:
+        return ""
+
+    counts: dict[str, int] = {}
+    examples: list[tuple[str, str, str]] = []
+    for prov, _rev, page in rows:
+        reason = prov.reject_reason or "other"
+        counts[reason] = counts.get(reason, 0) + 1
+        if prov.reject_notes and len(examples) < REJECT_FEEDBACK_MAX_EXAMPLES:
+            note = prov.reject_notes.strip()
+            if note:
+                examples.append((reason, note, page.path))
+
+    lines: list[str] = [
+        f"--- RECENT REVIEWER REJECTIONS (last {REJECT_FEEDBACK_WINDOW_DAYS} days, "
+        f"{len(rows)} agent drafts) ---",
+        "Recent reviewers have rejected agent drafts for the following reasons. "
+        "Treat this as guidance for what to avoid in this ingest:",
+        "",
+        "Counts by category:",
+    ]
+    for reason, n in sorted(counts.items(), key=lambda x: -x[1]):
+        lines.append(f"  - {reason}: {n}×")
+    if examples:
+        lines.append("")
+        lines.append("Representative reviewer notes (verbatim):")
+        for reason, note, path in examples:
+            # Truncate any single note that's accidentally huge.
+            trimmed = note if len(note) <= 220 else note[:220] + "…"
+            lines.append(f"  - [{reason}] on '{path}': {trimmed}")
+    lines.append("--- END REJECTION FEEDBACK ---")
+    return "\n".join(lines)
+
+
 # ── Raw source -> Anthropic content blocks ─────────────────────────────────
 
 def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]]:
@@ -195,6 +265,7 @@ def _assemble_user_message(
 
 async def _call_claude(
     rs: RawSource, ctx: RetrievalContext, source_block: dict,
+    *, reject_feedback: str = "",
 ) -> dict:
     client = get_client()
     system_prompt = (
@@ -203,6 +274,8 @@ async def _call_claude(
         "the playbook below. Output ONLY via the `submit_ingest_result` tool.\n\n"
         f"--- PLAYBOOK ---\n{_load_idea_file()}\n--- END PLAYBOOK ---"
     )
+    if reject_feedback:
+        system_prompt += "\n\n" + reject_feedback
     user_blocks = _assemble_user_message(rs, ctx, source_block)
     response = await client.messages.create(
         model=settings.chat_model,
@@ -248,7 +321,12 @@ async def run_plan_phase(
         assert source_block is not None
 
         ctx = await gather_context(session, rs)
-        result = await _call_claude(rs, ctx, source_block)
+        # Phase 3.6 closed: surface recent reviewer rejections (with notes)
+        # so the agent learns from prior failures instead of repeating them.
+        reject_feedback = await _recent_reject_feedback(session)
+        result = await _call_claude(
+            rs, ctx, source_block, reject_feedback=reject_feedback,
+        )
 
         edits = result.get("edits") or []
         # Counts for the preview UI.
