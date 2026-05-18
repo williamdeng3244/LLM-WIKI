@@ -91,23 +91,44 @@ jobs:
             echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Build runtime bundle
+        id: bundle
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          DIR="llm-wiki-${TAG}"
+          mkdir -p "$DIR/raw"
+          cp -r vault config "$DIR/"
+          cp docker-compose.yml docker-compose.prod.yml .env.example README.md "$DIR/"
+          touch "$DIR/raw/.gitkeep"
+          ARCHIVE="llm-wiki-${TAG}-bundle.tar.gz"
+          tar czf "$ARCHIVE" "$DIR"
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+          ls -lh "$ARCHIVE"
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           name: ${{ steps.tag.outputs.name }}
           generate_release_notes: true
+          files: ${{ steps.bundle.outputs.archive }}
           body: |
-            ## Docker images
-
-            Backend  → `ghcr.io/${{ github.repository_owner }}/llm-wiki-backend:${{ steps.tag.outputs.name }}`
-            Frontend → `ghcr.io/${{ github.repository_owner }}/llm-wiki-frontend:${{ steps.tag.outputs.name }}`
-
-            Pull and run:
+            ## Quick install (no clone required)
 
             ```bash
-            docker pull ghcr.io/${{ github.repository_owner }}/llm-wiki-backend:${{ steps.tag.outputs.name }}
-            docker pull ghcr.io/${{ github.repository_owner }}/llm-wiki-frontend:${{ steps.tag.outputs.name }}
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.name }}/llm-wiki-${{ steps.tag.outputs.name }}-bundle.tar.gz | tar xz
+            cd llm-wiki-${{ steps.tag.outputs.name }}
+            cp .env.example .env   # then edit for API keys
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
             ```
 
-            See the repo README for a `docker-compose.yml` snippet that uses the published images instead of local builds.
+            The bundle ships compose files, seed `vault/` pages, the `config/agents.md`
+            playbook, an empty `raw/`, and `.env.example`. Images pull from ghcr.io
+            automatically — no source build needed.
+
+            ## Docker images
+
+            - Backend  → `ghcr.io/${{ github.repository_owner }}/llm-wiki-backend:${{ steps.tag.outputs.name }}`
+            - Frontend → `ghcr.io/${{ github.repository_owner }}/llm-wiki-frontend:${{ steps.tag.outputs.name }}`
+
+            Both are multi-arch (`linux/amd64` + `linux/arm64`).
