@@ -136,10 +136,10 @@ export default function LintPanel({
       >
         <header className="px-5 py-3 border-b border-line flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-[14px] flex items-center gap-2">
+            <h3 className="font-medium text-[1rem] flex items-center gap-2">
               <ShieldCheck size={15} className="text-accent" /> Wiki lint
             </h3>
-            <div className="text-[11.5px] text-muted">
+            <div className="text-[0.8214rem] text-muted">
               Read-only audit pass. Findings are surfaced; the agent never auto-edits.
             </div>
           </div>
@@ -160,7 +160,7 @@ export default function LintPanel({
               : <><Play size={13} /> Run lint</>}
           </button>
           {activeReport && (
-            <span className="text-[11.5px] text-muted">
+            <span className="text-[0.8214rem] text-muted">
               Report #{activeReport.id} · {activeReport.status}
               {activeReport.provider_model && <> · {activeReport.provider_model}</>}
               {activeReport.finished_at && (
@@ -168,7 +168,7 @@ export default function LintPanel({
               )}
             </span>
           )}
-          <label className="ml-auto text-[11px] text-muted flex items-center gap-1.5 cursor-pointer">
+          <label className="ml-auto text-[0.7857rem] text-muted flex items-center gap-1.5 cursor-pointer">
             <input
               type="checkbox"
               checked={showDismissed}
@@ -180,41 +180,41 @@ export default function LintPanel({
         </div>
 
         {error && (
-          <div className="mx-5 mt-3 text-[11.5px] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-3 py-2 rounded">
+          <div className="mx-5 mt-3 text-[0.8214rem] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-3 py-2 rounded">
             {error}
           </div>
         )}
 
         <div className="flex-1 overflow-y-auto scroll-thin">
           {!activeReport ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted text-[13px] gap-2">
+            <div className="h-full flex flex-col items-center justify-center text-muted text-[0.9286rem] gap-2">
               <ShieldCheck size={24} />
               No lint reports yet. Click <strong className="text-ink">Run lint</strong> to start one.
             </div>
           ) : isPlanning ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted text-[13px] gap-2">
+            <div className="h-full flex flex-col items-center justify-center text-muted text-[0.9286rem] gap-2">
               <Loader2 size={20} className="animate-spin" />
               Agent is auditing the wiki…
             </div>
           ) : isFailed ? (
-            <div className="h-full flex flex-col items-center justify-center text-rose-300 text-[13px] px-6 text-center gap-2">
+            <div className="h-full flex flex-col items-center justify-center text-rose-300 text-[0.9286rem] px-6 text-center gap-2">
               <AlertTriangle size={20} />
               Lint failed: {activeReport.error || 'unknown error'}
             </div>
           ) : visibleCount === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted text-[13px] gap-2 px-6 text-center">
+            <div className="h-full flex flex-col items-center justify-center text-muted text-[0.9286rem] gap-2 px-6 text-center">
               <CheckCircle2 size={24} className="text-emerald-300" />
               {issues.length === 0
                 ? 'No issues found in this pass.'
                 : 'All issues dismissed. Toggle "Show dismissed" to view them.'}
               {activeReport.summary && (
-                <div className="italic mt-2 max-w-[60ch] text-[12px]">{activeReport.summary}</div>
+                <div className="italic mt-2 max-w-[60ch] text-[0.8571rem]">{activeReport.summary}</div>
               )}
             </div>
           ) : (
             <div className="px-5 py-4 space-y-4">
               {activeReport.summary && (
-                <div className="text-[12.5px] italic text-muted">
+                <div className="text-[0.8929rem] italic text-muted">
                   &ldquo;{activeReport.summary}&rdquo;
                 </div>
               )}
@@ -225,7 +225,7 @@ export default function LintPanel({
                 const Icon = KIND_ICON[kind];
                 return (
                   <section key={kind}>
-                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-muted mb-2">
+                    <div className="flex items-center gap-2 text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
                       <Icon size={11} />
                       <span>{KIND_LABEL[kind]}</span>
                       <span className="text-muted/70">({list.length})</span>
@@ -257,7 +257,7 @@ export default function LintPanel({
         </div>
 
         {reports.length > 1 && (
-          <div className="px-5 py-2 border-t border-white/[0.06] text-[11px] text-muted overflow-x-auto scroll-thin whitespace-nowrap">
+          <div className="px-5 py-2 border-t border-white/[0.06] text-[0.7857rem] text-muted overflow-x-auto scroll-thin whitespace-nowrap">
             History:
             {reports.slice(0, 12).map((r) => (
               <button
@@ -302,15 +302,15 @@ function IssueRow({
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`badge ${severityBadge(issue.severity)}`}>{issue.severity}</span>
             {issue.status !== 'open' && <span className="badge">{issue.status}</span>}
-            <span className="text-[13px] text-ink truncate">{issue.title}</span>
+            <span className="text-[0.9286rem] text-ink truncate">{issue.title}</span>
           </div>
           {issue.affected_paths && issue.affected_paths.length > 0 && (
-            <div className="text-[11px] text-muted mt-0.5 truncate font-mono">
+            <div className="text-[0.7857rem] text-muted mt-0.5 truncate font-mono">
               {issue.affected_paths.join(' · ')}
             </div>
           )}
           {expanded && (
-            <div className="mt-2 space-y-2 text-[12.5px]">
+            <div className="mt-2 space-y-2 text-[0.8929rem]">
               {issue.description && (
                 <div className="text-ink/85 whitespace-pre-wrap">{issue.description}</div>
               )}

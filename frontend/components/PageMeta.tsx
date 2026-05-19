@@ -33,10 +33,10 @@ export default function PageMeta({
   const latest = accepted[0];
 
   return (
-    <div className="space-y-5 text-[12.5px]">
+    <div className="space-y-5 text-[0.8929rem]">
       <section>
-        <div className="text-[10px] uppercase tracking-[0.12em] text-muted mb-2">Page</div>
-        <dl className="space-y-1.5 text-[12.5px]">
+        <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-2">Page</div>
+        <dl className="space-y-1.5 text-[0.8929rem]">
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Updated</dt>
             <dd>{formatDate(page.updated_at)}</dd>
@@ -61,7 +61,7 @@ export default function PageMeta({
       </section>
 
       <section>
-        <div className="text-[10px] uppercase tracking-[0.12em] text-muted mb-2">
+        <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-2">
           Backlinks
         </div>
         <Backlinks pagePath={page.path} onNavigate={onNavigate} />
@@ -69,20 +69,20 @@ export default function PageMeta({
 
       {accepted.length > 0 && (
         <section>
-          <div className="text-[10px] uppercase tracking-[0.12em] text-muted mb-2">
+          <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-2">
             History
           </div>
           <ul className="space-y-1">
             {accepted.slice(0, 6).map((r) => (
               <li key={r.id}>
                 <button
-                  className="w-full text-left text-[12px] hover:bg-black/5 rounded px-1.5 py-0.5 -mx-1.5 flex justify-between items-baseline gap-2"
+                  className="w-full text-left text-[0.8571rem] hover:bg-black/5 rounded px-1.5 py-0.5 -mx-1.5 flex justify-between items-baseline gap-2"
                   onClick={() => onSelectRevision?.(r)}
                 >
                   <span className="truncate">
                     {users.get(r.author_id)?.name || `user #${r.author_id}`}
                   </span>
-                  <span className="text-muted text-[11px] shrink-0">
+                  <span className="text-muted text-[0.7857rem] shrink-0">
                     {formatDate(r.created_at)}
                   </span>
                 </button>

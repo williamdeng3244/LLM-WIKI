@@ -66,18 +66,18 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
         <header className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <BookText size={15} className="text-accent shrink-0" />
-            <h3 className="font-medium text-[14px]">Agent playbook</h3>
-            <code className="text-[11px] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono truncate">
+            <h3 className="font-medium text-[1rem]">Agent playbook</h3>
+            <code className="text-[0.7857rem] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono truncate">
               {data?.path || '/config/agents.md'}
             </code>
             {!canEdit && !isLoading && (
-              <span className="flex items-center gap-1 text-[11px] text-muted">
+              <span className="flex items-center gap-1 text-[0.7857rem] text-muted">
                 <Lock size={11} /> read-only
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex bg-white/[0.04] rounded-md p-0.5 text-[11px]">
+            <div className="flex bg-white/[0.04] rounded-md p-0.5 text-[0.7857rem]">
               {(['edit', 'split', 'preview'] as const).map((m) => (
                 <button
                   key={m}
@@ -96,13 +96,13 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
           </div>
         </header>
 
-        <div className="px-5 py-2 border-b border-white/[0.06] text-[11.5px] text-muted">
+        <div className="px-5 py-2 border-b border-white/[0.06] text-[0.8214rem] text-muted">
           This file is injected into the agent's context for ingest and lint.
           Edit the conventions here and every future agent run picks them up.
         </div>
 
         {error && (
-          <div className="mx-5 mt-2 text-[11.5px] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-3 py-2 rounded">
+          <div className="mx-5 mt-2 text-[0.8214rem] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-3 py-2 rounded">
             {error}
           </div>
         )}
@@ -110,11 +110,11 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
         <div className={`flex-1 min-h-0 grid ${view === 'split' ? 'grid-cols-2' : 'grid-cols-1'}`}>
           {(view === 'edit' || view === 'split') && (
             <div className="flex flex-col min-h-0 border-r border-white/[0.06]">
-              <div className="px-5 py-2 text-[10px] uppercase tracking-[0.18em] text-muted bg-white/[0.02] border-b border-white/[0.06]">
+              <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.18em] text-muted bg-white/[0.02] border-b border-white/[0.06]">
                 Markdown
               </div>
               <textarea
-                className="form-input form-textarea flex-1 rounded-none border-0 px-5 py-3 text-[13px] leading-[1.6] focus:shadow-none disabled:opacity-70"
+                className="form-input form-textarea flex-1 rounded-none border-0 px-5 py-3 text-[0.9286rem] leading-[1.6] focus:shadow-none disabled:opacity-70"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 disabled={!canEdit || isLoading}
@@ -124,14 +124,14 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
           )}
           {(view === 'preview' || view === 'split') && (
             <div className="flex flex-col min-h-0">
-              <div className="px-5 py-2 text-[10px] uppercase tracking-[0.18em] text-muted bg-white/[0.02] border-b border-white/[0.06]">
+              <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.18em] text-muted bg-white/[0.02] border-b border-white/[0.06]">
                 Preview
               </div>
               <div className="flex-1 overflow-y-auto scroll-thin px-6 py-5">
                 {draft.trim() ? (
                   <Markdown>{draft}</Markdown>
                 ) : (
-                  <div className="text-muted text-[13px] italic">Empty.</div>
+                  <div className="text-muted text-[0.9286rem] italic">Empty.</div>
                 )}
               </div>
             </div>
@@ -139,7 +139,7 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="px-5 py-3 border-t border-line flex items-center gap-3">
-          <div className="text-[11px] text-muted flex items-center gap-2">
+          <div className="text-[0.7857rem] text-muted flex items-center gap-2">
             {data?.last_modified && (
               <span>
                 Last saved {new Date(data.last_modified).toLocaleString()}

@@ -23,6 +23,16 @@
 }
 
 html, body { height: 100%; }
+
+/* Fluid root font size. Everything in the UI is expressed in rem (Tailwind
+ * defaults plus the migrated text-[..rem] arbitrary sizes) so changing
+ * this one declaration rescales the whole UI. Floor 15px (above the old
+ * fixed 14px baseline so it reads better on small displays); ceiling 19px
+ * (comfortable on 4K). Respects browser zoom + OS text-size settings. */
+html {
+  font-size: clamp(15px, 0.9rem + 0.35vw, 19px);
+}
+
 body {
   font-family: var(--font-sans);
   color: var(--text);
@@ -32,7 +42,7 @@ body {
     radial-gradient(ellipse 900px 700px at 8% 110%, rgba(167, 139, 250, 0.08), transparent 60%);
   background-attachment: fixed;
   background-repeat: no-repeat, no-repeat;
-  font-size: 14px;
+  font-size: 1rem;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -42,7 +52,7 @@ body {
 /* ── Markdown prose ─────────────────────────────────────────────────── */
 .prose-body {
   font-family: var(--font-serif);
-  font-size: 15.5px;
+  font-size: 1.1071rem;
   line-height: 1.7;
   color: var(--text);
 }
@@ -56,10 +66,10 @@ body {
   letter-spacing: -0.01em;
   color: var(--text);
 }
-.prose-body h1 { font-size: 24px; margin-top: 1.4em; line-height: 1.25; }
-.prose-body h2 { font-size: 19px; margin-top: 1.6em; line-height: 1.3; }
-.prose-body h3 { font-size: 16px; margin-top: 1.4em; line-height: 1.35; }
-.prose-body h4 { font-size: 15px; margin-top: 1.2em; }
+.prose-body h1 { font-size: 1.7143rem; margin-top: 1.4em; line-height: 1.25; }
+.prose-body h2 { font-size: 1.3571rem; margin-top: 1.6em; line-height: 1.3; }
+.prose-body h3 { font-size: 1.1429rem; margin-top: 1.4em; line-height: 1.35; }
+.prose-body h4 { font-size: 1.0714rem; margin-top: 1.2em; }
 
 .prose-body p { margin: 0.9em 0; }
 .prose-body strong { font-weight: 600; color: #f2f4fa; }
@@ -125,7 +135,7 @@ body {
   border-collapse: collapse;
   margin: 1em 0;
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: 0.9643rem;
 }
 .prose-body table th,
 .prose-body table td {
@@ -156,7 +166,7 @@ body {
   border-radius: 6px;
   padding: 11px 13px;
   overflow-x: auto;
-  font-size: 13px;
+  font-size: 0.9286rem;
   line-height: 1.55;
   margin: 1em 0;
   color: var(--text);
@@ -210,7 +220,7 @@ body {
 /* ── Badges ─────────────────────────────────────────────────────────── */
 .badge {
   display: inline-block;
-  font-size: 10px;
+  font-size: 0.7143rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 2px 6px;
@@ -236,7 +246,7 @@ body {
   border-radius: 6px;
   background: var(--bg-elev);
   color: var(--text);
-  font-size: 13.5px; outline: none;
+  font-size: 0.9643rem; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
 }
 .form-input::placeholder { color: var(--text-faint); }
@@ -250,7 +260,7 @@ body {
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 32px; padding: 0 12px;
-  font-size: 12.5px; font-weight: 500;
+  font-size: 0.8929rem; font-weight: 500;
   border-radius: 6px;
   border: 1px solid var(--line);
   background: var(--bg-elev);

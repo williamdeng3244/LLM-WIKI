@@ -105,7 +105,7 @@ function NodeRow({
     return (
       <button
         data-path={node.pagePath}
-        className={`w-full text-left px-2 py-[3px] rounded text-[12.5px] flex items-center gap-1.5 transition-colors ${
+        className={`w-full text-left px-2 py-[3px] rounded text-[0.8929rem] flex items-center gap-1.5 transition-colors ${
           isSel
             ? 'bg-accent/[0.18] text-ink font-medium'
             : 'hover:bg-white/[0.05] text-muted hover:text-ink'
@@ -134,7 +134,7 @@ function NodeRow({
   return (
     <div>
       <button
-        className="w-full text-left px-2 py-[3px] rounded text-[12.5px] font-medium flex items-center gap-1.5 hover:bg-white/[0.05] text-ink select-none transition-colors"
+        className="w-full text-left px-2 py-[3px] rounded text-[0.8929rem] font-medium flex items-center gap-1.5 hover:bg-white/[0.05] text-ink select-none transition-colors"
         onClick={() => toggleOpen(node.path)}
         onMouseEnter={() => onHover?.({ kind: 'folder', path: node.path })}
         onMouseLeave={() => onHover?.(null)}
@@ -203,7 +203,7 @@ function PendingFolderRow({
       <input
         ref={inputRef}
         defaultValue={initial}
-        className="flex-1 bg-elev/80 border border-accent/60 rounded px-1.5 py-[1px] text-[12.5px] outline-none text-ink focus:border-accent focus:shadow-[0_0_0_2px_rgba(124,156,255,0.18)]"
+        className="flex-1 bg-elev/80 border border-accent/60 rounded px-1.5 py-[1px] text-[0.8929rem] outline-none text-ink focus:border-accent focus:shadow-[0_0_0_2px_rgba(124,156,255,0.18)]"
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();

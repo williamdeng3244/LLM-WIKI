@@ -79,9 +79,9 @@ export default function SearchResults({
       className="absolute top-full left-0 right-0 mt-1 bg-panel border border-line rounded-md shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6)] z-30 max-h-[420px] overflow-y-auto scroll-thin"
     >
       {loading && results.length === 0 ? (
-        <div className="px-3 py-3 text-[12.5px] text-muted">Searching…</div>
+        <div className="px-3 py-3 text-[0.8929rem] text-muted">Searching…</div>
       ) : results.length === 0 ? (
-        <div className="px-3 py-3 text-[12.5px] text-muted">No results for "{query}"</div>
+        <div className="px-3 py-3 text-[0.8929rem] text-muted">No results for "{query}"</div>
       ) : (
         results.map((r, i) => (
           <button
@@ -93,13 +93,13 @@ export default function SearchResults({
             onClick={() => onSelect(r.page_path)}
           >
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[13px] font-medium truncate">{r.page_title}</span>
-              <span className="text-[10.5px] text-muted shrink-0">
+              <span className="text-[0.9286rem] font-medium truncate">{r.page_title}</span>
+              <span className="text-[0.75rem] text-muted shrink-0">
                 {r.page_path}
                 {r.chunk_type === 'code' && ` · L${r.line_start}–${r.line_end}`}
               </span>
             </div>
-            <div className="text-[11.5px] text-muted mt-0.5 line-clamp-2">
+            <div className="text-[0.8214rem] text-muted mt-0.5 line-clamp-2">
               {r.snippet}
             </div>
           </button>

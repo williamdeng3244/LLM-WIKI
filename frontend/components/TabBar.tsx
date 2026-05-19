@@ -34,7 +34,7 @@ export default function TabBar({
           <div
             key={t.id}
             onClick={() => onActivate(t.id)}
-            className={`group h-9 flex items-center gap-1.5 px-3 cursor-pointer border-r border-white/[0.04] min-w-[140px] max-w-[220px] text-[11.5px] transition-colors ${
+            className={`group h-9 flex items-center gap-1.5 px-3 cursor-pointer border-r border-white/[0.04] min-w-[140px] max-w-[220px] text-[0.8214rem] transition-colors ${
               isActive
                 ? 'bg-paper/40 text-ink'
                 : 'text-muted hover:text-ink hover:bg-white/[0.03]'

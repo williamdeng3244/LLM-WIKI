@@ -148,14 +148,14 @@ export default function QuickSwitcher({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Find a page by title or path…"
-            className="flex-1 bg-transparent outline-none text-[14px] text-ink placeholder:text-muted"
+            className="flex-1 bg-transparent outline-none text-[1rem] text-ink placeholder:text-muted"
           />
-          <kbd className="text-[10px] text-muted bg-white/[0.06] border border-white/10 rounded px-1.5 py-0.5 font-mono">esc</kbd>
+          <kbd className="text-[0.7143rem] text-muted bg-white/[0.06] border border-white/10 rounded px-1.5 py-0.5 font-mono">esc</kbd>
         </div>
 
         <div ref={listRef} className="flex-1 overflow-y-auto scroll-thin py-1">
           {items.length === 0 ? (
-            <div className="px-4 py-6 text-center text-[12.5px] text-muted">
+            <div className="px-4 py-6 text-center text-[0.8929rem] text-muted">
               No pages match &quot;{q}&quot;
             </div>
           ) : (
@@ -171,8 +171,8 @@ export default function QuickSwitcher({
               >
                 <FileText size={13} className={i === idx ? 'text-accent' : 'text-muted'} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] truncate text-ink">{p.title}</div>
-                  <div className="text-[11px] text-muted truncate font-mono">{p.path}</div>
+                  <div className="text-[0.9286rem] truncate text-ink">{p.title}</div>
+                  <div className="text-[0.7857rem] text-muted truncate font-mono">{p.path}</div>
                 </div>
                 {recent && (
                   <Clock size={11} className="text-muted/60 shrink-0" aria-label="recent" />
@@ -188,18 +188,18 @@ export default function QuickSwitcher({
           )}
         </div>
 
-        <div className="px-3 py-2 border-t border-line text-[10.5px] text-muted flex items-center gap-3">
+        <div className="px-3 py-2 border-t border-line text-[0.75rem] text-muted flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[9px]">↑</kbd>
-            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[9px]">↓</kbd>
+            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[0.6429rem]">↑</kbd>
+            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[0.6429rem]">↓</kbd>
             navigate
           </span>
           <span className="flex items-center gap-1">
-            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[9px]">↵</kbd>
+            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[0.6429rem]">↵</kbd>
             open
           </span>
           <span className="flex items-center gap-1 ml-auto">
-            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[9px]">⌃O</kbd>
+            <kbd className="bg-white/[0.06] border border-white/10 rounded px-1 py-0.5 font-mono text-[0.6429rem]">⌃O</kbd>
             quick switcher
           </span>
         </div>

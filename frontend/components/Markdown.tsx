@@ -93,7 +93,7 @@ function MarkdownInner({
               const c = citesRef.current?.get(n);
               return (
                 <sup
-                  className="text-accent cursor-pointer mx-[0.5px] font-medium text-[10px] no-underline"
+                  className="text-accent cursor-pointer mx-[0.5px] font-medium text-[0.7143rem] no-underline"
                   title={c ? `${c.page_title} (lines ${c.line_start}–${c.line_end})` : `[${n}]`}
                   onClick={(e) => {
                     e.preventDefault();

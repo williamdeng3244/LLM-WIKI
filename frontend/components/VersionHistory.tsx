@@ -35,8 +35,8 @@ export default function VersionHistory({
       >
         <header className="px-4 py-3 border-b border-line flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <h3 className="font-medium text-[14px] shrink-0">Version history</h3>
-            <code className="text-[11px] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono truncate">
+            <h3 className="font-medium text-[1rem] shrink-0">Version history</h3>
+            <code className="text-[0.7857rem] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono truncate">
               {path}
             </code>
           </div>
@@ -46,7 +46,7 @@ export default function VersionHistory({
         </header>
         <div className="flex-1 overflow-y-auto scroll-thin">
           {revs.length === 0 ? (
-            <p className="p-6 text-center text-[13px] text-muted">No revisions yet.</p>
+            <p className="p-6 text-center text-[0.9286rem] text-muted">No revisions yet.</p>
           ) : (
             <ul>
               {revs.map((r) => {
@@ -59,7 +59,7 @@ export default function VersionHistory({
                     }`}
                     onClick={() => onOpenRevision?.(r)}
                   >
-                    <div className="flex items-center gap-2 text-[11px]">
+                    <div className="flex items-center gap-2 text-[0.7857rem]">
                       <span className={`badge ${r.status}`}>{r.status}</span>
                       <span className="text-muted">rev #{r.id}</span>
                       <span className="text-muted">·</span>
@@ -68,9 +68,9 @@ export default function VersionHistory({
                         {author?.name || `user #${r.author_id}`}
                       </span>
                     </div>
-                    <div className="mt-1 text-[13px] text-ink truncate">{r.title}</div>
+                    <div className="mt-1 text-[0.9286rem] text-ink truncate">{r.title}</div>
                     {r.rationale && (
-                      <div className="mt-1 text-[12px] text-muted italic line-clamp-2">
+                      <div className="mt-1 text-[0.8571rem] text-muted italic line-clamp-2">
                         &ldquo;{r.rationale}&rdquo;
                       </div>
                     )}

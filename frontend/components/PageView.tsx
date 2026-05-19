@@ -199,7 +199,7 @@ export default function PageView({
         <div className="max-w-[68ch] mx-auto">
           <div className="flex items-center justify-between gap-4 mb-5">
             <div
-              className="text-[10.5px] uppercase tracking-[0.18em] text-muted truncate"
+              className="text-[0.75rem] uppercase tracking-[0.18em] text-muted truncate"
               title={page.path}
             >
               {page.path.split('/').join(' · ')}
@@ -246,7 +246,7 @@ export default function PageView({
             </div>
           </div>
           <div className="border-t border-black/10 mb-7" />
-          <h1 className="font-serif font-medium text-ink text-[40px] leading-[1.08] tracking-[-0.018em]">
+          <h1 className="font-serif font-medium text-ink text-[2.8571rem] leading-[1.08] tracking-[-0.018em]">
             {page.title}
           </h1>
           <div className="flex items-center flex-wrap gap-2 mt-5">
@@ -282,7 +282,7 @@ export default function PageView({
 
           {showBacklinks && (
             <div className="mt-12 pt-5 border-t border-white/[0.08]">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-3">
+              <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-3">
                 Backlinks <span className="ml-1 text-muted/70">({backlinks.length})</span>
               </div>
               {backlinks.length === 0 ? (
@@ -295,8 +295,8 @@ export default function PageView({
                         onClick={() => onNavigate(b.path)}
                         className="text-left w-full px-2 py-1 rounded hover:bg-white/[0.04] transition-colors"
                       >
-                        <span className="text-[13px] text-accent hover:text-ink">{b.title}</span>
-                        <span className="text-muted text-[11px] ml-2 font-mono">{b.path}</span>
+                        <span className="text-[0.9286rem] text-accent hover:text-ink">{b.title}</span>
+                        <span className="text-muted text-[0.7857rem] ml-2 font-mono">{b.path}</span>
                       </button>
                     </li>
                   ))}
@@ -307,7 +307,7 @@ export default function PageView({
 
           {/* Comments */}
           <div className="mt-14 pt-6 border-t border-black/8">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted mb-3">
+            <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-3">
               Comments ({comments.length})
             </div>
             {comments.length === 0 ? (
@@ -317,15 +317,15 @@ export default function PageView({
                 {comments.map((c) => {
                   const author = users.get(c.author_id);
                   return (
-                    <div key={c.id} className="text-[13px] flex gap-3">
+                    <div key={c.id} className="text-[0.9286rem] flex gap-3">
                       <div
-                        className="w-7 h-7 rounded-full bg-accent/15 text-accent flex items-center justify-center text-[11px] font-medium shrink-0"
+                        className="w-7 h-7 rounded-full bg-accent/15 text-accent flex items-center justify-center text-[0.7857rem] font-medium shrink-0"
                         title={author?.email || ''}
                       >
                         {(author?.name || '?').slice(0, 1).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11.5px] text-muted">
+                        <div className="text-[0.8214rem] text-muted">
                           <span className="font-medium text-ink">
                             {author?.name || `user #${c.author_id}`}
                           </span>

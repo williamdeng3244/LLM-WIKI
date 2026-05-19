@@ -377,10 +377,10 @@ export default function Home() {
   return (
     <div className="relative z-10 h-screen flex flex-col">
       {/* Top bar */}
-      <header className="h-12 border-b border-white/[0.06] bg-panel/85 backdrop-blur flex items-center px-3 gap-3 text-[13px] relative z-20">
+      <header className="h-12 border-b border-white/[0.06] bg-panel/85 backdrop-blur flex items-center px-3 gap-3 text-[0.9286rem] relative z-20">
         <div className="flex items-center gap-2 px-2">
           <BookOpen size={16} className="text-accent" />
-          <span className="font-display font-medium tracking-[0.02em] text-[14px] text-ink">Enflame Wiki</span>
+          <span className="font-display font-medium tracking-[0.02em] text-[1rem] text-ink">Enflame Wiki</span>
         </div>
 
         {/* Search */}
@@ -389,7 +389,7 @@ export default function Home() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
             <input
               ref={searchInputRef}
-              className="form-input h-8 pl-9 pr-12 text-[13px]"
+              className="form-input h-8 pl-9 pr-12 text-[0.9286rem]"
               placeholder="Search pages, content, code…"
               value={searchQuery}
               onChange={(e) => {
@@ -398,7 +398,7 @@ export default function Home() {
               }}
               onFocus={() => setShowSearch(true)}
             />
-            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted bg-black/5 border border-black/10 rounded px-1.5 py-0.5 font-mono pointer-events-none">
+            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[0.7143rem] text-muted bg-black/5 border border-black/10 rounded px-1.5 py-0.5 font-mono pointer-events-none">
               ⌘K
             </kbd>
           </div>
@@ -426,7 +426,7 @@ export default function Home() {
           </button>
           {/* Dev: role switcher */}
           <select
-            className="h-8 px-2 text-[11.5px] border border-line rounded-md bg-elev text-ink"
+            className="h-8 px-2 text-[0.8214rem] border border-line rounded-md bg-elev text-ink"
             value={user?.role || 'admin'}
             onChange={(e) => changeRole(e.target.value as Role)}
             title="View as role (dev only)"
@@ -455,7 +455,7 @@ export default function Home() {
             >
               <Inbox size={13} />
               {queue.length > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-medium">
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[0.7143rem] font-medium">
                   {queue.length}
                 </span>
               )}
@@ -470,7 +470,7 @@ export default function Home() {
             >
               <Bell size={14} />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-medium">
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[0.7143rem] font-medium">
                   {unreadCount}
                 </span>
               )}
@@ -526,7 +526,7 @@ export default function Home() {
             <Plug size={14} />
           </button>
 
-          <div className="text-[11.5px] text-muted ml-1.5 truncate max-w-[120px]" title={user?.email}>
+          <div className="text-[0.8214rem] text-muted ml-1.5 truncate max-w-[120px]" title={user?.email}>
             {user?.name || '…'}
           </div>
         </div>
@@ -575,7 +575,7 @@ export default function Home() {
             </button>
             <span className="w-px h-4 bg-white/[0.08] mx-0.5" aria-hidden />
             <button
-              className={`w-7 h-7 rounded grid place-items-center text-[10px] font-mono transition-colors ${
+              className={`w-7 h-7 rounded grid place-items-center text-[0.7143rem] font-mono transition-colors ${
                 activeTab?.kind === 'graph' && activeTab.graphMode === '2d'
                   ? 'bg-accent/20 text-accent'
                   : 'text-muted hover:text-ink hover:bg-white/[0.06]'
@@ -586,7 +586,7 @@ export default function Home() {
               2D
             </button>
             <button
-              className={`w-7 h-7 rounded grid place-items-center text-[10px] font-mono transition-colors ${
+              className={`w-7 h-7 rounded grid place-items-center text-[0.7143rem] font-mono transition-colors ${
                 activeTab?.kind === 'graph' && activeTab.graphMode === '3d'
                   ? 'bg-accent/20 text-accent'
                   : 'text-muted hover:text-ink hover:bg-white/[0.06]'

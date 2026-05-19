@@ -478,7 +478,7 @@ export default function GraphView({
           {timelapseStep == null ? <Play size={14} /> : <Square size={14} />}
         </button>
         {timelapseStep != null && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 bg-panel/85 border border-line rounded-md px-3 py-1.5 text-[11.5px] text-muted backdrop-blur font-mono tabular-nums">
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 bg-panel/85 border border-line rounded-md px-3 py-1.5 text-[0.8214rem] text-muted backdrop-blur font-mono tabular-nums">
             {Math.min(timelapseStep, chronoOrder.length)} / {chronoOrder.length} pages
           </div>
         )}

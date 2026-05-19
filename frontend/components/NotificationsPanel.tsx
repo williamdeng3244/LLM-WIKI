@@ -41,17 +41,17 @@ export default function NotificationsPanel({
       className="absolute right-0 top-full mt-1 w-[360px] max-h-[480px] bg-panel border border-line rounded-md shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6)] z-30 flex flex-col"
     >
       <div className="px-3 py-2.5 border-b border-black/8 flex items-center justify-between">
-        <span className="text-[12.5px] font-medium flex items-center gap-1.5">
+        <span className="text-[0.8929rem] font-medium flex items-center gap-1.5">
           <Bell size={13} /> Notifications
           {unread > 0 && (
-            <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-medium">
+            <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[0.7143rem] font-medium">
               {unread}
             </span>
           )}
         </span>
         {unread > 0 && (
           <button
-            className="text-[11px] text-accent hover:underline flex items-center gap-1"
+            className="text-[0.7857rem] text-accent hover:underline flex items-center gap-1"
             onClick={onMarkAllRead}
           >
             <Check size={12} /> Mark all read
@@ -60,7 +60,7 @@ export default function NotificationsPanel({
       </div>
       <div className="flex-1 overflow-y-auto scroll-thin">
         {notifications.length === 0 ? (
-          <div className="px-3 py-6 text-center text-[12px] text-muted">
+          <div className="px-3 py-6 text-center text-[0.8571rem] text-muted">
             All caught up.
           </div>
         ) : (
@@ -73,8 +73,8 @@ export default function NotificationsPanel({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] leading-relaxed">{n.body}</div>
-                  <div className="text-[10.5px] text-muted mt-0.5">
+                  <div className="text-[0.8929rem] leading-relaxed">{n.body}</div>
+                  <div className="text-[0.75rem] text-muted mt-0.5">
                     {timeAgo(n.created_at)}
                     {n.link && (
                       <>

@@ -104,9 +104,9 @@ export default function ReviewQueue({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-3 border-b border-black/10 flex items-center justify-between">
-          <h3 className="font-medium text-[14px]">
+          <h3 className="font-medium text-[1rem]">
             Review queue
-            <span className="ml-2 text-[12px] text-muted font-normal">
+            <span className="ml-2 text-[0.8571rem] text-muted font-normal">
               ({items.length} pending)
             </span>
           </h3>
@@ -119,7 +119,7 @@ export default function ReviewQueue({
           {/* List */}
           <div className="border-r border-black/8 overflow-y-auto scroll-thin">
             {items.length === 0 ? (
-              <div className="p-5 text-[13px] text-muted">
+              <div className="p-5 text-[0.9286rem] text-muted">
                 Empty. Nice and clean.
               </div>
             ) : (
@@ -134,8 +134,8 @@ export default function ReviewQueue({
                     }`}
                     onClick={() => setSelectedId(r.id)}
                   >
-                    <div className="text-[13px] font-medium truncate">{r.title}</div>
-                    <div className="text-[11px] text-muted mt-0.5 truncate">
+                    <div className="text-[0.9286rem] font-medium truncate">{r.title}</div>
+                    <div className="text-[0.7857rem] text-muted mt-0.5 truncate">
                       {author?.name || `user #${r.author_id}`}
                       {' · '}
                       {new Date(r.created_at).toLocaleDateString()}
@@ -148,26 +148,26 @@ export default function ReviewQueue({
 
           {/* Detail */}
           {!selected ? (
-            <div className="flex items-center justify-center text-muted text-[13px]">
+            <div className="flex items-center justify-center text-muted text-[0.9286rem]">
               Select a revision to review.
             </div>
           ) : (
             <div className="flex flex-col min-h-0">
               {/* Header */}
               <div className="px-6 pt-4 pb-3 border-b border-black/8">
-                <div className="text-[11px] text-muted">
+                <div className="text-[0.7857rem] text-muted">
                   rev #{selected.id} ·{' '}
                   {users.get(selected.author_id)?.name || `user #${selected.author_id}`}
                 </div>
-                <div className="text-[18px] font-medium mt-1">{selected.title}</div>
+                <div className="text-[1.2857rem] font-medium mt-1">{selected.title}</div>
                 {selected.rationale && (
-                  <div className="mt-3 text-[13px] italic text-ink/85 bg-amber-500/[0.08] border-l-2 border-amber-400 px-3 py-2 rounded-r">
+                  <div className="mt-3 text-[0.9286rem] italic text-ink/85 bg-amber-500/[0.08] border-l-2 border-amber-400 px-3 py-2 rounded-r">
                     &ldquo;{selected.rationale}&rdquo;
                   </div>
                 )}
 
                 {provenance && provenance.is_agent_authored && (
-                  <div className="mt-3 bg-accent/[0.08] border border-accent/30 rounded-md px-3 py-2.5 text-[12px]">
+                  <div className="mt-3 bg-accent/[0.08] border border-accent/30 rounded-md px-3 py-2.5 text-[0.8571rem]">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Bot size={12} className="text-accent" />
                       <span className="font-medium text-ink">Agent-authored</span>
@@ -194,7 +194,7 @@ export default function ReviewQueue({
                     )}
                     {provenance.source_refs && provenance.source_refs.length > 0 && (
                       <div className="space-y-1.5">
-                        <div className="text-[10.5px] uppercase tracking-[0.18em] text-muted">
+                        <div className="text-[0.75rem] uppercase tracking-[0.18em] text-muted">
                           Source grounding
                         </div>
                         {provenance.source_refs.map((r, i) => (
@@ -203,7 +203,7 @@ export default function ReviewQueue({
                             <div>
                               <div className="text-ink/85 italic">&ldquo;{r.quote_or_excerpt}&rdquo;</div>
                               {r.location && (
-                                <div className="text-[10.5px] text-muted/80 mt-0.5">
+                                <div className="text-[0.75rem] text-muted/80 mt-0.5">
                                   {r.location}
                                   {r.source_id != null && <> · raw source #{r.source_id}</>}
                                 </div>
@@ -219,7 +219,7 @@ export default function ReviewQueue({
                   {(['diff', 'preview', 'raw'] as Tab[]).map((t) => (
                     <button
                       key={t}
-                      className={`h-7 px-3 text-[11px] rounded ${
+                      className={`h-7 px-3 text-[0.7857rem] rounded ${
                         tab === t ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
                       }`}
                       onClick={() => setTab(t)}
@@ -241,7 +241,7 @@ export default function ReviewQueue({
                   </Markdown>
                 )}
                 {tab === 'raw' && (
-                  <pre className="font-mono text-[12.5px] leading-[1.55] whitespace-pre-wrap bg-[#0a0f1e] text-ink border border-line rounded-md p-4">
+                  <pre className="font-mono text-[0.8929rem] leading-[1.55] whitespace-pre-wrap bg-[#0a0f1e] text-ink border border-line rounded-md p-4">
                     {selected.body}
                   </pre>
                 )}
@@ -252,7 +252,7 @@ export default function ReviewQueue({
                   reviews don't carry extra friction. */}
               {provenance?.is_agent_authored && (
                 <div className="px-6 py-3 border-t border-white/[0.04] bg-accent/[0.04]">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2">
+                  <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
                     Reviewer feedback (optional, agent drafts only)
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -274,7 +274,7 @@ export default function ReviewQueue({
                       <option value="other">Other</option>
                     </select>
                     <input
-                      className="form-input flex-1 h-8 text-[12.5px]"
+                      className="form-input flex-1 h-8 text-[0.8929rem]"
                       placeholder="Notes (consumed by future ingest prompts)"
                       value={rejectNotes}
                       onChange={(e) => setRejectNotes(e.target.value)}

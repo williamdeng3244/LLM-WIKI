@@ -90,10 +90,10 @@ export default function ChatPanel({
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2.5 border-b border-black/8 flex items-center justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-[0.12em] text-muted flex items-center gap-1.5 shrink-0">
+        <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted flex items-center gap-1.5 shrink-0">
           <Sparkles size={12} /> Assistant
         </div>
-        <div className="flex items-center bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5 text-[10.5px]">
+        <div className="flex items-center bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5 text-[0.75rem]">
           <button
             className={`px-2 h-6 rounded flex items-center gap-1 transition-colors ${
               mode === 'sources' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
@@ -126,9 +126,9 @@ export default function ChatPanel({
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-5">
         {messages.length === 0 ? (
-          <div className="text-muted leading-relaxed text-[12.5px]">
+          <div className="text-muted leading-relaxed text-[0.8929rem]">
             Ask anything about the wiki. Answers cite only published content.
-            <div className="mt-1 text-[11px] text-muted/85">
+            <div className="mt-1 text-[0.7857rem] text-muted/85">
               {mode === 'wiki'
                 ? 'Wiki mode: synthesizes across full pages and follows [[wikilinks]]. Best for "explain this concept" questions.'
                 : 'Sources mode: chunk-level retrieval with line-range citations. Best for "where is X documented" questions.'}
@@ -137,7 +137,7 @@ export default function ChatPanel({
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
-                  className="block text-left text-accent hover:underline text-[12px]"
+                  className="block text-left text-accent hover:underline text-[0.8571rem]"
                   onClick={() => setInput(s)}
                 >
                   {s} →
@@ -150,10 +150,10 @@ export default function ChatPanel({
         )}
         {busy && (
           <div>
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted mb-1">
+            <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-1">
               assistant
             </div>
-            <div className="flex items-center gap-1.5 text-muted text-[12.5px]">
+            <div className="flex items-center gap-1.5 text-muted text-[0.8929rem]">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" style={{ animationDelay: '120ms' }} />
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse" style={{ animationDelay: '240ms' }} />
@@ -208,7 +208,7 @@ function ChatBubble({
 
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-[0.12em] text-muted mb-1">
+      <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-1">
         {msg.role}
       </div>
       <Markdown
@@ -224,14 +224,14 @@ function ChatBubble({
           {msg.citations.map((c) => (
             <button
               key={c.n}
-              className="text-[11px] block w-full text-left px-2 py-1.5 border border-black/8 rounded-md hover:bg-black/5"
+              className="text-[0.7857rem] block w-full text-left px-2 py-1.5 border border-black/8 rounded-md hover:bg-black/5"
               onClick={() => onCitationClick(c.page_path)}
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-medium truncate">[{c.n}] {c.page_title}</span>
-                {c.symbol && <span className="text-muted shrink-0 text-[10.5px]">{c.symbol}</span>}
+                {c.symbol && <span className="text-muted shrink-0 text-[0.75rem]">{c.symbol}</span>}
               </div>
-              <div className="text-muted text-[10.5px] mt-0.5">
+              <div className="text-muted text-[0.75rem] mt-0.5">
                 {c.page_path}
                 {c.chunk_type === 'code' && ` · L${c.line_start}–${c.line_end}`}
               </div>

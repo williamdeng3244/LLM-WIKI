@@ -22,9 +22,9 @@ function Slider({
 }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between text-[11px]">
+      <div className="flex items-baseline justify-between text-[0.7857rem]">
         <span className="text-muted">{label}</span>
-        <span className="text-ink/85 font-mono tabular-nums text-[10.5px]">
+        <span className="text-ink/85 font-mono tabular-nums text-[0.75rem]">
           {fmt ? fmt(value) : value.toFixed(2)}
         </span>
       </div>
@@ -48,9 +48,9 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
   const resetAll = () => onChange({ ...DEFAULTS, colors: { ...DEFAULT_COLORS } });
 
   return (
-    <div className="absolute bottom-3 left-3 z-20 w-[280px] bg-panel/95 border border-line rounded-md shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7)] backdrop-blur p-4 text-[12px]">
+    <div className="absolute bottom-3 left-3 z-20 w-[280px] bg-panel/95 border border-line rounded-md shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7)] backdrop-blur p-4 text-[0.8571rem]">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[10px] uppercase tracking-[0.18em] text-muted">Graph Settings</h3>
+        <h3 className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted">Graph Settings</h3>
         <button className="text-muted hover:text-ink" onClick={onClose} aria-label="Close">
           <X size={14} />
         </button>
@@ -69,7 +69,7 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
       </div>
 
       <div className="mt-4 pt-3 border-t border-white/[0.06]">
-        <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2">Forces</div>
+        <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">Forces</div>
         <div className="space-y-3">
           <Slider label="Center force" value={settings.centerForce}
             min={0} max={0.3} step={0.005}
@@ -90,7 +90,7 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
       </div>
 
       <div className="mt-4 pt-3 border-t border-white/[0.06]">
-        <div className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2">Colors</div>
+        <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">Colors</div>
         <div className="grid grid-cols-3 gap-2">
           {CATEGORY_ORDER.map((cat) => {
             const hex = settings.colors[cat] || '#9aa1b8';
@@ -107,7 +107,7 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
                 </span>
-                <span className="text-[10.5px] text-muted truncate group-hover:text-ink">
+                <span className="text-[0.75rem] text-muted truncate group-hover:text-ink">
                   {cat}
                 </span>
               </label>
@@ -117,7 +117,7 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
       </div>
 
       <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
-        <label className="flex items-center gap-2 cursor-pointer text-[11px]">
+        <label className="flex items-center gap-2 cursor-pointer text-[0.7857rem]">
           <input
             type="checkbox"
             checked={settings.motionEnabled}
@@ -127,7 +127,7 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
           <span className="text-muted">Background motion</span>
         </label>
         <button
-          className="text-muted hover:text-ink flex items-center gap-1 text-[10.5px]"
+          className="text-muted hover:text-ink flex items-center gap-1 text-[0.75rem]"
           onClick={resetAll}
           title="Reset all graph settings"
         >

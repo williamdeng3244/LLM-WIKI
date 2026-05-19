@@ -152,8 +152,8 @@ export default function SourcesPanel({
       >
         <header className="px-5 py-3 border-b border-line flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-[14px]">Raw sources</h3>
-            <div className="text-[11.5px] text-muted">
+            <h3 className="font-medium text-[1rem]">Raw sources</h3>
+            <div className="text-[0.8214rem] text-muted">
               Immutable input documents the agent can read on ingest.
               Wiki pages are written from these — not edited in place.
             </div>
@@ -177,7 +177,7 @@ export default function SourcesPanel({
           }}
         >
           <Upload size={20} className="mx-auto text-muted mb-2" />
-          <div className="text-[13px] text-ink">Drop files here, or</div>
+          <div className="text-[0.9286rem] text-ink">Drop files here, or</div>
           <button
             className="btn btn-primary mt-3 inline-flex"
             disabled={!canUpload || uploading}
@@ -195,21 +195,21 @@ export default function SourcesPanel({
               e.target.value = '';
             }}
           />
-          <div className="text-[10.5px] text-muted mt-2">PDF, markdown, text, images. 50 MB max per file.</div>
+          <div className="text-[0.75rem] text-muted mt-2">PDF, markdown, text, images. 50 MB max per file.</div>
           {!canUpload && (
-            <div className="text-[10.5px] text-muted mt-1">Sign in as contributor or higher to upload.</div>
+            <div className="text-[0.75rem] text-muted mt-1">Sign in as contributor or higher to upload.</div>
           )}
         </div>
 
         {error && (
-          <div className="mx-5 mb-2 text-[11.5px] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-3 py-2 rounded">
+          <div className="mx-5 mb-2 text-[0.8214rem] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-3 py-2 rounded">
             {error}
           </div>
         )}
 
         <div className="flex-1 overflow-y-auto scroll-thin px-5 pb-5">
           {sources.length === 0 ? (
-            <div className="text-center text-muted text-[12.5px] py-6">
+            <div className="text-center text-muted text-[0.8929rem] py-6">
               No sources yet. Drop something above to get started.
             </div>
           ) : (
@@ -225,26 +225,26 @@ export default function SourcesPanel({
                     <Icon size={20} className="text-accent shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] text-ink truncate">{s.title}</span>
+                        <span className="text-[0.9286rem] text-ink truncate">{s.title}</span>
                         <span className={`badge ${s.ingest_status === 'done' ? 'accepted' : s.ingest_status === 'failed' ? 'rejected' : s.ingest_status === 'ingesting' ? 'proposed' : 'draft'}`}>
                           {s.ingest_status}
                         </span>
                       </div>
-                      <div className="text-[11px] text-muted mt-0.5 truncate font-mono">
+                      <div className="text-[0.7857rem] text-muted mt-0.5 truncate font-mono">
                         {s.original_filename} · {fmtSize(s.size_bytes)} · {s.mime_type}
                       </div>
-                      <div className="text-[10.5px] text-muted mt-1">
+                      <div className="text-[0.75rem] text-muted mt-1">
                         Uploaded by {uploader?.name || `user #${s.uploaded_by_id ?? '?'}`}
                         {' · '}
                         {new Date(s.uploaded_at).toLocaleString()}
                       </div>
                       {s.description && (
-                        <div className="text-[12px] italic text-muted mt-1">
+                        <div className="text-[0.8571rem] italic text-muted mt-1">
                           &ldquo;{s.description}&rdquo;
                         </div>
                       )}
                       {s.last_ingest_notes && (
-                        <div className="text-[11.5px] text-muted/85 mt-2 border-l-2 border-white/[0.08] pl-2">
+                        <div className="text-[0.8214rem] text-muted/85 mt-2 border-l-2 border-white/[0.08] pl-2">
                           {s.last_ingest_notes}
                         </div>
                       )}
@@ -336,10 +336,10 @@ export default function SourcesPanel({
             <div className="flex items-start gap-3 mb-3">
               <AlertTriangle size={18} className="text-amber-300 shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-medium text-[14px] text-ink">
+                <h4 className="font-medium text-[1rem] text-ink">
                   This source has {duplicateWarn.drafts.length} pending agent draft{duplicateWarn.drafts.length === 1 ? '' : 's'}
                 </h4>
-                <p className="text-[12.5px] text-muted mt-1 leading-relaxed">
+                <p className="text-[0.8929rem] text-muted mt-1 leading-relaxed">
                   Re-ingesting may create duplicate or conflicting drafts. Review or
                   resolve the existing drafts in the review queue first.
                 </p>
@@ -347,7 +347,7 @@ export default function SourcesPanel({
             </div>
             <ul className="space-y-1 max-h-[180px] overflow-y-auto scroll-thin mb-4">
               {duplicateWarn.drafts.map((d) => (
-                <li key={d.revision_id} className="text-[12px] text-muted flex items-center gap-2">
+                <li key={d.revision_id} className="text-[0.8571rem] text-muted flex items-center gap-2">
                   <span className={`badge ${d.status}`}>{d.status}</span>
                   <code className="font-mono truncate">{d.page_path}</code>
                   <span className="truncate">— {d.page_title}</span>
@@ -376,13 +376,13 @@ export default function SourcesPanel({
             <div className="flex items-start gap-3 mb-3">
               <AlertTriangle size={18} className="text-amber-300 shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-medium text-[14px] text-ink">External processing notice</h4>
-                <p className="text-[12.5px] text-muted mt-1 leading-relaxed">
+                <h4 className="font-medium text-[1rem] text-ink">External processing notice</h4>
+                <p className="text-[0.8929rem] text-muted mt-1 leading-relaxed">
                   This source ({ingestPrompt.mime_type}) will be sent to the
                   configured LLM provider (Anthropic) for analysis. Bytes leave
                   this server during ingest.
                 </p>
-                <p className="text-[12.5px] text-muted mt-2 leading-relaxed">
+                <p className="text-[0.8929rem] text-muted mt-2 leading-relaxed">
                   The agent will return a plan for human review. No drafts are
                   created until you approve the plan.
                 </p>
@@ -433,8 +433,8 @@ function SourceHistory({
     }
   }
 
-  if (isLoading) return <div className="text-[11.5px] text-muted py-2">Loading history…</div>;
-  if (runs.length === 0) return <div className="text-[11.5px] text-muted py-2">No ingest history yet.</div>;
+  if (isLoading) return <div className="text-[0.8214rem] text-muted py-2">Loading history…</div>;
+  if (runs.length === 0) return <div className="text-[0.8214rem] text-muted py-2">No ingest history yet.</div>;
   return (
     <ul className="mt-2 space-y-1.5 border-t border-white/[0.05] pt-2">
       {runs.map((r) => {
@@ -450,7 +450,7 @@ function SourceHistory({
         return (
           <li
             key={r.id}
-            className="text-[11.5px] flex items-start gap-2 px-2 py-1.5 rounded bg-white/[0.02]"
+            className="text-[0.8214rem] flex items-start gap-2 px-2 py-1.5 rounded bg-white/[0.02]"
           >
             <span className={`badge shrink-0 ${
               r.status === 'done' ? 'accepted'
@@ -467,7 +467,7 @@ function SourceHistory({
                   {agent?.name || (r.agent_user_id ? `agent #${r.agent_user_id}` : 'pending agent')}
                 </span>
               </div>
-              <div className="text-[10.5px] text-muted mt-0.5 truncate">
+              <div className="text-[0.75rem] text-muted mt-0.5 truncate">
                 {new Date(r.started_at).toLocaleString()}
                 {r.finished_at && <> → {new Date(r.finished_at).toLocaleString()}</>}
                 {' · '}
@@ -480,12 +480,12 @@ function SourceHistory({
                 {r.provider_model && <> · {r.provider_model}</>}
                 {r.retrieval_strategy && <> · {r.retrieval_strategy}</>}
               </div>
-              {r.error && <div className="text-[10.5px] text-rose-300 mt-0.5">{r.error}</div>}
+              {r.error && <div className="text-[0.75rem] text-rose-300 mt-0.5">{r.error}</div>}
             </div>
             <div className="flex items-center gap-1 shrink-0">
               {canRetry && (
                 <button
-                  className="text-[10.5px] text-amber-300 hover:text-ink flex items-center gap-1"
+                  className="text-[0.75rem] text-amber-300 hover:text-ink flex items-center gap-1"
                   onClick={() => retry(r)}
                   title="Resume / retry the apply phase. Already-applied edits are skipped."
                 >
@@ -494,7 +494,7 @@ function SourceHistory({
               )}
               {r.plan_json && (
                 <button
-                  className="text-[10.5px] text-accent hover:text-ink underline"
+                  className="text-[0.75rem] text-accent hover:text-ink underline"
                   onClick={() => onOpenPlan(r.id)}
                 >
                   Open plan

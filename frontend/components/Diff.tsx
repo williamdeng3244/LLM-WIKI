@@ -71,10 +71,10 @@ function DiffInner({
     return <div className="text-xs text-muted italic px-3 py-3">No textual changes.</div>;
   }
   return (
-    <pre className="font-mono text-[12.5px] leading-[1.55] bg-[#0a0f1e] text-ink border border-line rounded-md overflow-x-auto p-0 m-0">
+    <pre className="font-mono text-[0.8929rem] leading-[1.55] bg-[#0a0f1e] text-ink border border-line rounded-md overflow-x-auto p-0 m-0">
       {hunks.map((h, i) =>
         h.kind === 'sep' ? (
-          <div key={i} className="px-3 py-1 text-muted text-[11px] border-y border-black/5 bg-black/[0.02]">…</div>
+          <div key={i} className="px-3 py-1 text-muted text-[0.7857rem] border-y border-black/5 bg-black/[0.02]">…</div>
         ) : (
           <div key={i} className={`diff-line diff-${h.kind}`}>{h.line || ' '}</div>
         ),

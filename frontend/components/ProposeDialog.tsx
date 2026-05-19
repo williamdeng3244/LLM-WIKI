@@ -101,7 +101,7 @@ export default function ProposeDialog({
       >
         <div className="px-5 py-3 border-b border-black/10 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="font-medium text-[14px]">
+            <h3 className="font-medium text-[1rem]">
               {done
                 ? 'Submitted for review'
                 : mode === 'edit-existing'
@@ -109,19 +109,19 @@ export default function ProposeDialog({
                   : 'Propose a new page'}
             </h3>
             {!done && page && (
-              <code className="text-[11px] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono">
+              <code className="text-[0.7857rem] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono">
                 {page.path}
               </code>
             )}
             {!done && page && helperText && (
-              <span className="text-[11.5px]">{helperText}</span>
+              <span className="text-[0.8214rem]">{helperText}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
             {!done && (
               <div className="flex bg-black/5 rounded-md p-0.5">
                 <button
-                  className={`h-7 px-2 text-[11px] rounded flex items-center gap-1 ${
+                  className={`h-7 px-2 text-[0.7857rem] rounded flex items-center gap-1 ${
                     view === 'edit' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
                   }`}
                   onClick={() => setView('edit')}
@@ -130,7 +130,7 @@ export default function ProposeDialog({
                   <Edit3 size={12} />
                 </button>
                 <button
-                  className={`h-7 px-2 text-[11px] rounded flex items-center gap-1 ${
+                  className={`h-7 px-2 text-[0.7857rem] rounded flex items-center gap-1 ${
                     view === 'split' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
                   }`}
                   onClick={() => setView('split')}
@@ -139,7 +139,7 @@ export default function ProposeDialog({
                   <Columns2 size={12} />
                 </button>
                 <button
-                  className={`h-7 px-2 text-[11px] rounded flex items-center gap-1 ${
+                  className={`h-7 px-2 text-[0.7857rem] rounded flex items-center gap-1 ${
                     view === 'preview' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
                   }`}
                   onClick={() => setView('preview')}
@@ -157,10 +157,10 @@ export default function ProposeDialog({
 
         {done ? (
           <div className="p-8 space-y-4 max-w-md">
-            <p className="text-[14px]">
+            <p className="text-[1rem]">
               Your {mode === 'edit-existing' ? 'edit' : 'new page'} was submitted (revision #{done.revisionId}).
             </p>
-            <p className="text-[12.5px] text-muted">
+            <p className="text-[0.8929rem] text-muted">
               Status: <span className={`badge ${done.status}`}>{done.status}</span>
               {done.status === 'accepted' &&
                 ' — open page autopublishes; your change is live.'}
@@ -176,7 +176,7 @@ export default function ProposeDialog({
               {mode === 'new' && (
                 <>
                   <div>
-                    <label className="text-[10px] uppercase tracking-[0.12em] text-muted">Path</label>
+                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">Path</label>
                     <input
                       className="form-input mt-1"
                       value={newPath}
@@ -185,7 +185,7 @@ export default function ProposeDialog({
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase tracking-[0.12em] text-muted">Category</label>
+                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">Category</label>
                     <select
                       className="form-input mt-1"
                       value={newCategory}
@@ -202,7 +202,7 @@ export default function ProposeDialog({
                 </>
               )}
               <div className={mode === 'new' ? 'col-span-2' : ''}>
-                <label className="text-[10px] uppercase tracking-[0.12em] text-muted">Title</label>
+                <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">Title</label>
                 <input
                   className="form-input mt-1"
                   value={title}
@@ -210,7 +210,7 @@ export default function ProposeDialog({
                 />
               </div>
               <div className={mode === 'new' ? 'col-span-2' : 'col-span-2'}>
-                <label className="text-[10px] uppercase tracking-[0.12em] text-muted">
+                <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">
                   Tags (comma-separated)
                 </label>
                 <input
@@ -230,11 +230,11 @@ export default function ProposeDialog({
             >
               {(view === 'edit' || view === 'split') && (
                 <div className="flex flex-col min-h-0 border-r border-black/8">
-                  <div className="px-5 py-2 text-[10px] uppercase tracking-[0.12em] text-muted bg-black/[0.02] border-b border-black/8">
+                  <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.12em] text-muted bg-black/[0.02] border-b border-black/8">
                     Markdown
                   </div>
                   <textarea
-                    className="form-input form-textarea flex-1 rounded-none border-0 px-5 py-3 text-[13px] leading-[1.6] focus:shadow-none"
+                    className="form-input form-textarea flex-1 rounded-none border-0 px-5 py-3 text-[0.9286rem] leading-[1.6] focus:shadow-none"
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     placeholder={'# Your page title\n\nWrite in markdown. Use [[wiki-links]] to link to other pages.'}
@@ -244,14 +244,14 @@ export default function ProposeDialog({
               )}
               {(view === 'preview' || view === 'split') && (
                 <div className="flex flex-col min-h-0">
-                  <div className="px-5 py-2 text-[10px] uppercase tracking-[0.12em] text-muted bg-black/[0.02] border-b border-black/8">
+                  <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.12em] text-muted bg-black/[0.02] border-b border-black/8">
                     Preview
                   </div>
                   <div className="flex-1 overflow-y-auto scroll-thin px-6 py-5">
                     {body.trim() ? (
                       <Markdown knownPaths={allPaths}>{body}</Markdown>
                     ) : (
-                      <div className="text-muted text-[13px] italic">Nothing to preview yet.</div>
+                      <div className="text-muted text-[0.9286rem] italic">Nothing to preview yet.</div>
                     )}
                   </div>
                 </div>
