@@ -1,4 +1,5 @@
 """FastAPI app entrypoint."""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -21,19 +22,55 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+async def _wait_for_db(max_attempts: int = 30, base_delay: float = 1.0) -> None:
+    """Bounded exponential-backoff probe of the DB.
+
+    Earlier the lifespan tried to connect exactly once — any transient
+    DNS / not-yet-ready / network failure killed the container forever
+    (see issue #1). Combined with `restart: unless-stopped` in compose,
+    this gives clean self-recovery for the usual race-with-postgres-init.
+    Ceiling is ~3 minutes (30 attempts, backoff capped at 10s).
+    """
+    for attempt in range(1, max_attempts + 1):
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            if attempt > 1:
+                log.info("DB reachable after %d attempt(s)", attempt)
+            return
+        except Exception as e:  # noqa: BLE001
+            if attempt == max_attempts:
+                log.error("DB unreachable after %d attempts; giving up", attempt)
+                raise
+            delay = min(base_delay * (2 ** (attempt - 1)), 10.0)
+            log.warning("DB not ready (attempt %d/%d: %s); retrying in %.1fs",
+                        attempt, max_attempts, type(e).__name__, delay)
+            await asyncio.sleep(delay)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Wait for the DB to be reachable before doing any DDL. Necessary so
+    # transient infra issues (recreated network, slow PG init) don't
+    # permanently kill the container.
+    await _wait_for_db()
+
     # Schema setup. PROD TODO: replace with Alembic.
     # Enum extensions must run in their own transaction in older Postgres
     # versions; do them first via AUTOCOMMIT, before any other DDL.
     raw = engine.execution_options(isolation_level="AUTOCOMMIT")
     async with raw.connect() as conn:
-        try:
+        # Only extend the enum if it already exists. On a fresh DB the
+        # type is created by Base.metadata.create_all below (with all
+        # values), so this ALTER would just log a scary traceback for
+        # nothing — see issue #5.
+        exists = (await conn.execute(text(
+            "SELECT 1 FROM pg_type WHERE typname = 'ingestrunstatus'"
+        ))).scalar()
+        if exists:
             await conn.execute(text(
                 "ALTER TYPE ingestrunstatus ADD VALUE IF NOT EXISTS 'partially_failed'"
             ))
-        except Exception as e:  # enum not yet created on first boot
-            log.info("ingestrunstatus enum bootstrap: %s", e)
 
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

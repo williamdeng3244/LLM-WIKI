@@ -1,6 +1,7 @@
 services:
   db:
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wiki}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wiki}
@@ -17,18 +18,29 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     volumes:
       - redis_data:/data
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   backend:
     build: ./backend
+    restart: unless-stopped
+    # Dev-only command override: image CMD is the prod multi-worker uvicorn
+    # (no --reload). For dev workflow with bind-mounted source, swap in
+    # --reload + single worker so file edits hot-reload.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wiki}:${POSTGRES_PASSWORD:-wiki}@db:5432/${POSTGRES_DB:-wiki}
       REDIS_URL: redis://redis:6379/0
@@ -51,14 +63,25 @@ services:
       - ./backend:/app
     ports:
       - "8000:8000"
+    # Python is in the slim image (curl is not). start_period gives the
+    # FastAPI lifespan time to wait for DB + run schema bootstrap.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=2).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
 
   worker:
     build: ./backend
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     command: ["celery", "-A", "app.worker", "worker", "--loglevel=info"]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wiki}:${POSTGRES_PASSWORD:-wiki}@db:5432/${POSTGRES_DB:-wiki}
@@ -78,8 +101,15 @@ services:
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
+    # Dev override: image CMD is `npm start` (prod). For dev with bind-mount
+    # we want the dev server (hot reload + fast refresh).
+    command: ["npm", "run", "dev"]
+    # Gate on backend being *healthy*, not just started — fixes the case
+    # where the page loads but the API is dead.
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       BACKEND_URL: http://backend:8000
       NEXT_PUBLIC_AUTH_MODE: ${AUTH_MODE:-stub}
@@ -89,6 +119,13 @@ services:
       - /app/.next
     ports:
       - "3000:3000"
+    # wget is in busybox (default in node:alpine).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
 volumes:
   db_data:

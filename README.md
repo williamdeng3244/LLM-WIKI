@@ -388,6 +388,47 @@ OpenAPI docs at <http://localhost:8000/docs>.
 - **Tests**: a test directory exists but tests aren't written; smoke tests for
   the workflow state machine are highest priority.
 
+## Troubleshooting
+
+**`docker compose` (v2) is required.** The v1 `docker-compose` script
+(written in Python, installed via `pip` / Debian's `docker-compose` package)
+has a known partial-recreate bug that can orphan containers off the project
+network — concretely, `db` ends up healthy but unreachable by service name.
+On Debian/Ubuntu install the v2 plugin with `sudo apt install
+docker-compose-plugin`; on other distros see Docker's install docs. Verify:
+
+```bash
+docker compose version   # v2.x; if this fails you're on v1
+```
+
+**When switching between dev and prod compose, run `down` first.** Mixing
+the two via incremental `up -d` can leave services attached to a stale
+network. Named volumes (`db_data`, `redis_data`) are preserved by `down`,
+so your data is safe:
+
+```bash
+docker compose down                              # stops everything cleanly
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+**`localhost:3000` unreachable.** Run:
+
+```bash
+docker compose ps         # are all 5 services Up + healthy?
+docker compose logs backend frontend db   # last error lines
+```
+
+Most common causes: ports already bound on the host (`5432`, `6379`, `3000`,
+`8000`); the backend hard-exited because the DB was unreachable at startup
+(fixed in v0.3.0 with bounded retry + `restart: unless-stopped`); or you're
+still on `docker-compose` v1 (see above).
+
+**Backend logs show DB connection retries.** Expected on first boot — the
+lifespan probes Postgres with exponential backoff up to ~3 minutes before
+giving up. If retries persist, check that `db` is healthy
+(`docker compose ps db`) and on the same network as `backend`
+(`docker network inspect <project>_default | grep db`).
+
 ## Repository layout
 
 ```

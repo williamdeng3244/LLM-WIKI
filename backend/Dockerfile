@@ -40,4 +40,7 @@ ENV PATH=/opt/venv/bin:$PATH
 WORKDIR /app
 COPY . .
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Production default — no --reload, multiple workers, real logs.
+# The dev docker-compose.yml overrides this with `--reload` (single worker)
+# for hot-reload on bind-mounted source.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

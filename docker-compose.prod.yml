@@ -3,13 +3,17 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# Pin TAG in .env (TAG=v0.1.0) to lock to a specific release; defaults
-# to the latest stable tag.
+# Pin TAG in .env (TAG=v0.2.0) to lock to a specific release; defaults
+# to :latest which always points at the newest stable tag.
+#
+# This file `!reset`s the dev-only `command:` override from the base
+# compose so the published image's CMD (real prod servers — uvicorn
+# multi-worker for backend, `next start` for frontend) takes effect.
 services:
   backend:
     build: !reset null
     image: ghcr.io/williamdeng3244/llm-wiki-backend:${TAG:-latest}
-    # The published image bakes in the source; mount only writable data.
+    command: !reset null
     volumes: !override
       - ./vault:/vault
       - ./raw:/raw
@@ -26,4 +30,5 @@ services:
   frontend:
     build: !reset null
     image: ghcr.io/williamdeng3244/llm-wiki-frontend:${TAG:-latest}
+    command: !reset null
     volumes: !override []
