@@ -482,8 +482,6 @@ export default function GraphView({
             {Math.min(timelapseStep, chronoOrder.length)} / {chronoOrder.length} pages
           </div>
         )}
-
-        {/* @ts-expect-error dynamic import props */}
         <ForceGraph2D
           ref={fg2dRef}
           graphData={renderGraph}
@@ -604,7 +602,6 @@ export default function GraphView({
   // managed so the per-frame focus callbacks still apply.
   return (
     <div ref={containerRef} className="w-full h-full">
-      {/* @ts-expect-error dynamic import props */}
       <ForceGraph3D
         ref={fg3dRef}
         graphData={graph}
