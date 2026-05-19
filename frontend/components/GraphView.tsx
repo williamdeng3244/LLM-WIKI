@@ -489,11 +489,14 @@ export default function GraphView({
           // No `nodeLabel` here — the canvas rendering below draws labels
           // itself (only for the focused node + neighbors, themed). The
           // lib's default would also pop up an HTML tooltip → double label.
-          onNodeClick={(n: { id: string }) => onSelect(n.id)}
-          onNodeHover={(n: { id: string } | null) => setHoverId(n?.id ?? null)}
+          // Node param is `any` (matches `onNodeDragEnd` + `nodeCanvasObject`)
+          // because the lib's NodeAccessor type uses `{id?: string|number}`,
+          // narrower types like `{id: string}` get rejected in strict mode.
+          onNodeClick={(n: any) => onSelect(String(n.id))}
+          onNodeHover={(n: any) => setHoverId(n ? String(n.id) : null)}
           onNodeDragEnd={(n: any) => releaseNode(n, false)}
           nodeRelSize={5}
-          nodeVal={(n: { backlinks?: number }) => 1 + (n.backlinks || 0) * 0.6}
+          nodeVal={(n: any) => 1 + (n.backlinks || 0) * 0.6}
           nodeCanvasObjectMode={() => 'replace'}
           nodeCanvasObject={(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
             // Force-graph can call this before the simulation has placed
@@ -607,9 +610,9 @@ export default function GraphView({
         graphData={graph}
         showNavInfo={false}
         backgroundColor={GRAPH_BG}
-        nodeLabel={(n: { title: string }) => n.title}
-        onNodeClick={(n: { id: string }) => onSelect(n.id)}
-        onNodeHover={(n: { id: string } | null) => setHoverId(n?.id ?? null)}
+        nodeLabel={(n: any) => n.title}
+        onNodeClick={(n: any) => onSelect(String(n.id))}
+        onNodeHover={(n: any) => setHoverId(n ? String(n.id) : null)}
         onNodeDragEnd={(n: any) => releaseNode(n, true)}
         nodeThreeObject={(n: any) => {
           const baseSize = 4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2;

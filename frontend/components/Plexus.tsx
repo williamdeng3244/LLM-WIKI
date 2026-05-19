@@ -221,10 +221,13 @@ export default function Plexus() {
     function resize() {
       w = window.innerWidth;
       h = window.innerHeight;
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
+      // Non-null asserted: the outer useEffect bails before here if the
+      // ref is null, but TS strict mode doesn't carry that narrowing into
+      // nested function declarations.
+      canvas!.width = Math.floor(w * dpr);
+      canvas!.height = Math.floor(h * dpr);
+      canvas!.style.width = w + 'px';
+      canvas!.style.height = h + 'px';
       const target = targetCount();
       if (particles.length === 0) {
         particles = makeParticles(target, w, h);
@@ -237,7 +240,7 @@ export default function Plexus() {
 
     function clearAndScale() {
       ctx!.setTransform(1, 0, 0, 1, 0, 0);
-      ctx!.clearRect(0, 0, canvas.width, canvas.height);
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
