@@ -6,7 +6,7 @@ import {
   SquarePen, FolderPlus, ArrowDownAZ, ArrowDownZA,
   ChevronsDownUp, ChevronsUpDown,
   Copy, Clipboard, History, Bookmark, FolderInput, Trash2,
-  ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon,
+  ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon, HelpCircle,
 } from 'lucide-react';
 import FileTree, {
   type FileTreeHandle, type SortMode, type ContextMenuInfo,
@@ -30,7 +30,11 @@ import QuickSwitcher, { pushRecent } from '@/components/QuickSwitcher';
 import SourcesPanel from '@/components/SourcesPanel';
 import SchemaEditor from '@/components/SchemaEditor';
 import LintPanel from '@/components/LintPanel';
+import UserManual from '@/components/UserManual';
+import ShortcutSheet from '@/components/ShortcutSheet';
+import VersionLog from '@/components/VersionLog';
 import { useTheme } from '@/lib/theme';
+import { useLanguage } from '@/lib/i18n';
 import { api, type Page, type Role, type User } from '@/lib/api';
 import { useGraphSettings } from '@/lib/graphSettings';
 
@@ -52,6 +56,7 @@ export default function Home() {
   const [showReview, setShowReview] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const { theme, toggle: toggleTheme } = useTheme();
+  const { lang, toggle: toggleLang, t } = useLanguage();
   const [showSources, setShowSources] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
   const [showLint, setShowLint] = useState(false);
@@ -59,6 +64,8 @@ export default function Home() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [showGraphSettings, setShowGraphSettings] = useState(false);
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<FileTreeHandle>(null);
@@ -151,7 +158,7 @@ export default function Home() {
   }, []);
 
   // Keyboard: ⌘K = search; ⌘O = quick switcher; ⌘E = suggest edit;
-  // ⌘T = new tab; ⌘W = close current tab.
+  // ⌘T = new tab; ⌘W = close current tab; ⌘? = shortcut sheet.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const cmd = e.metaKey || e.ctrlKey;
@@ -176,6 +183,26 @@ export default function Home() {
       if (cmd && (e.key === 'w' || e.key === 'W')) {
         e.preventDefault();
         if (tabs.activeId) tabs.closeTab(tabs.activeId);
+      }
+      // Shortcut sheet opens on any of:
+      //   • plain `?` when nothing is being typed (Gmail / Linear convention)
+      //   • ⌘/ or Ctrl+/ (works without holding Shift; many users find this easier)
+      //   • ⌘? or Ctrl+? (Ctrl+Shift+/ on US layouts)
+      // Match via e.code === 'Slash' too because e.key can differ across
+      // layouts and OSes (some report '?', some report '/').
+      {
+        const target = e.target as HTMLElement | null;
+        const isTyping =
+          !!target &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            (target as HTMLElement).isContentEditable);
+        const isSlashKey =
+          e.key === '/' || e.key === '?' || e.code === 'Slash';
+        if (isSlashKey && (cmd || (e.key === '?' && !isTyping))) {
+          e.preventDefault();
+          setShowShortcuts(true);
+        }
       }
     }
     window.addEventListener('keydown', onKey);
@@ -380,17 +407,16 @@ export default function Home() {
       <header className="h-12 border-b border-white/[0.06] bg-panel/85 backdrop-blur flex items-center px-3 gap-3 text-[0.9286rem] relative z-20">
         <div className="flex items-center gap-2 px-2">
           <BookOpen size={16} className="text-accent" />
-          <span className="font-display font-medium tracking-[0.02em] text-[1rem] text-ink">Enflame Wiki</span>
+          <span className="font-display font-medium tracking-[0.02em] text-[1rem] text-ink">{t('topbar.brand')}</span>
         </div>
 
         {/* Search */}
         <div className="flex-1 max-w-xl mx-2 relative">
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
             <input
               ref={searchInputRef}
-              className="form-input h-8 pl-9 pr-12 text-[0.9286rem]"
-              placeholder="Search pages, content, code…"
+              className="form-input h-8 pl-3 pr-16 text-[0.9286rem]"
+              placeholder={t('topbar.search.placeholder')}
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -398,9 +424,10 @@ export default function Home() {
               }}
               onFocus={() => setShowSearch(true)}
             />
-            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[0.7143rem] text-muted bg-black/5 border border-black/10 rounded px-1.5 py-0.5 font-mono pointer-events-none">
+            <kbd className="absolute right-9 top-1/2 -translate-y-1/2 text-[0.7143rem] text-muted bg-black/5 border border-black/10 rounded px-1.5 py-0.5 font-mono pointer-events-none">
               ⌘K
             </kbd>
+            <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           </div>
           {showSearch && (
             <SearchResults
@@ -419,31 +446,41 @@ export default function Home() {
           <button
             className="btn btn-icon"
             onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={theme === 'dark' ? t('topbar.theme.toLight') : t('topbar.theme.toDark')}
             aria-label="Toggle theme"
           >
             {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+          {/* Language toggle. Single button, label is the *other* language so
+              the click target tells you what you'll switch to. */}
+          <button
+            className="btn btn-icon font-mono text-[0.7857rem] tracking-tight px-1.5"
+            onClick={toggleLang}
+            title={t('topbar.lang.toggle.title')}
+            aria-label="Toggle language"
+          >
+            {lang === 'en' ? '中' : 'EN'}
           </button>
           {/* Dev: role switcher */}
           <select
             className="h-8 px-2 text-[0.8214rem] border border-line rounded-md bg-elev text-ink"
             value={user?.role || 'admin'}
             onChange={(e) => changeRole(e.target.value as Role)}
-            title="View as role (dev only)"
+            title={t('topbar.role.title')}
           >
-            <option value="reader">Reader</option>
-            <option value="contributor">Contributor</option>
-            <option value="editor">Editor</option>
-            <option value="admin">Admin</option>
+            <option value="reader">{t('topbar.role.reader')}</option>
+            <option value="contributor">{t('topbar.role.contributor')}</option>
+            <option value="editor">{t('topbar.role.editor')}</option>
+            <option value="admin">{t('topbar.role.admin')}</option>
           </select>
 
           {user && user.role !== 'reader' && (
             <button
               className="btn btn-primary"
               onClick={() => setShowPropose(true)}
-              title="Suggest edit (⌘E)"
+              title={t('topbar.suggest.title')}
             >
-              <Pencil size={13} /> Suggest
+              <Pencil size={13} /> {t('topbar.suggest')}
             </button>
           )}
 
@@ -451,7 +488,7 @@ export default function Home() {
             <button
               className="btn relative"
               onClick={() => setShowReview(true)}
-              title="Review queue"
+              title={t('topbar.review.title')}
             >
               <Inbox size={13} />
               {queue.length > 0 && (
@@ -466,7 +503,7 @@ export default function Home() {
             <button
               className="btn btn-icon relative"
               onClick={() => setShowNotifs((s) => !s)}
-              title="Notifications"
+              title={t('topbar.notifications.title')}
             >
               <Bell size={14} />
               {unreadCount > 0 && (
@@ -495,7 +532,7 @@ export default function Home() {
           <button
             className="btn btn-icon"
             onClick={() => setShowSources(true)}
-            title="Raw sources"
+            title={t('topbar.sources.title')}
           >
             <Files size={14} />
           </button>
@@ -503,7 +540,7 @@ export default function Home() {
           <button
             className="btn btn-icon"
             onClick={() => setShowSchema(true)}
-            title="Agent playbook (schema)"
+            title={t('topbar.schema.title')}
           >
             <BookText size={14} />
           </button>
@@ -512,7 +549,7 @@ export default function Home() {
             <button
               className="btn btn-icon"
               onClick={() => setShowLint(true)}
-              title="Wiki lint (admin)"
+              title={t('topbar.lint.title')}
             >
               <ShieldCheck size={14} />
             </button>
@@ -521,10 +558,24 @@ export default function Home() {
           <button
             className="btn btn-icon"
             onClick={() => setShowMcp(true)}
-            title="MCP access — connect external LLM clients"
+            title={t('topbar.mcp.title')}
           >
             <Plug size={14} />
           </button>
+
+          <div className="relative">
+            <button
+              className="btn btn-icon"
+              onClick={() => setShowManual((s) => !s)}
+              title={t('topbar.manual.title')}
+              aria-label={t('topbar.manual.ariaLabel')}
+            >
+              <HelpCircle size={14} />
+            </button>
+            {showManual && (
+              <UserManual onClose={() => setShowManual(false)} />
+            )}
+          </div>
 
           <div className="text-[0.8214rem] text-muted ml-1.5 truncate max-w-[120px]" title={user?.email}>
             {user?.name || '…'}
@@ -725,6 +776,8 @@ export default function Home() {
         />
       )}
       {showSchema && <SchemaEditor onClose={() => setShowSchema(false)} />}
+      {showShortcuts && <ShortcutSheet onClose={() => setShowShortcuts(false)} />}
+      <VersionLog />
       {showLint && (
         <LintPanel
           onClose={() => setShowLint(false)}

@@ -1,0 +1,246 @@
+'use client';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Sparkles, X, ExternalLink, Github } from 'lucide-react';
+import { useLanguage } from '@/lib/i18n';
+import {
+  APP_VERSION, RELEASES_URL, compareVersions, type GhRelease,
+} from '@/lib/version';
+
+const CACHE_KEY = 'wiki:releases:v1';
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+type CacheShape = { fetchedAt: number; releases: GhRelease[] };
+
+function readCache(): CacheShape | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CacheShape;
+    if (Date.now() - parsed.fetchedAt > CACHE_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(releases: GhRelease[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ fetchedAt: Date.now(), releases } as CacheShape),
+    );
+  } catch { /* quota */ }
+}
+
+function formatDate(iso: string, lang: 'en' | 'zh'): string {
+  try {
+    return new Date(iso).toLocaleDateString(
+      lang === 'zh' ? 'zh-CN' : 'en-US',
+      { year: 'numeric', month: 'short', day: 'numeric' },
+    );
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+export default function VersionLog() {
+  const { lang, t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const [releases, setReleases] = useState<GhRelease[] | null>(null);
+  const [fetchError, setFetchError] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Load (or refresh) the release list on mount. Result is cached in
+  // localStorage for an hour so we don't hammer GitHub on every reload.
+  useEffect(() => {
+    const cached = readCache();
+    if (cached) {
+      setReleases(cached.releases);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(RELEASES_URL, {
+          headers: { 'Accept': 'application/vnd.github+json' },
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = (await r.json()) as GhRelease[];
+        const usable = data.filter((x) => !x.draft);
+        if (!cancelled) {
+          setReleases(usable);
+          writeCache(usable);
+        }
+      } catch {
+        if (!cancelled) setFetchError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Find the latest non-prerelease tag; compare against the bundled
+  // APP_VERSION to decide whether to show the "update available" badge.
+  const latest = useMemo(() => {
+    if (!releases || releases.length === 0) return null;
+    return releases
+      .filter((r) => !r.prerelease)
+      .sort((a, b) => -compareVersions(a.tag_name, b.tag_name))[0]
+      ?? releases[0];
+  }, [releases]);
+
+  const isOutdated = useMemo(() => {
+    if (!latest) return false;
+    return compareVersions(latest.tag_name, APP_VERSION) > 0;
+  }, [latest]);
+
+  // Outside-click + Esc to close the dropdown.
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    // Outer wrapper so the panel positions relative to the badge.
+    <div ref={ref} className="fixed bottom-2.5 left-2.5 z-30">
+      <button
+        type="button"
+        onClick={() => setOpen((s) => !s)}
+        className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md border text-[0.7857rem] font-mono backdrop-blur transition-colors ${
+          isOutdated
+            ? 'bg-amber-500/[0.14] border-amber-500/40 text-amber-200 hover:bg-amber-500/[0.22]'
+            : 'bg-panel/70 border-line text-muted hover:text-ink hover:bg-panel/85'
+        }`}
+        title={
+          isOutdated && latest
+            ? `${t('version.update.available')}: ${latest.tag_name}`
+            : t('version.upToDate')
+        }
+      >
+        <span>{APP_VERSION}</span>
+        {isOutdated && (
+          <span className="inline-flex items-center gap-1">
+            <Sparkles size={11} />
+            <span className="hidden md:inline">{t('version.update.available')}</span>
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute bottom-9 left-0 w-[340px] max-h-[60vh] bg-panel border border-line rounded-md shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-black/8 flex items-center justify-between">
+            <span className="text-[0.8929rem] font-medium flex items-center gap-1.5">
+              <Github size={13} /> {t('version.panel.title')}
+            </span>
+            <button
+              onClick={() => setOpen(false)}
+              className="w-6 h-6 grid place-items-center rounded text-muted hover:text-ink hover:bg-white/[0.06] transition-colors"
+              aria-label="Close"
+            >
+              <X size={12} />
+            </button>
+          </div>
+
+          <div className="px-3 py-2 border-b border-white/[0.06] flex items-center justify-between text-[0.8214rem]">
+            <span className="text-muted">
+              {t('version.label')}{' '}
+              <span className="text-ink font-mono">{APP_VERSION}</span>
+            </span>
+            {isOutdated && latest ? (
+              <a
+                href={latest.html_url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-amber-300 hover:text-amber-200 flex items-center gap-1"
+              >
+                <Sparkles size={11} />
+                {latest.tag_name} {t('version.update.cta')}
+              </a>
+            ) : (
+              !fetchError && releases !== null && (
+                <span className="text-emerald-300 text-[0.7857rem]">
+                  ✓ {t('version.upToDate')}
+                </span>
+              )
+            )}
+          </div>
+
+          <div className="overflow-y-auto scroll-thin px-3 py-2 flex-1">
+            <h3 className="text-[0.7143rem] uppercase tracking-[0.10em] text-muted font-medium mb-2">
+              {t('version.panel.recent')}
+            </h3>
+
+            {releases === null && !fetchError && (
+              <div className="text-[0.8214rem] text-muted">{t('version.panel.loading')}</div>
+            )}
+            {fetchError && (
+              <div className="text-[0.8214rem] text-muted">{t('version.panel.checkFailed')}</div>
+            )}
+            {releases && releases.length === 0 && (
+              <div className="text-[0.8214rem] text-muted">{t('version.panel.empty')}</div>
+            )}
+
+            {releases && releases.length > 0 && (
+              <ul className="space-y-3">
+                {releases.slice(0, 8).map((r) => {
+                  const isCurrent = r.tag_name === APP_VERSION;
+                  return (
+                    <li key={r.tag_name}>
+                      <a
+                        href={r.html_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block group"
+                      >
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className={`text-[0.8929rem] font-medium font-mono ${
+                            isCurrent ? 'text-accent' : 'text-ink group-hover:text-accent'
+                          }`}>
+                            {r.tag_name}
+                            {isCurrent && (
+                              <span className="ml-2 inline-block px-1.5 py-0 rounded text-[0.6786rem] uppercase tracking-[0.08em] bg-accent/[0.16] text-accent font-sans">
+                                current
+                              </span>
+                            )}
+                            {r.prerelease && (
+                              <span className="ml-2 inline-block px-1.5 py-0 rounded text-[0.6786rem] uppercase tracking-[0.08em] bg-amber-500/[0.14] text-amber-300 font-sans">
+                                pre
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[0.7143rem] text-muted shrink-0">
+                            {formatDate(r.published_at, lang)}
+                          </span>
+                        </div>
+                        {r.body && (
+                          <p className="mt-1 text-[0.7857rem] text-muted leading-snug line-clamp-3 group-hover:text-ink/80 transition-colors">
+                            {r.body.split('\n').filter((l) => l.trim()).slice(0, 3).join(' · ').slice(0, 180)}
+                          </p>
+                        )}
+                        <span className="mt-1 inline-flex items-center gap-1 text-[0.7143rem] text-muted/80 group-hover:text-accent">
+                          <ExternalLink size={10} /> github.com
+                        </span>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
