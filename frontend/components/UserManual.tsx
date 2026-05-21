@@ -4,6 +4,7 @@ import {
   HelpCircle, Search, BookOpen, Pencil, Inbox, Bell, Files, BookText,
   ShieldCheck, Plug, Sun, SquarePen, FolderPlus, History,
   ChevronsUpDown, ArrowDownAZ, MessageSquare, ExternalLink,
+  PanelRightClose, FileText, Languages, Tag,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
 
@@ -14,13 +15,17 @@ type Item = {
     | 'manual.history.title' | 'manual.review.title' | 'manual.graph.title'
     | 'manual.timelapse.title' | 'manual.sources.title' | 'manual.playbook.title'
     | 'manual.lint.title' | 'manual.mcp.title' | 'manual.theme.title'
-    | 'manual.notif.title' | 'manual.tabs.title';
+    | 'manual.notif.title' | 'manual.tabs.title'
+    | 'manual.chatCollapse.title' | 'manual.pageLayout.title'
+    | 'manual.versionLog.title' | 'manual.langToggle.title';
   bodyKey: 'manual.search.body' | 'manual.switcher.body' | 'manual.chat.body'
     | 'manual.suggest.body' | 'manual.newNote.body' | 'manual.newFolder.body'
     | 'manual.history.body' | 'manual.review.body' | 'manual.graph.body'
     | 'manual.timelapse.body' | 'manual.sources.body' | 'manual.playbook.body'
     | 'manual.lint.body' | 'manual.mcp.body' | 'manual.theme.body'
-    | 'manual.notif.body' | 'manual.tabs.body';
+    | 'manual.notif.body' | 'manual.tabs.body'
+    | 'manual.chatCollapse.body' | 'manual.pageLayout.body'
+    | 'manual.versionLog.body' | 'manual.langToggle.body';
   shortcut?: string;
 };
 
@@ -40,6 +45,7 @@ const SECTIONS: Section[] = [
     items: [
       { icon: <Search size={13} />, titleKey: 'manual.search.title', bodyKey: 'manual.search.body', shortcut: '⌘K' },
       { icon: <BookOpen size={13} />, titleKey: 'manual.switcher.title', bodyKey: 'manual.switcher.body', shortcut: '⌘O' },
+      { icon: <FileText size={13} />, titleKey: 'manual.pageLayout.title', bodyKey: 'manual.pageLayout.body' },
       { icon: <MessageSquare size={13} />, titleKey: 'manual.chat.title', bodyKey: 'manual.chat.body' },
     ],
   },
@@ -83,8 +89,11 @@ const SECTIONS: Section[] = [
     headingKey: 'manual.section.chrome',
     items: [
       { icon: <Sun size={13} />, titleKey: 'manual.theme.title', bodyKey: 'manual.theme.body' },
+      { icon: <Languages size={13} />, titleKey: 'manual.langToggle.title', bodyKey: 'manual.langToggle.body' },
       { icon: <Bell size={13} />, titleKey: 'manual.notif.title', bodyKey: 'manual.notif.body' },
       { icon: <ChevronsUpDown size={13} />, titleKey: 'manual.tabs.title', bodyKey: 'manual.tabs.body', shortcut: '⌘T · ⌘W' },
+      { icon: <PanelRightClose size={13} />, titleKey: 'manual.chatCollapse.title', bodyKey: 'manual.chatCollapse.body' },
+      { icon: <Tag size={13} />, titleKey: 'manual.versionLog.title', bodyKey: 'manual.versionLog.body' },
     ],
   },
 ];

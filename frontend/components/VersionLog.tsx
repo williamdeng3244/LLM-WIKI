@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, X, ExternalLink, Github } from 'lucide-react';
+import { Sparkles, X, Github } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
 import {
   APP_VERSION, RELEASES_URL, compareVersions, type GhRelease,
@@ -139,62 +139,34 @@ export default function VersionLog() {
       </button>
 
       {open && (
-        <div className="absolute bottom-9 left-0 w-[340px] max-h-[60vh] bg-panel border border-line rounded-md shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-black/8 flex items-center justify-between">
-            <span className="text-[0.8929rem] font-medium flex items-center gap-1.5">
-              <Github size={13} /> {t('version.panel.title')}
+        <div className="absolute bottom-9 left-0 w-[260px] max-h-[60vh] bg-panel border border-line rounded-md shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden">
+          <div className="px-3 py-2 border-b border-black/8 flex items-center justify-between">
+            <span className="text-[0.8214rem] font-medium flex items-center gap-1.5 text-muted">
+              <Github size={12} /> {t('version.panel.title')}
             </span>
             <button
               onClick={() => setOpen(false)}
-              className="w-6 h-6 grid place-items-center rounded text-muted hover:text-ink hover:bg-white/[0.06] transition-colors"
+              className="w-5 h-5 grid place-items-center rounded text-muted hover:text-ink hover:bg-white/[0.06] transition-colors"
               aria-label="Close"
             >
-              <X size={12} />
+              <X size={11} />
             </button>
           </div>
 
-          <div className="px-3 py-2 border-b border-white/[0.06] flex items-center justify-between text-[0.8214rem]">
-            <span className="text-muted">
-              {t('version.label')}{' '}
-              <span className="text-ink font-mono">{APP_VERSION}</span>
-            </span>
-            {isOutdated && latest ? (
-              <a
-                href={latest.html_url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-amber-300 hover:text-amber-200 flex items-center gap-1"
-              >
-                <Sparkles size={11} />
-                {latest.tag_name} {t('version.update.cta')}
-              </a>
-            ) : (
-              !fetchError && releases !== null && (
-                <span className="text-emerald-300 text-[0.7857rem]">
-                  ✓ {t('version.upToDate')}
-                </span>
-              )
-            )}
-          </div>
-
-          <div className="overflow-y-auto scroll-thin px-3 py-2 flex-1">
-            <h3 className="text-[0.7143rem] uppercase tracking-[0.10em] text-muted font-medium mb-2">
-              {t('version.panel.recent')}
-            </h3>
-
+          <div className="overflow-y-auto scroll-thin py-1 flex-1">
             {releases === null && !fetchError && (
-              <div className="text-[0.8214rem] text-muted">{t('version.panel.loading')}</div>
+              <div className="px-3 py-2 text-[0.8214rem] text-muted">{t('version.panel.loading')}</div>
             )}
             {fetchError && (
-              <div className="text-[0.8214rem] text-muted">{t('version.panel.checkFailed')}</div>
+              <div className="px-3 py-2 text-[0.8214rem] text-muted">{t('version.panel.checkFailed')}</div>
             )}
             {releases && releases.length === 0 && (
-              <div className="text-[0.8214rem] text-muted">{t('version.panel.empty')}</div>
+              <div className="px-3 py-2 text-[0.8214rem] text-muted">{t('version.panel.empty')}</div>
             )}
 
             {releases && releases.length > 0 && (
-              <ul className="space-y-3">
-                {releases.slice(0, 8).map((r) => {
+              <ul>
+                {releases.slice(0, 12).map((r) => {
                   const isCurrent = r.tag_name === APP_VERSION;
                   return (
                     <li key={r.tag_name}>
@@ -202,35 +174,25 @@ export default function VersionLog() {
                         href={r.html_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="block group"
+                        className="flex items-baseline justify-between gap-2 px-3 py-1.5 hover:bg-white/[0.05] transition-colors"
                       >
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className={`text-[0.8929rem] font-medium font-mono ${
-                            isCurrent ? 'text-accent' : 'text-ink group-hover:text-accent'
-                          }`}>
-                            {r.tag_name}
-                            {isCurrent && (
-                              <span className="ml-2 inline-block px-1.5 py-0 rounded text-[0.6786rem] uppercase tracking-[0.08em] bg-accent/[0.16] text-accent font-sans">
-                                current
-                              </span>
-                            )}
-                            {r.prerelease && (
-                              <span className="ml-2 inline-block px-1.5 py-0 rounded text-[0.6786rem] uppercase tracking-[0.08em] bg-amber-500/[0.14] text-amber-300 font-sans">
-                                pre
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-[0.7143rem] text-muted shrink-0">
-                            {formatDate(r.published_at, lang)}
-                          </span>
-                        </div>
-                        {r.body && (
-                          <p className="mt-1 text-[0.7857rem] text-muted leading-snug line-clamp-3 group-hover:text-ink/80 transition-colors">
-                            {r.body.split('\n').filter((l) => l.trim()).slice(0, 3).join(' · ').slice(0, 180)}
-                          </p>
-                        )}
-                        <span className="mt-1 inline-flex items-center gap-1 text-[0.7143rem] text-muted/80 group-hover:text-accent">
-                          <ExternalLink size={10} /> github.com
+                        <span className={`text-[0.8571rem] font-mono ${
+                          isCurrent ? 'text-accent font-medium' : 'text-ink'
+                        }`}>
+                          {r.tag_name}
+                          {isCurrent && (
+                            <span className="ml-1.5 text-[0.6786rem] text-accent/80 font-sans uppercase tracking-[0.06em]">
+                              · current
+                            </span>
+                          )}
+                          {r.prerelease && (
+                            <span className="ml-1.5 text-[0.6786rem] text-amber-300 font-sans uppercase tracking-[0.06em]">
+                              · pre
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[0.7143rem] text-muted shrink-0">
+                          {formatDate(r.published_at, lang)}
                         </span>
                       </a>
                     </li>

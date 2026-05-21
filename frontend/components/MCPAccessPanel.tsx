@@ -5,6 +5,7 @@ import {
   X, Check, Copy, Plug, Trash2, Lock, Loader2, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 import { api, type User } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n';
 
 type Token = {
   id: number; name: string; last_used_at: string | null;
@@ -17,6 +18,7 @@ export default function MCPAccessPanel({
   onClose: () => void;
   currentUser: User | null;
 }) {
+  const { t } = useLanguage();
   const isAdmin = currentUser?.role === 'admin';
   // mcp_enabled comes back from /api/users; if missing on the cached
   // current user record we optimistically assume enabled (the backend
@@ -110,7 +112,7 @@ export default function MCPAccessPanel({
         <header className="px-5 py-3 border-b border-line flex items-center justify-between">
           <div>
             <h3 className="font-medium text-[1rem] flex items-center gap-2">
-              <Plug size={15} className="text-accent" /> MCP access
+              <Plug size={15} className="text-accent" /> {t('mcp.title')}
             </h3>
             <div className="text-[0.8214rem] text-muted">
               Connect external LLM clients (Claude Desktop, Claude Code, Cursor)

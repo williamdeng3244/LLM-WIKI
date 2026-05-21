@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { X, Save, RotateCcw, BookText, Loader2, Lock } from 'lucide-react';
 import Markdown from './Markdown';
+import { useLanguage } from '@/lib/i18n';
 import { api } from '@/lib/api';
 
 export default function SchemaEditor({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
   const { data, mutate, isLoading } = useSWR(
     'idea-file', api.getIdeaFile,
     { revalidateOnFocus: false },
@@ -66,7 +68,7 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
         <header className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <BookText size={15} className="text-accent shrink-0" />
-            <h3 className="font-medium text-[1rem]">Agent playbook</h3>
+            <h3 className="font-medium text-[1rem]">{t('schema.title')}</h3>
             <code className="text-[0.7857rem] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono truncate">
               {data?.path || '/config/agents.md'}
             </code>

@@ -6,6 +6,7 @@ import {
   Loader2, Play, AlertTriangle, Eye, History, RotateCcw,
 } from 'lucide-react';
 import { api, type RawSource, type IngestRun, type User } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n';
 import IngestPlanPreview from './IngestPlanPreview';
 
 function fmtSize(n: number): string {
@@ -28,6 +29,7 @@ export default function SourcesPanel({
   currentUser: User | null;
   users: Map<number, User>;
 }) {
+  const { t } = useLanguage();
   const { data: sources = [], mutate } = useSWR<RawSource[]>(
     'raw-sources', api.listRawSources,
     {
@@ -152,7 +154,7 @@ export default function SourcesPanel({
       >
         <header className="px-5 py-3 border-b border-line flex items-center justify-between">
           <div>
-            <h3 className="font-medium text-[1rem]">Raw sources</h3>
+            <h3 className="font-medium text-[1rem]">{t('sources.title')}</h3>
             <div className="text-[0.8214rem] text-muted">
               Immutable input documents the agent can read on ingest.
               Wiki pages are written from these — not edited in place.
@@ -177,7 +179,7 @@ export default function SourcesPanel({
           }}
         >
           <Upload size={20} className="mx-auto text-muted mb-2" />
-          <div className="text-[0.9286rem] text-ink">Drop files here, or</div>
+          <div className="text-[0.9286rem] text-ink">{t('sources.dropHere')}</div>
           <button
             className="btn btn-primary mt-3 inline-flex"
             disabled={!canUpload || uploading}
@@ -197,7 +199,7 @@ export default function SourcesPanel({
           />
           <div className="text-[0.75rem] text-muted mt-2">PDF, markdown, text, images. 50 MB max per file.</div>
           {!canUpload && (
-            <div className="text-[0.75rem] text-muted mt-1">Sign in as contributor or higher to upload.</div>
+            <div className="text-[0.75rem] text-muted mt-1">{t('sources.signInToUpload')}</div>
           )}
         </div>
 

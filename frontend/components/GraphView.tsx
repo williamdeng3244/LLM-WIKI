@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Play, Square } from 'lucide-react';
 import type { GraphData, PageSummary } from '@/lib/api';
 import { type GraphSettingsState, DEFAULTS } from '@/lib/graphSettings';
+import { useLanguage } from '@/lib/i18n';
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
@@ -84,6 +85,7 @@ export default function GraphView({
   const [hoverId, setHoverId] = useState<string | null>(null);
   const fg2dRef = useRef<any>(null);
   const fg3dRef = useRef<any>(null);
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // While the user drags inside the graph, emit a `plexus:transform`
@@ -471,15 +473,15 @@ export default function GraphView({
         <button
           className="absolute top-3 right-14 z-10 w-8 h-8 grid place-items-center rounded-md border border-line bg-panel/85 text-muted hover:text-ink backdrop-blur transition-colors"
           onClick={() => setTimelapseStep(timelapseStep == null ? 1 : null)}
-          title={timelapseStep == null
-            ? 'Play timelapse — watch the wiki grow chronologically'
-            : 'Stop timelapse'}
+          title={timelapseStep == null ? t('graph.timelapse.play') : t('graph.timelapse.stop')}
         >
           {timelapseStep == null ? <Play size={14} /> : <Square size={14} />}
         </button>
         {timelapseStep != null && (
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 bg-panel/85 border border-line rounded-md px-3 py-1.5 text-[0.8214rem] text-muted backdrop-blur font-mono tabular-nums">
-            {Math.min(timelapseStep, chronoOrder.length)} / {chronoOrder.length} pages
+            {t('graph.timelapse.counter')
+              .replace('{current}', String(Math.min(timelapseStep, chronoOrder.length)))
+              .replace('{total}', String(chronoOrder.length))}
           </div>
         )}
         <ForceGraph2D

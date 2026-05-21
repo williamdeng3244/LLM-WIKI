@@ -84,6 +84,28 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         kind: 'h3',
+        en: 'New in v0.5.0',
+        zh: 'v0.5.0 新增',
+      },
+      {
+        kind: 'ul',
+        en: [
+          'Collapsible chat panel — fold the AI assistant into a thin rail when you don\'t need it, expand again with one click; conversation state is preserved.',
+          'Obsidian-style page layout — slim top toolbar, title and metadata strip scroll with the body, backlinks always at the bottom, reading column capped at ~820 px and centered for editorial readability.',
+          'Live language switching — flipping 中/EN updates every open menu, dropdown, prompt, and panel in place (no reload, no stale strings).',
+          'Graph settings panel is scrollable now and no longer gets clipped at the top of the graph area.',
+          'Bottom-left version badge — shows the running build and auto-detects new releases against the GitHub Releases API.',
+        ],
+        zh: [
+          '可折叠的对话面板——不需要 AI 助手时收成窄栏，点一下即可展开；对话状态完整保留。',
+          'Obsidian 风格页面排版——细长顶部工具栏，标题和信息条与正文一起滚动，反向链接位于底部，阅读列宽 ~820px 居中显示，整体阅读体验更接近编辑物。',
+          '语言实时切换——切换 中/EN 时所有打开的菜单、下拉、提示、面板立即更新（无需刷新，没有残留旧文本）。',
+          '图谱设置面板现在可滚动，不再被图谱区域顶部截断。',
+          '左下角版本徽章——显示当前运行的构建，通过 GitHub Releases API 自动检测新版本。',
+        ],
+      },
+      {
+        kind: 'h3',
         en: 'How content flows in',
         zh: '内容的流入方式',
       },
@@ -189,14 +211,34 @@ export const HELP_SECTIONS: HelpSection[] = [
         zh: '两种模式都不会编造事实：如果维基没有覆盖某个主题，对话会直接说没有，而不是凭空生成。',
       },
       {
+        kind: 'p',
+        en: 'The chat panel is collapsible — click the panel-close icon in its header to fold it into a 40 px rail; click again to expand. Conversation history, current mode, and any unsent draft persist while collapsed. With the chat folded, the page reading column gains the freed space and centers with comfortable gutters.',
+        zh: '对话面板可折叠——点击面板头部的折叠图标可把它收成一条 40 像素宽的窄栏，再点一次展开。折叠期间对话记录、当前模式以及未发送的草稿都不会丢失。折叠后，页面阅读列会获得释放出来的空间，居中显示并留出舒适的左右边距。',
+      },
+      {
+        kind: 'h3',
+        en: 'Page layout',
+        zh: '页面排版',
+      },
+      {
+        kind: 'p',
+        en: 'Pages render Obsidian-style. A slim toolbar at the top of the tab carries the path breadcrumb and the action buttons (Suggest edit, Flag, Lock for admins, kebab menu); the title and everything below it scrolls as a single column. Immediately under the title is a horizontal metadata strip — Updated date · Last edit by · stability badge · revision count · tag pills — replacing the old right-side metadata sidebar.',
+        zh: '页面采用 Obsidian 风格排版。标签页顶部一条细长工具栏，承载路径面包屑和操作按钮（建议编辑、标记、管理员锁定、kebab 菜单）；标题及其下方所有内容作为单列一起滚动。标题正下方是一条横向信息条——更新日期 · 最近编辑者 · 稳定度徽章 · 修订数 · 标签——取代了原本右侧的元数据栏。',
+      },
+      {
+        kind: 'p',
+        en: 'The reading column caps at ~820 px and centers in the available space. On a wide monitor with the chat panel collapsed, you get generous left/right gutters around a single comfortable reading column — closer to a real editorial document than a dashboard.',
+        zh: '阅读列宽上限 ~820px，在可用空间内居中。在大显示器上把对话面板收起来后，左右都有相当宽的边距，整页呈现为一个舒适的阅读列——更像一本真正的编辑物，而不是仪表板。',
+      },
+      {
         kind: 'h3',
         en: 'Backlinks',
         zh: '反向链接',
       },
       {
         kind: 'p',
-        en: 'On any page, open the kebab menu (⋯ at the top of the page) and toggle Backlinks. An inline panel shows every page that wikilinks here, plus a snippet of the linking text. Backlinks are how you discover "everything that depends on / references this concept" without grepping.',
-        zh: '在任何页面上打开页面顶部的 ⋯ 菜单并切换"反向链接"。一个内联面板会列出所有链接到本页的页面以及链接处的片段。反向链接让你不用 grep 就能发现"所有依赖 / 引用这个概念的地方"。',
+        en: 'Backlinks now render automatically at the bottom of every page (Obsidian convention) — no toggle. Scroll past the markdown body and you\'ll see a list of every page that wikilinks here, with a snippet of the linking text. Backlinks are how you discover "everything that depends on / references this concept" without grepping.',
+        zh: '反向链接现在自动显示在每个页面的底部（Obsidian 惯例）——不再需要开关。滚动到 markdown 正文下方就能看到所有链接到本页的页面列表，附带链接处的片段。反向链接让你不用 grep 就能发现"所有依赖 / 引用这个概念的地方"。',
       },
     ],
   },
@@ -753,13 +795,38 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         kind: 'p',
-        en: 'The 中 / EN button in the top bar swaps the interface chrome between Mandarin Chinese and English. Choice is persisted in localStorage and shared between the wiki and this help site, so you don\'t have to set it twice. First-time visitors get a default based on their browser language (zh* → Chinese; everything else → English).',
-        zh: '顶栏的 中 / EN 按钮在中英文之间切换界面 chrome。选择持久化到 localStorage，并在维基与本帮助站点之间共享，不需要设两次。首次访问时根据浏览器语言决定默认值（zh* → 中文；其它 → 英文）。',
+        en: 'The 中 / EN button in the top bar swaps the interface chrome between Mandarin Chinese and English. As of v0.5.0 coverage is end-to-end: topbar, file-tree toolbar, right-click context menus on files and folders, the page kebab "More actions" list, the Flag dropdown, prompts (rename folder, flag reason, …), the metadata strip, Backlinks, Comments, Sources / Schema / Lint / MCP / Propose panels, the User Manual dropdown, the /help docs, the Shortcut sheet, and the version log are all bilingual. Switching flips every open menu in place without a reload thanks to a cross-instance `lang:change` event.',
+        zh: '顶栏的 中 / EN 按钮在中英文之间切换界面 chrome。从 v0.5.0 起覆盖是端到端的：顶栏、文件树工具栏、文件 / 文件夹的右键菜单、页面 kebab "更多操作"列表、Flag 下拉、各类 prompt（重命名文件夹、Flag 理由…）、信息条、反向链接、评论、原始资料 / 智能体手册 / Lint / MCP / 提议页面 等面板、用户手册下拉、/help 文档、快捷键速查表、版本日志全部双语。切换时所有已打开的菜单原地更新——通过跨实例的 `lang:change` 事件，无需刷新。',
+      },
+      {
+        kind: 'p',
+        en: 'Choice is persisted in localStorage and shared between the wiki and this help site, so you don\'t have to set it twice. First-time visitors get a default based on their browser language (zh* → Chinese; everything else → English).',
+        zh: '选择持久化到 localStorage，并在维基与本帮助站点之间共享，不需要设两次。首次访问时根据浏览器语言决定默认值（zh* → 中文；其它 → 英文）。',
       },
       {
         kind: 'p',
         en: 'Page content (the body of each wiki page) is not auto-translated. If you want bilingual content for a specific page, write it bilingually within the page body, or create two parallel pages (e.g. design/visual-language.md and design/visual-language.zh.md) and link them with wikilinks.',
         zh: '页面正文（每个维基页面的内容）不会被自动翻译。如果你希望某页双语，可以在正文里直接写两份，或者建两个并行页面（如 design/visual-language.md 与 design/visual-language.zh.md）并用 wikilinks 互相链接。',
+      },
+      {
+        kind: 'h3',
+        en: 'Collapsible chat panel',
+        zh: '可折叠的对话面板',
+      },
+      {
+        kind: 'p',
+        en: 'The chat panel on the right can be collapsed to a 40 px rail with the panel-close icon in its header, and re-expanded with one click. State persists across reloads (`wiki:chat-collapsed` in localStorage). When collapsed, the page reading area gains the freed space; the markdown column still caps at ~820 px and centers, giving generous gutters.',
+        zh: '右侧对话面板可以通过头部的"折叠"图标收成 40 像素宽的窄栏，点一下即可重新展开。状态会跨刷新保留（localStorage 中的 `wiki:chat-collapsed`）。折叠时页面阅读区获得释放出来的空间，markdown 列仍以 ~820px 上限居中显示，左右留出舒适的边距。',
+      },
+      {
+        kind: 'h3',
+        en: 'Version log',
+        zh: '版本徽章',
+      },
+      {
+        kind: 'p',
+        en: 'Bottom-left of the wiki shows a small pill with the running build (e.g. v0.5.0). Click it to open a compact list of the last several GitHub releases; each row is a link to the corresponding release page. The list is fetched from the GitHub Releases API once on mount and cached in localStorage for an hour. When a newer non-prerelease tag exists, the pill turns amber as a soft hint to update.',
+        zh: '维基左下角显示一个小药丸，标记当前运行的版本（如 v0.5.0）。点击展开最近几个 GitHub release 的列表，每行可直接跳转到对应 release 页面。列表会在挂载时从 GitHub Releases API 拉取一次，缓存到 localStorage 一小时。当远端有更新的稳定版本时，药丸变琥珀色作为软提示。',
       },
     ],
   },

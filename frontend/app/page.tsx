@@ -67,6 +67,24 @@ export default function Home() {
   const [showManual, setShowManual] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Chat panel collapse: hydrate from localStorage on mount, persist on
+  // every flip. Mirrors the useTheme/useLanguage pattern.
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem('wiki:chat-collapsed');
+      if (saved === '1') setChatCollapsed(true);
+    } catch { /* localStorage unavailable */ }
+  }, []);
+  const toggleChat = useCallback(() => {
+    setChatCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem('wiki:chat-collapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  }, []);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<FileTreeHandle>(null);
 
@@ -92,10 +110,10 @@ export default function Home() {
   const [treeOpenCount, setTreeOpenCount] = useState(0);
   const customFolders = useCustomFolders();
 
-  // File-tree right-click menu + version-history modal.
-  const [ctxMenu, setCtxMenu] = useState<{
-    x: number; y: number; items: MenuItem[];
-  } | null>(null);
+  // File-tree right-click menu + version-history modal. Store the original
+  // ContextMenuInfo (not pre-built items) so the menu re-translates when
+  // language flips while it's open.
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuInfo | null>(null);
   const [historyForPath, setHistoryForPath] = useState<string | null>(null);
 
   // Tree → graph hover bridge: hovering a folder or file in the left
@@ -274,61 +292,61 @@ export default function Home() {
     return [
       {
         kind: 'item',
-        label: 'Open in new tab',
+        label: t('menu.file.openNewTab'),
         icon: <ExternalLink size={13} />,
         onClick: () => { tabs.openPage(info.pagePath, true); pushRecent(info.pagePath); },
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Suggest edit',
+        label: t('menu.file.suggest'),
         icon: <Pencil size={13} />,
         disabled: !user || user.role === 'reader',
-        hint: 'Readers cannot suggest edits',
+        hint: t('menu.file.suggest.disabled'),
         onClick: () => { navigate(info.pagePath); setShowPropose(true); },
       },
       {
         kind: 'item',
-        label: 'Make a copy',
+        label: t('menu.file.copy'),
         icon: <Copy size={13} />,
         disabled: !user || user.role === 'reader',
-        hint: 'Readers cannot create drafts',
+        hint: t('menu.file.copy.disabled'),
         onClick: () => { makePageCopy(info.pagePath); },
       },
       {
         kind: 'item',
-        label: 'Copy path',
+        label: t('menu.file.copyPath'),
         icon: <Clipboard size={13} />,
         onClick: () => { copyToClipboard(info.pagePath); },
       },
       {
         kind: 'item',
-        label: 'Open version history',
+        label: t('menu.file.history'),
         icon: <History size={13} />,
         onClick: () => { setHistoryForPath(info.pagePath); },
       },
       {
         kind: 'item',
-        label: 'Bookmark…',
+        label: t('menu.file.bookmark'),
         icon: <Bookmark size={13} />,
         disabled: true,
-        hint: 'Coming soon',
+        hint: t('menu.file.bookmark.disabled'),
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Move file to…',
+        label: t('menu.file.move'),
         icon: <FolderInput size={13} />,
         disabled: true,
-        hint: 'Backend support not yet wired',
+        hint: t('menu.file.backendNotWired'),
       },
       {
         kind: 'item',
-        label: 'Delete',
+        label: t('menu.file.delete'),
         icon: <Trash2 size={13} />,
         danger: true,
         disabled: true,
-        hint: 'Backend support not yet wired',
+        hint: t('menu.file.backendNotWired'),
       },
     ];
   }
@@ -338,7 +356,7 @@ export default function Home() {
     return [
       {
         kind: 'item',
-        label: 'New note in folder',
+        label: t('menu.folder.newNote'),
         icon: <FilePlus size={13} />,
         disabled: !user || user.role === 'reader',
         onClick: () => {
@@ -350,12 +368,12 @@ export default function Home() {
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Rename folder…',
+        label: t('menu.folder.rename'),
         icon: <Pencil size={13} />,
         disabled: !isCustom,
-        hint: isCustom ? undefined : 'Only user-created folders can be renamed',
+        hint: isCustom ? undefined : t('menu.folder.rename.disabled'),
         onClick: () => {
-          const next = window.prompt('Rename folder:', info.name);
+          const next = window.prompt(t('menu.folder.rename.prompt'), info.name);
           const clean = (next || '').trim().replace(/^\/+|\/+$/g, '').replace(/\//g, '-');
           if (!clean || clean === info.name) return;
           customFolders.remove(info.name);
@@ -364,21 +382,21 @@ export default function Home() {
       },
       {
         kind: 'item',
-        label: 'Copy folder path',
+        label: t('menu.folder.copyPath'),
         icon: <Clipboard size={13} />,
         onClick: () => { copyToClipboard(info.folderPath); },
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Delete folder',
+        label: t('menu.folder.delete'),
         icon: <Trash2 size={13} />,
         danger: true,
         disabled: !isCustom || !info.isEmpty,
         hint: !isCustom
-          ? 'Only user-created folders can be deleted'
+          ? t('menu.folder.delete.notCustom')
           : !info.isEmpty
-            ? 'Folder contains pages — move or delete them first'
+            ? t('menu.folder.delete.notEmpty')
             : undefined,
         onClick: () => { customFolders.remove(info.name); },
       },
@@ -386,10 +404,8 @@ export default function Home() {
   }
 
   const onTreeContextMenu = useCallback((info: ContextMenuInfo) => {
-    const items = info.kind === 'file' ? buildFileMenu(info) : buildFolderMenu(info);
-    setCtxMenu({ x: info.x, y: info.y, items });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, customFolders.folders]);
+    setCtxMenu(info);
+  }, []);
 
   // Handle notification link clicks — they look like /pages/<path> or /review/<id>
   const onNotificationLink = useCallback((link: string) => {
@@ -583,13 +599,21 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Three-pane body */}
-      <div className="flex-1 grid grid-cols-[224px_1fr_340px] min-h-0">
+      {/* Three-pane body. Tree column widened from 224 to 240 for long titles;
+          chat column flips between 320 (expanded) and 40 (collapsed rail).
+          grid-template-columns transitions smoothly via Tailwind arbitrary
+          transition-property so the swap interpolates cleanly. */}
+      <div
+        className="flex-1 grid min-h-0 transition-[grid-template-columns] duration-200 ease-out"
+        style={{
+          gridTemplateColumns: `240px 1fr ${chatCollapsed ? '40px' : '320px'}`,
+        }}
+      >
         <aside className="border-r border-white/[0.06] bg-panel/60 overflow-y-auto scroll-thin">
           <div className="px-2 pt-2 pb-1.5 flex items-center justify-end gap-0.5 sticky top-0 bg-panel/85 backdrop-blur z-10 border-b border-white/[0.04]">
             <button
               className="w-7 h-7 rounded grid place-items-center text-muted hover:text-ink hover:bg-white/[0.06] transition-colors disabled:opacity-40"
-              title="New note"
+              title={t('tree.newNote')}
               disabled={!user || user.role === 'reader'}
               onClick={() => {
                 setProposeAsNew(true);
@@ -600,21 +624,21 @@ export default function Home() {
             </button>
             <button
               className="w-7 h-7 rounded grid place-items-center text-muted hover:text-ink hover:bg-white/[0.06] transition-colors"
-              title="New folder"
+              title={t('tree.newFolder')}
               onClick={() => setPendingFolder({ initial: 'Untitled' })}
             >
               <FolderPlus size={14} />
             </button>
             <button
               className="w-7 h-7 rounded grid place-items-center text-muted hover:text-ink hover:bg-white/[0.06] transition-colors"
-              title={`Sort: ${treeSort === 'asc' ? 'A → Z' : 'Z → A'}`}
+              title={treeSort === 'asc' ? t('tree.sort.asc') : t('tree.sort.desc')}
               onClick={cycleTreeSort}
             >
               {treeSort === 'asc' ? <ArrowDownAZ size={14} /> : <ArrowDownZA size={14} />}
             </button>
             <button
               className="w-7 h-7 rounded grid place-items-center text-muted hover:text-ink hover:bg-white/[0.06] transition-colors"
-              title={treeOpenCount > 0 ? 'Collapse all' : 'Expand all'}
+              title={treeOpenCount > 0 ? t('tree.collapseAll') : t('tree.expandAll')}
               onClick={() => {
                 if (treeOpenCount > 0) treeRef.current?.collapseAll();
                 else treeRef.current?.expandAll();
@@ -631,7 +655,7 @@ export default function Home() {
                   ? 'bg-accent/20 text-accent'
                   : 'text-muted hover:text-ink hover:bg-white/[0.06]'
               }`}
-              title="Graph (2D)"
+              title={t('tree.graph2d')}
               onClick={() => tabs.openGraph('2d')}
             >
               2D
@@ -642,7 +666,7 @@ export default function Home() {
                   ? 'bg-accent/20 text-accent'
                   : 'text-muted hover:text-ink hover:bg-white/[0.06]'
               }`}
-              title="Graph (3D)"
+              title={t('tree.graph3d')}
               onClick={() => tabs.openGraph('3d')}
             >
               3D
@@ -740,7 +764,12 @@ export default function Home() {
         </main>
 
         <aside className="border-l border-white/[0.06] bg-panel/60">
-          <ChatPanel onCitationClick={navigate} knownPaths={allPaths} />
+          <ChatPanel
+            onCitationClick={navigate}
+            knownPaths={allPaths}
+            collapsed={chatCollapsed}
+            onToggleCollapse={toggleChat}
+          />
         </aside>
       </div>
 
@@ -800,7 +829,9 @@ export default function Home() {
         <ContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
-          items={ctxMenu.items}
+          // Rebuild items on every render so the menu re-translates while
+          // open if the user flips language.
+          items={ctxMenu.kind === 'file' ? buildFileMenu(ctxMenu) : buildFolderMenu(ctxMenu)}
           onClose={() => setCtxMenu(null)}
         />
       )}

@@ -3,14 +3,22 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import {
   Flag as FlagIcon, Lock, Unlock, Pencil, MoreVertical,
-  Link2, BookOpen, FolderInput, Bookmark, GitMerge, FileDown,
+  BookOpen, FolderInput, Bookmark, GitMerge, FileDown,
   SearchIcon, Replace, Clipboard, History, Network, LocateFixed,
   Trash2, Plus,
 } from 'lucide-react';
 import Markdown from './Markdown';
-import PageMeta from './PageMeta';
 import ContextMenu, { type MenuItem } from './ContextMenu';
-import { api, type Page, type PageSummary, type Comment, type Flag, type User } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n';
+import { api, type Page, type PageSummary, type Comment, type Flag, type Revision, type User } from '@/lib/api';
+
+function formatDate(s: string): string {
+  try {
+    return new Date(s).toLocaleDateString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+  } catch { return s; }
+}
 
 export default function PageView({
   page, currentUser, allPaths, users, onPropose, onLock, onNavigate,
@@ -27,8 +35,8 @@ export default function PageView({
   onShowVersionHistory?: (path: string) => void;
 }) {
   const [newComment, setNewComment] = useState('');
-  const [showBacklinks, setShowBacklinks] = useState(false);
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number } | null>(null);
+  const { t } = useLanguage();
 
   const { data: comments = [], mutate: refetchComments } = useSWR<Comment[]>(
     page ? `comments:${page.path}` : null,
@@ -41,12 +49,24 @@ export default function PageView({
     { revalidateOnFocus: false },
   );
 
-  // Only fetched when the inline backlinks panel is open.
+  // Backlinks are now always shown at the bottom of the page (Obsidian
+  // style) — fetched on page load instead of gated behind a toggle.
   const { data: backlinks = [] } = useSWR<PageSummary[]>(
-    page && showBacklinks ? `backlinks:${page.path}` : null,
+    page ? `backlinks:${page.path}` : null,
     () => (page ? api.backlinks(page.path) : Promise.resolve([])),
     { revalidateOnFocus: false },
   );
+
+  // Revisions: used for the inline metadata strip (count + latest author).
+  // Shares the SWR cache key with the version-history dialog so opening
+  // history doesn't refetch.
+  const { data: revisions = [] } = useSWR<Revision[]>(
+    page ? `revisions:${page.path}` : null,
+    () => (page ? api.listRevisions(page.path) : Promise.resolve([])),
+    { revalidateOnFocus: false },
+  );
+  const latestRev = revisions
+    .filter((r) => r.status === 'accepted' || r.status === 'superseded')[0];
 
   if (!page) {
     return (
@@ -69,7 +89,11 @@ export default function PageView({
 
   async function flagPage(kind: 'incorrect' | 'outdated' | 'needs_source') {
     if (!page) return;
-    const note = prompt(`Why is this ${kind.replace('_', ' ')}?`);
+    const promptKey =
+      kind === 'incorrect' ? 'page.flag.promptIncorrect'
+      : kind === 'outdated' ? 'page.flag.promptOutdated'
+      : 'page.flag.promptNeedsSource';
+    const note = prompt(t(promptKey));
     if (!note) return;
     await api.createFlag(page.path, kind, note);
   }
@@ -81,101 +105,94 @@ export default function PageView({
     return [
       {
         kind: 'item',
-        label: 'Backlinks in document',
-        icon: <Link2 size={13} />,
-        checked: showBacklinks,
-        onClick: () => setShowBacklinks((v) => !v),
-      },
-      {
-        kind: 'item',
-        label: 'Reading view',
+        label: t('menu.page.readingView'),
         icon: <BookOpen size={13} />,
         checked: true,
         disabled: true,
-        hint: 'Inline editing is not available yet — pages always render in reading view',
+        hint: t('menu.page.readingView.hint'),
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Rename…',
+        label: t('menu.page.rename'),
         icon: <Pencil size={13} />,
         disabled: true,
-        hint: 'Backend support not yet wired',
+        hint: t('menu.page.backendNotWired'),
       },
       {
         kind: 'item',
-        label: 'Move file to…',
+        label: t('menu.page.move'),
         icon: <FolderInput size={13} />,
         disabled: true,
-        hint: 'Backend support not yet wired',
+        hint: t('menu.page.backendNotWired'),
       },
       {
         kind: 'item',
-        label: 'Bookmark…',
+        label: t('menu.page.bookmark'),
         icon: <Bookmark size={13} />,
         disabled: true,
-        hint: 'Coming soon',
+        hint: t('menu.page.bookmark.hint'),
       },
       {
         kind: 'item',
-        label: 'Merge entire file with…',
+        label: t('menu.page.merge'),
         icon: <GitMerge size={13} />,
         disabled: true,
-        hint: 'Not yet implemented',
+        hint: t('menu.page.merge.hint'),
       },
       {
         kind: 'item',
-        label: 'Add file property',
+        label: t('menu.page.addProp'),
         icon: <Plus size={13} />,
         disabled: true,
-        hint: 'Use the tags field in Suggest edit for now',
+        hint: t('menu.page.addProp.hint'),
       },
       {
         kind: 'item',
-        label: 'Export to PDF…',
+        label: t('menu.page.export'),
         icon: <FileDown size={13} />,
         onClick: () => window.print(),
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Find…',
+        label: t('menu.page.find'),
         icon: <SearchIcon size={13} />,
         disabled: true,
-        hint: 'Use Ctrl+F (browser find) for now',
+        hint: t('menu.page.find.hint'),
       },
       {
         kind: 'item',
-        label: 'Replace…',
+        label: t('menu.page.replace'),
         icon: <Replace size={13} />,
         disabled: true,
-        hint: 'No editor available yet',
+        hint: t('menu.page.replace.hint'),
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Copy path',
+        label: t('menu.page.copyPath'),
         icon: <Clipboard size={13} />,
         onClick: copyPath,
       },
       {
         kind: 'item',
-        label: 'Open version history',
+        label: t('menu.page.history'),
         icon: <History size={13} />,
         disabled: !onShowVersionHistory,
         onClick: () => onShowVersionHistory?.(p.path),
       },
       {
         kind: 'item',
-        label: 'Open linked view',
+        label: t('menu.page.linked'),
         icon: <Network size={13} />,
         disabled: true,
-        hint: 'Outline panel not yet implemented',
+        hint: t('menu.page.linked.hint'),
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Reveal file in navigation',
+        label: t('menu.page.reveal'),
         icon: <LocateFixed size={13} />,
         disabled: !onRevealInTree,
         onClick: () => onRevealInTree?.(p.path),
@@ -183,135 +200,168 @@ export default function PageView({
       { kind: 'divider' },
       {
         kind: 'item',
-        label: 'Delete file',
+        label: t('menu.page.delete'),
         icon: <Trash2 size={13} />,
         danger: true,
         disabled: true,
-        hint: 'Backend support not yet wired',
+        hint: t('menu.page.backendNotWired'),
       },
     ];
   }
 
+  const latestAuthor = latestRev ? users.get(latestRev.author_id) : undefined;
+
   return (
     <div className="h-full flex flex-col reading-wash">
-      {/* Header */}
-      <header className="px-8 pt-12 pb-8 border-b border-black/8">
-        <div className="max-w-[68ch] mx-auto">
-          <div className="flex items-center justify-between gap-4 mb-5">
-            <div
-              className="text-[0.75rem] uppercase tracking-[0.18em] text-muted truncate"
-              title={page.path}
-            >
-              {page.path.split('/').join(' · ')}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {canSuggest && (
-                <button className="btn" onClick={onPropose}>
-                  <Pencil size={13} /> Suggest edit
-                </button>
-              )}
-              <div className="relative group">
-                <button className="btn">
-                  <FlagIcon size={13} /> Flag
-                </button>
-                <div className="absolute right-0 top-full pt-1 hidden group-hover:block z-10">
-                  <div className="bg-panel border border-line rounded-md shadow-lg text-xs min-w-[148px] overflow-hidden">
-                    <button className="block w-full text-left px-3 py-2 hover:bg-black/5"
-                      onClick={() => flagPage('incorrect')}>Incorrect</button>
-                    <button className="block w-full text-left px-3 py-2 hover:bg-black/5"
-                      onClick={() => flagPage('outdated')}>Outdated</button>
-                    <button className="block w-full text-left px-3 py-2 hover:bg-black/5"
-                      onClick={() => flagPage('needs_source')}>Needs source</button>
-                  </div>
-                </div>
-              </div>
-              {isAdmin && (
-                <button className="btn" onClick={() => onLock(page.stability !== 'locked')}>
-                  {page.stability === 'locked' ? <><Unlock size={13} /> Unlock</> : <><Lock size={13} /> Lock</>}
-                </button>
-              )}
-              <button
-                className="btn btn-icon"
-                title="More actions"
-                aria-label="More actions"
-                onClick={(e) => {
-                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                  // Right-align the menu under the button; ContextMenu
-                  // clamps to the viewport if our estimate is off.
-                  setPageMenu({ x: rect.right - 240, y: rect.bottom + 4 });
-                }}
-              >
-                <MoreVertical size={14} />
-              </button>
-            </div>
-          </div>
-          <div className="border-t border-black/10 mb-7" />
-          <h1 className="font-serif font-medium text-ink text-[2.8571rem] leading-[1.08] tracking-[-0.018em]">
-            {page.title}
-          </h1>
-          <div className="flex items-center flex-wrap gap-2 mt-5">
-            <span className={`badge ${page.stability}`}>{page.stability}</span>
-            {page.tags.slice(0, 5).map((t) => (
-              <span key={t} className="badge">#{t}</span>
-            ))}
-          </div>
+      {/* Slim sticky toolbar — path + actions only. The title scrolls with
+          the body below, Obsidian-style. */}
+      <div className="shrink-0 px-6 py-2 border-b border-black/8 bg-paper/55 backdrop-blur flex items-center justify-between gap-4 z-10">
+        <div
+          className="text-[0.75rem] uppercase tracking-[0.18em] text-muted truncate min-w-0"
+          title={page.path}
+        >
+          {page.path.split('/').join(' · ')}
         </div>
-      </header>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {canSuggest && (
+            <button className="btn" onClick={onPropose}>
+              <Pencil size={13} /> {t('page.toolbar.suggest')}
+            </button>
+          )}
+          <div className="relative group">
+            <button className="btn">
+              <FlagIcon size={13} /> {t('page.toolbar.flag')}
+            </button>
+            <div className="absolute right-0 top-full pt-1 hidden group-hover:block z-10">
+              <div className="bg-panel border border-line rounded-md shadow-lg text-xs min-w-[148px] overflow-hidden">
+                <button className="block w-full text-left px-3 py-2 hover:bg-black/5"
+                  onClick={() => flagPage('incorrect')}>{t('page.flag.incorrect')}</button>
+                <button className="block w-full text-left px-3 py-2 hover:bg-black/5"
+                  onClick={() => flagPage('outdated')}>{t('page.flag.outdated')}</button>
+                <button className="block w-full text-left px-3 py-2 hover:bg-black/5"
+                  onClick={() => flagPage('needs_source')}>{t('page.flag.needsSource')}</button>
+              </div>
+            </div>
+          </div>
+          {isAdmin && (
+            <button className="btn" onClick={() => onLock(page.stability !== 'locked')}>
+              {page.stability === 'locked'
+                ? <><Unlock size={13} /> {t('page.toolbar.unlock')}</>
+                : <><Lock size={13} /> {t('page.toolbar.lock')}</>}
+            </button>
+          )}
+          <button
+            className="btn btn-icon"
+            title={t('page.toolbar.more')}
+            aria-label={t('page.toolbar.more')}
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+              setPageMenu({ x: rect.right - 240, y: rect.bottom + 4 });
+            }}
+          >
+            <MoreVertical size={14} />
+          </button>
+        </div>
+      </div>
 
       {openFlags.length > 0 && (
         <div className="px-8 py-2 bg-amber-500/[0.08] border-b border-amber-500/30 text-xs text-amber-300 flex items-start gap-2">
           <FlagIcon size={13} className="shrink-0 mt-0.5" />
           <div>
-            <strong>{openFlags.length} open flag{openFlags.length > 1 ? 's' : ''}:</strong>{' '}
+            <strong>
+              {openFlags.length}{' '}
+              {openFlags.length === 1 ? t('page.flags.banner.one') : t('page.flags.banner.many')}:
+            </strong>{' '}
             {openFlags[0].body}
-            {openFlags.length > 1 && ` (+${openFlags.length - 1} more)`}
+            {openFlags.length > 1 && ` (+${openFlags.length - 1} ${t('page.flags.banner.more')})`}
           </div>
         </div>
       )}
 
-      {/* Two-column body */}
-      <div className="flex-1 grid grid-cols-[1fr_220px] min-h-0">
-        <div className="overflow-y-auto scroll-thin px-8 py-12">
-          <div className="max-w-[68ch] mx-auto">
-          <Markdown
-            knownPaths={allPaths}
-            onWikiLinkClick={onNavigate}
-          >
+      {/* Single scrollable column. Title, metadata strip, body, backlinks,
+          and comments all scroll together. Reading column is capped at
+          820px and centered. */}
+      <div className="flex-1 overflow-y-auto scroll-thin">
+        <div className="max-w-[820px] mx-auto px-8 pt-10 pb-16">
+          <h1 className="font-serif font-medium text-ink text-[2.8571rem] leading-[1.08] tracking-[-0.018em]">
+            {page.title}
+          </h1>
+
+          {/* Inline metadata strip — replaces the old right-rail sidebar. */}
+          <div className="mt-4 flex items-center flex-wrap gap-x-3 gap-y-2 text-[0.8214rem] text-muted">
+            <span>{t('page.meta.updated')} {formatDate(page.updated_at)}</span>
+            {latestAuthor && (
+              <>
+                <span className="text-muted/40">·</span>
+                <span>
+                  {t('page.meta.lastEditBy')}{' '}
+                  <span className="text-ink" title={latestAuthor.email}>
+                    {latestAuthor.name || `user #${latestRev!.author_id}`}
+                  </span>
+                </span>
+              </>
+            )}
+            <span className="text-muted/40">·</span>
+            <span className={`badge ${page.stability}`}>{page.stability}</span>
+            <span className="text-muted/40">·</span>
+            <button
+              onClick={() => onShowVersionHistory?.(page.path)}
+              className="text-muted hover:text-ink transition-colors disabled:cursor-default disabled:hover:text-muted"
+              disabled={!onShowVersionHistory}
+              title={onShowVersionHistory ? t('page.meta.historyTitle') : undefined}
+            >
+              {(revisions.length === 1
+                ? t('page.meta.revisions.one')
+                : t('page.meta.revisions.many')
+              ).replace('{n}', String(revisions.length))}
+            </button>
+            {page.tags.length > 0 && (
+              <>
+                <span className="text-muted/40">·</span>
+                {page.tags.slice(0, 8).map((t) => (
+                  <span key={t} className="badge">#{t}</span>
+                ))}
+              </>
+            )}
+          </div>
+
+          <div className="border-t border-black/8 mt-6 mb-8" />
+
+          <Markdown knownPaths={allPaths} onWikiLinkClick={onNavigate}>
             {page.body}
           </Markdown>
 
-          {showBacklinks && (
-            <div className="mt-12 pt-5 border-t border-white/[0.08]">
-              <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-3">
-                Backlinks <span className="ml-1 text-muted/70">({backlinks.length})</span>
-              </div>
-              {backlinks.length === 0 ? (
-                <div className="text-xs text-muted italic">No backlinks yet.</div>
-              ) : (
-                <ul className="space-y-1">
-                  {backlinks.map((b) => (
-                    <li key={b.path}>
-                      <button
-                        onClick={() => onNavigate(b.path)}
-                        className="text-left w-full px-2 py-1 rounded hover:bg-white/[0.04] transition-colors"
-                      >
-                        <span className="text-[0.9286rem] text-accent hover:text-ink">{b.title}</span>
-                        <span className="text-muted text-[0.7857rem] ml-2 font-mono">{b.path}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          {/* Backlinks — always shown at the bottom (Obsidian convention). */}
+          <div className="mt-14 pt-6 border-t border-black/8">
+            <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-3">
+              {t('page.backlinks.title')} <span className="ml-1 text-muted/70">({backlinks.length})</span>
             </div>
-          )}
+            {backlinks.length === 0 ? (
+              <div className="text-xs text-muted italic">{t('page.backlinks.empty')}</div>
+            ) : (
+              <ul className="space-y-1">
+                {backlinks.map((b) => (
+                  <li key={b.path}>
+                    <button
+                      onClick={() => onNavigate(b.path)}
+                      className="text-left w-full px-2 py-1 rounded hover:bg-white/[0.04] transition-colors"
+                    >
+                      <span className="text-[0.9286rem] text-accent hover:text-ink">{b.title}</span>
+                      <span className="text-muted text-[0.7857rem] ml-2 font-mono">{b.path}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {/* Comments */}
           <div className="mt-14 pt-6 border-t border-black/8">
             <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-3">
-              Comments ({comments.length})
+              {t('page.comments.title')} ({comments.length})
             </div>
             {comments.length === 0 ? (
-              <div className="text-xs text-muted italic mb-3">No comments yet.</div>
+              <div className="text-xs text-muted italic mb-3">{t('page.comments.empty')}</div>
             ) : (
               <div className="space-y-3 mb-4">
                 {comments.map((c) => {
@@ -343,7 +393,7 @@ export default function PageView({
             <div className="flex gap-2">
               <input
                 className="form-input flex-1 h-9"
-                placeholder="Comment…"
+                placeholder={t('page.comments.placeholder')}
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && postComment()}
@@ -353,21 +403,11 @@ export default function PageView({
                 onClick={postComment}
                 disabled={!newComment.trim()}
               >
-                Post
+                {t('page.comments.post')}
               </button>
             </div>
           </div>
-          </div>
         </div>
-
-        {/* Sidebar */}
-        <aside className="border-l border-white/[0.06] px-5 py-6 overflow-y-auto scroll-thin bg-panel/40">
-          <PageMeta
-            page={page}
-            users={users}
-            onNavigate={onNavigate}
-          />
-        </aside>
       </div>
 
       {pageMenu && (

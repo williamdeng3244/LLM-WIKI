@@ -37,6 +37,27 @@ export function useLanguage(): {
     document.documentElement.setAttribute('lang', value === 'zh' ? 'zh-Hans' : 'en');
   }, []);
 
+  // Every useLanguage() call has its own React state. Without this listener,
+  // flipping the topbar toggle would update only the topbar; other consumers
+  // (PageView, file/folder context menus, etc.) would render stale strings
+  // until their own component happened to re-mount. Subscribe to the
+  // `lang:change` event our own setLang fires so every instance syncs.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    function onLangChange(e: Event) {
+      const detail = (e as CustomEvent<{ to?: Lang }>).detail;
+      if (detail?.to === 'en' || detail?.to === 'zh') {
+        setLangState(detail.to);
+        document.documentElement.setAttribute(
+          'lang',
+          detail.to === 'zh' ? 'zh-Hans' : 'en',
+        );
+      }
+    }
+    window.addEventListener('lang:change', onLangChange);
+    return () => window.removeEventListener('lang:change', onLangChange);
+  }, []);
+
   const setLang = useCallback((next: Lang) => {
     setLangState((prev) => {
       if (prev === next) return prev;
@@ -159,6 +180,181 @@ export const MESSAGES = {
     'version.panel.loading': 'Loading…',
     'version.panel.checkFailed': 'Could not reach GitHub. Showing the bundled version only.',
 
+    // File tree toolbar (above the file list)
+    'tree.newNote': 'New note',
+    'tree.newFolder': 'New folder',
+    'tree.sort.asc': 'Sort: A → Z',
+    'tree.sort.desc': 'Sort: Z → A',
+    'tree.collapseAll': 'Collapse all',
+    'tree.expandAll': 'Expand all',
+    'tree.graph2d': 'Graph (2D)',
+    'tree.graph3d': 'Graph (3D)',
+
+    // File right-click context menu
+    'menu.file.openNewTab': 'Open in new tab',
+    'menu.file.suggest': 'Suggest edit',
+    'menu.file.suggest.disabled': 'Readers cannot suggest edits',
+    'menu.file.copy': 'Make a copy',
+    'menu.file.copy.disabled': 'Readers cannot create drafts',
+    'menu.file.copyPath': 'Copy path',
+    'menu.file.history': 'Open version history',
+    'menu.file.bookmark': 'Bookmark…',
+    'menu.file.bookmark.disabled': 'Coming soon',
+    'menu.file.move': 'Move file to…',
+    'menu.file.delete': 'Delete',
+    'menu.file.backendNotWired': 'Backend support not yet wired',
+
+    // Folder right-click context menu
+    'menu.folder.newNote': 'New note in folder',
+    'menu.folder.rename': 'Rename folder…',
+    'menu.folder.rename.disabled': 'Only user-created folders can be renamed',
+    'menu.folder.rename.prompt': 'Rename folder:',
+    'menu.folder.copyPath': 'Copy folder path',
+    'menu.folder.delete': 'Delete folder',
+    'menu.folder.delete.notCustom': 'Only user-created folders can be deleted',
+    'menu.folder.delete.notEmpty': 'Folder contains pages — move or delete them first',
+
+    // PageView toolbar (top of every page tab)
+    'page.toolbar.suggest': 'Suggest edit',
+    'page.toolbar.flag': 'Flag',
+    'page.toolbar.lock': 'Lock',
+    'page.toolbar.unlock': 'Unlock',
+    'page.toolbar.more': 'More actions',
+    'page.flag.incorrect': 'Incorrect',
+    'page.flag.outdated': 'Outdated',
+    'page.flag.needsSource': 'Needs source',
+    'page.flag.promptIncorrect': 'Why is this incorrect?',
+    'page.flag.promptOutdated': 'Why is this outdated?',
+    'page.flag.promptNeedsSource': 'What source is needed?',
+
+    // PageView kebab "More actions" menu items
+    'menu.page.readingView': 'Reading view',
+    'menu.page.readingView.hint': 'Inline editing is not available yet — pages always render in reading view',
+    'menu.page.rename': 'Rename…',
+    'menu.page.move': 'Move file to…',
+    'menu.page.bookmark': 'Bookmark…',
+    'menu.page.bookmark.hint': 'Coming soon',
+    'menu.page.merge': 'Merge entire file with…',
+    'menu.page.merge.hint': 'Not yet implemented',
+    'menu.page.addProp': 'Add file property',
+    'menu.page.addProp.hint': 'Use the tags field in Suggest edit for now',
+    'menu.page.export': 'Export to PDF…',
+    'menu.page.find': 'Find…',
+    'menu.page.find.hint': 'Use Ctrl+F (browser find) for now',
+    'menu.page.replace': 'Replace…',
+    'menu.page.replace.hint': 'No editor available yet',
+    'menu.page.copyPath': 'Copy path',
+    'menu.page.history': 'Open version history',
+    'menu.page.linked': 'Open linked view',
+    'menu.page.linked.hint': 'Outline panel not yet implemented',
+    'menu.page.reveal': 'Reveal file in navigation',
+    'menu.page.delete': 'Delete file',
+    'menu.page.backendNotWired': 'Backend support not yet wired',
+
+    // PageView metadata strip + body
+    'page.meta.updated': 'Updated',
+    'page.meta.lastEditBy': 'Last edit by',
+    'page.meta.revisions.one': '{n} revision',
+    'page.meta.revisions.many': '{n} revisions',
+    'page.meta.historyTitle': 'Open version history',
+    'page.backlinks.title': 'Backlinks',
+    'page.backlinks.empty': 'No backlinks yet.',
+    'page.comments.title': 'Comments',
+    'page.comments.empty': 'No comments yet.',
+    'page.comments.placeholder': 'Comment…',
+    'page.comments.post': 'Post',
+    'page.flags.banner.one': 'open flag',
+    'page.flags.banner.many': 'open flags',
+    'page.flags.banner.more': 'more',
+
+    // Chat panel
+    'chat.assistant': 'Assistant',
+    'chat.intro': 'Ask anything about the wiki. Answers cite only published content.',
+    'chat.intro.wiki': 'Wiki mode: synthesizes across full pages and follows [[wikilinks]]. Best for "explain this concept" questions.',
+    'chat.intro.sources': 'Sources mode: chunk-level retrieval with line-range citations. Best for "where is X documented" questions.',
+    'chat.clear': 'Clear chat',
+    'chat.collapse': 'Collapse chat panel',
+    'chat.expand': 'Expand chat panel',
+    'chat.input.placeholder': 'Ask the wiki…',
+    'chat.send': 'Send',
+    'chat.mode.sources': 'Sources mode — chunk-level RAG with line-range citations',
+    'chat.mode.wiki': 'Wiki mode — synthesize from full pages, follow [[wikilinks]]',
+
+    // Graph view buttons + timelapse
+    'graph.timelapse.play': 'Play timelapse — watch the wiki grow chronologically',
+    'graph.timelapse.stop': 'Stop timelapse',
+    'graph.timelapse.counter': '{current} / {total} pages',
+
+    // Graph settings panel
+    'graphSettings.title': 'Graph Settings',
+    'graphSettings.section.display': 'Display',
+    'graphSettings.section.forces': 'Forces',
+    'graphSettings.section.colors': 'Colors',
+    'graphSettings.nodeSize': 'Node size',
+    'graphSettings.lineThickness': 'Line thickness',
+    'graphSettings.glow': 'Glow',
+    'graphSettings.centerForce': 'Center force',
+    'graphSettings.repelForce': 'Repel force',
+    'graphSettings.linkForce': 'Link force',
+    'graphSettings.linkDistance': 'Link distance',
+    'graphSettings.bgMotion': 'Background motion',
+    'graphSettings.reset': 'Reset',
+    'graphSettings.resetTitle': 'Reset all graph settings',
+
+    // Sources panel
+    'sources.title': 'Raw sources',
+    'sources.dropHere': 'Drop files here, or',
+    'sources.browse': 'browse',
+    'sources.signInToUpload': 'Sign in as contributor or higher to upload.',
+    'sources.openLatest': 'Open the latest plan / run',
+    'sources.ingestTitle': 'Plan an ingest — agent reads the source, you review proposed edits before any drafts are created.',
+    'sources.ingest': 'Ingest',
+    'sources.history': 'Show ingest history',
+    'sources.download': 'Download',
+    'sources.empty': 'No sources uploaded yet.',
+
+    // Schema editor (agent playbook)
+    'schema.title': 'Agent playbook',
+    'schema.discard': 'Discard local edits',
+    'schema.save': 'Save',
+    'schema.saved': 'Saved',
+    'schema.unsaved': 'Unsaved changes',
+    'schema.adminOnly': 'Admin only — this is the system prompt the ingest agent follows.',
+
+    // Lint panel
+    'lint.title': 'Wiki lint',
+    'lint.runLint': 'Run lint',
+    'lint.runLintTitle': 'Queue a new lint pass',
+    'lint.empty': 'No lint reports yet. Click {action} to start one.',
+    'lint.dismissNote': 'Dismiss note',
+    'lint.openPage': 'Open this page',
+    'lint.suggestEdit': 'Open Suggest edit on this page',
+
+    // MCP access panel
+    'mcp.title': 'MCP access',
+    'mcp.tokenCopy': 'Copy',
+    'mcp.tokenCopied': 'Copied',
+    'mcp.tokenSavedHint': 'Save this token now — it won\'t be shown again.',
+    'mcp.tokenDismiss': 'Dismiss',
+    'mcp.namePlaceholder': "Token name (e.g. 'Claude Desktop on laptop')",
+    'mcp.create': 'Create token',
+    'mcp.creating': 'Creating…',
+    'mcp.activeNone': 'No active tokens.',
+    'mcp.revoke': 'Revoke',
+
+    // Propose dialog
+    'propose.title.new': 'Propose a new page',
+    'propose.title.edit': 'Suggest edit',
+    'propose.edit': 'Edit',
+    'propose.split': 'Split',
+    'propose.preview': 'Preview',
+    'propose.close': 'Close',
+    'propose.submit': 'Submit for review',
+    'propose.saveDraft': 'Save draft',
+    'propose.stability.open': 'Open page — auto-publishes on submit.',
+    'propose.stability.stable': 'Stable page — goes to the review queue.',
+    'propose.stability.locked': 'Locked page — admin review required.',
+
     // Section headings
     'manual.section.reading': 'Reading & search',
     'manual.section.authoring': 'Authoring',
@@ -226,6 +422,18 @@ export const MESSAGES = {
     'manual.tabs.title': 'Tabs',
     'manual.tabs.body':
       'Open multiple pages or graph views in tabs at the top of the center pane. Right-click a tab for split / reveal / close options. Tabs persist across reloads.',
+    'manual.chatCollapse.title': 'Collapsible chat panel',
+    'manual.chatCollapse.body':
+      'Click the panel-close icon in the chat header to collapse the assistant into a thin 40 px rail; click again to expand. State persists across reloads. Conversation history, mode (Sources/Wiki), and any draft input are preserved while collapsed — nothing is reset.',
+    'manual.pageLayout.title': 'Page layout',
+    'manual.pageLayout.body':
+      'Pages render Obsidian-style: a slim toolbar at the top (path + actions), the title scrolling with the body, a metadata strip under the title (Updated · Last edit by · stability · revisions · tags), the markdown body, and backlinks at the bottom. Reading column caps at ~820 px and centers — collapse the chat panel for a roomier reading view.',
+    'manual.versionLog.title': 'Version log',
+    'manual.versionLog.body':
+      'Bottom-left badge showing the running version (e.g. v0.5.0). Click for a compact list of recent releases — each row jumps to the GitHub release page. Polls the Releases API hourly; when a newer tag exists, the badge turns amber.',
+    'manual.langToggle.title': 'Language toggle',
+    'manual.langToggle.body':
+      '中/EN button in the top bar. Switches the entire chrome — topbar, menus, prompts, kebabs, panels, manual, and /help docs — between Mandarin and English instantly. Choice is shared across the wiki and the help site via localStorage.',
   },
 
   zh: {
@@ -315,6 +523,181 @@ export const MESSAGES = {
     'version.panel.loading': '加载中…',
     'version.panel.checkFailed': '无法连接 GitHub，仅显示当前打包版本。',
 
+    // File tree toolbar (above the file list)
+    'tree.newNote': '新建笔记',
+    'tree.newFolder': '新建文件夹',
+    'tree.sort.asc': '排序：A → Z',
+    'tree.sort.desc': '排序：Z → A',
+    'tree.collapseAll': '全部折叠',
+    'tree.expandAll': '全部展开',
+    'tree.graph2d': '图谱（2D）',
+    'tree.graph3d': '图谱（3D）',
+
+    // File right-click context menu
+    'menu.file.openNewTab': '在新标签页打开',
+    'menu.file.suggest': '建议编辑',
+    'menu.file.suggest.disabled': '只读用户无法建议编辑',
+    'menu.file.copy': '创建副本',
+    'menu.file.copy.disabled': '只读用户无法创建草稿',
+    'menu.file.copyPath': '复制路径',
+    'menu.file.history': '查看版本历史',
+    'menu.file.bookmark': '收藏…',
+    'menu.file.bookmark.disabled': '即将推出',
+    'menu.file.move': '移动到…',
+    'menu.file.delete': '删除',
+    'menu.file.backendNotWired': '后端尚未实现',
+
+    // Folder right-click context menu
+    'menu.folder.newNote': '在此文件夹中新建笔记',
+    'menu.folder.rename': '重命名文件夹…',
+    'menu.folder.rename.disabled': '仅可重命名用户创建的文件夹',
+    'menu.folder.rename.prompt': '重命名文件夹：',
+    'menu.folder.copyPath': '复制文件夹路径',
+    'menu.folder.delete': '删除文件夹',
+    'menu.folder.delete.notCustom': '仅可删除用户创建的文件夹',
+    'menu.folder.delete.notEmpty': '文件夹中含有页面——请先移走或删除',
+
+    // PageView toolbar (top of every page tab)
+    'page.toolbar.suggest': '建议编辑',
+    'page.toolbar.flag': '标记',
+    'page.toolbar.lock': '锁定',
+    'page.toolbar.unlock': '解锁',
+    'page.toolbar.more': '更多操作',
+    'page.flag.incorrect': '内容有误',
+    'page.flag.outdated': '已过期',
+    'page.flag.needsSource': '需要来源',
+    'page.flag.promptIncorrect': '请说明哪里有误：',
+    'page.flag.promptOutdated': '请说明哪里过期：',
+    'page.flag.promptNeedsSource': '需要什么来源？',
+
+    // PageView kebab "More actions" menu items
+    'menu.page.readingView': '阅读模式',
+    'menu.page.readingView.hint': '当前尚未支持行内编辑——页面始终以阅读模式渲染',
+    'menu.page.rename': '重命名…',
+    'menu.page.move': '移动到…',
+    'menu.page.bookmark': '收藏…',
+    'menu.page.bookmark.hint': '即将推出',
+    'menu.page.merge': '合并到另一文件…',
+    'menu.page.merge.hint': '尚未实现',
+    'menu.page.addProp': '添加文件属性',
+    'menu.page.addProp.hint': '请暂用"建议编辑"中的 tags 字段',
+    'menu.page.export': '导出为 PDF…',
+    'menu.page.find': '查找…',
+    'menu.page.find.hint': '请暂用浏览器的 Ctrl+F',
+    'menu.page.replace': '替换…',
+    'menu.page.replace.hint': '暂无可用编辑器',
+    'menu.page.copyPath': '复制路径',
+    'menu.page.history': '查看版本历史',
+    'menu.page.linked': '打开关联视图',
+    'menu.page.linked.hint': '大纲面板尚未实现',
+    'menu.page.reveal': '在导航中定位',
+    'menu.page.delete': '删除文件',
+    'menu.page.backendNotWired': '后端尚未实现',
+
+    // PageView metadata strip + body
+    'page.meta.updated': '更新于',
+    'page.meta.lastEditBy': '最近编辑者',
+    'page.meta.revisions.one': '{n} 次修订',
+    'page.meta.revisions.many': '{n} 次修订',
+    'page.meta.historyTitle': '查看版本历史',
+    'page.backlinks.title': '反向链接',
+    'page.backlinks.empty': '暂无反向链接。',
+    'page.comments.title': '评论',
+    'page.comments.empty': '暂无评论。',
+    'page.comments.placeholder': '评论…',
+    'page.comments.post': '发布',
+    'page.flags.banner.one': '个未处理标记',
+    'page.flags.banner.many': '个未处理标记',
+    'page.flags.banner.more': '更多',
+
+    // Chat panel
+    'chat.assistant': 'AI 助手',
+    'chat.intro': '关于维基的任何问题都可以提问。回答只会引用已发布的内容。',
+    'chat.intro.wiki': 'Wiki 模式：综合整页内容并跟随 [[wikilinks]]。适合"解释这个概念"类问题。',
+    'chat.intro.sources': 'Sources 模式：按片段检索，附带行号引用。适合"X 在哪里有记录"类问题。',
+    'chat.clear': '清空对话',
+    'chat.collapse': '收起对话面板',
+    'chat.expand': '展开对话面板',
+    'chat.input.placeholder': '向维基提问…',
+    'chat.send': '发送',
+    'chat.mode.sources': 'Sources 模式 — 按片段检索，附带行号引用',
+    'chat.mode.wiki': 'Wiki 模式 — 综合整页内容，跟随 [[wikilinks]]',
+
+    // Graph view buttons + timelapse
+    'graph.timelapse.play': '播放时间回放 — 按时间顺序观看维基的成长',
+    'graph.timelapse.stop': '停止时间回放',
+    'graph.timelapse.counter': '{current} / {total} 个页面',
+
+    // Graph settings panel
+    'graphSettings.title': '图谱设置',
+    'graphSettings.section.display': '显示',
+    'graphSettings.section.forces': '力学参数',
+    'graphSettings.section.colors': '颜色',
+    'graphSettings.nodeSize': '节点大小',
+    'graphSettings.lineThickness': '连线粗细',
+    'graphSettings.glow': '辉光',
+    'graphSettings.centerForce': '中心力',
+    'graphSettings.repelForce': '排斥力',
+    'graphSettings.linkForce': '连接力',
+    'graphSettings.linkDistance': '连线距离',
+    'graphSettings.bgMotion': '背景动效',
+    'graphSettings.reset': '重置',
+    'graphSettings.resetTitle': '重置所有图谱设置',
+
+    // Sources panel
+    'sources.title': '原始资料',
+    'sources.dropHere': '将文件拖到这里，或',
+    'sources.browse': '浏览',
+    'sources.signInToUpload': '请以贡献者及以上身份登录后再上传。',
+    'sources.openLatest': '打开最新的计划 / 运行记录',
+    'sources.ingestTitle': '触发 ingest — 智能体阅读资料并提出建议编辑，需经你审核后才会生成草稿。',
+    'sources.ingest': '导入',
+    'sources.history': '查看 ingest 历史',
+    'sources.download': '下载',
+    'sources.empty': '尚未上传任何资料。',
+
+    // Schema editor (agent playbook)
+    'schema.title': '智能体手册',
+    'schema.discard': '放弃本地修改',
+    'schema.save': '保存',
+    'schema.saved': '已保存',
+    'schema.unsaved': '有未保存的修改',
+    'schema.adminOnly': '仅管理员可见 — 此为 ingest 智能体所遵循的系统提示词。',
+
+    // Lint panel
+    'lint.title': '维基检查',
+    'lint.runLint': '运行检查',
+    'lint.runLintTitle': '触发一次新的 lint 扫描',
+    'lint.empty': '暂无 lint 报告。点击 {action} 触发一次。',
+    'lint.dismissNote': '驳回理由',
+    'lint.openPage': '打开此页面',
+    'lint.suggestEdit': '在此页面打开「建议编辑」',
+
+    // MCP access panel
+    'mcp.title': 'MCP 接入',
+    'mcp.tokenCopy': '复制',
+    'mcp.tokenCopied': '已复制',
+    'mcp.tokenSavedHint': '请立即保存 Token——它仅显示这一次。',
+    'mcp.tokenDismiss': '关闭',
+    'mcp.namePlaceholder': 'Token 名称（如 "Claude Desktop on laptop"）',
+    'mcp.create': '创建 Token',
+    'mcp.creating': '创建中…',
+    'mcp.activeNone': '当前没有可用的 Token。',
+    'mcp.revoke': '吊销',
+
+    // Propose dialog
+    'propose.title.new': '提议新页面',
+    'propose.title.edit': '建议编辑',
+    'propose.edit': '编辑',
+    'propose.split': '分屏',
+    'propose.preview': '预览',
+    'propose.close': '关闭',
+    'propose.submit': '提交审核',
+    'propose.saveDraft': '保存草稿',
+    'propose.stability.open': 'Open 页面 — 提交后自动发布。',
+    'propose.stability.stable': 'Stable 页面 — 提交进入审核队列。',
+    'propose.stability.locked': 'Locked 页面 — 需要管理员审核。',
+
     // Section headings
     'manual.section.reading': '阅读与检索',
     'manual.section.authoring': '内容创作',
@@ -382,5 +765,17 @@ export const MESSAGES = {
     'manual.tabs.title': '标签页',
     'manual.tabs.body':
       '在中心区域顶部以标签页形式打开多个页面或图谱视图。右键标签提供拆分、定位、关闭等选项。标签页跨刷新保留。',
+    'manual.chatCollapse.title': '可折叠的对话面板',
+    'manual.chatCollapse.body':
+      '点击对话面板头部的折叠图标，可把 AI 助手收成一条 40 像素宽的窄栏；再点一次展开。状态跨刷新保留。折叠时对话记录、当前模式（Sources/Wiki）以及未发送的输入都不会丢失。',
+    'manual.pageLayout.title': '页面排版',
+    'manual.pageLayout.body':
+      '页面采用 Obsidian 风格排版：顶部一条细长工具栏（路径 + 操作），标题与正文一起滚动；标题下方有信息条（更新时间 · 最近编辑者 · 稳定度 · 修订数 · 标签），正文 markdown 居中，反向链接位于页面底部。阅读列宽 ~820px 居中显示——折叠对话面板可获得更宽裕的阅读区。',
+    'manual.versionLog.title': '版本徽章',
+    'manual.versionLog.body':
+      '左下角小徽章显示当前运行的版本（如 v0.5.0）。点击展开近期 release 列表，每行可直接跳转 GitHub release 页面。每小时轮询一次 Releases API；当远端有新版本时徽章变琥珀色提示。',
+    'manual.langToggle.title': '语言切换',
+    'manual.langToggle.body':
+      '顶栏 中/EN 按钮。可瞬间切换整个界面 chrome —— 顶栏、菜单、提示、kebab、面板、用户手册、/help 文档 —— 中英文。维基和帮助站点通过 localStorage 共享语言偏好。',
   },
 } as const;

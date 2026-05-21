@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, Eye, Edit3, Columns2 } from 'lucide-react';
 import Markdown from './Markdown';
+import { useLanguage } from '@/lib/i18n';
 import { api, type Page } from '@/lib/api';
 
 type ViewMode = 'edit' | 'preview' | 'split';
@@ -14,6 +15,7 @@ export default function ProposeDialog({
   onClose: () => void;
   initialPath?: string;
 }) {
+  const { t } = useLanguage();
   const [mode, setMode] = useState<'edit-existing' | 'new'>(page ? 'edit-existing' : 'new');
   const [view, setView] = useState<ViewMode>('split');
   const [title, setTitle] = useState(page?.title || '');
@@ -82,13 +84,13 @@ export default function ProposeDialog({
   const helperText = useMemo(() => {
     if (!page) return null;
     if (stability === 'open')
-      return <span className="text-emerald-300">Open page — auto-publishes on submit.</span>;
+      return <span className="text-emerald-300">{t('propose.stability.open')}</span>;
     if (stability === 'stable')
-      return <span className="text-amber-300">Stable page — goes to the review queue.</span>;
+      return <span className="text-amber-300">{t('propose.stability.stable')}</span>;
     if (stability === 'locked')
-      return <span className="text-rose-300">Locked page — admin review required.</span>;
+      return <span className="text-rose-300">{t('propose.stability.locked')}</span>;
     return null;
-  }, [page, stability]);
+  }, [page, stability, t]);
 
   return (
     <div
@@ -103,10 +105,10 @@ export default function ProposeDialog({
           <div className="flex items-center gap-3">
             <h3 className="font-medium text-[1rem]">
               {done
-                ? 'Submitted for review'
+                ? t('propose.submit')
                 : mode === 'edit-existing'
-                  ? 'Suggest an edit'
-                  : 'Propose a new page'}
+                  ? t('propose.title.edit')
+                  : t('propose.title.new')}
             </h3>
             {!done && page && (
               <code className="text-[0.7857rem] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono">

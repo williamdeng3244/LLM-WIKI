@@ -10,6 +10,7 @@ import {
   api, type LintReport, type LintIssue, type LintIssueKind,
   type LintIssueSeverity,
 } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n';
 
 const KIND_LABEL: Record<LintIssueKind, string> = {
   orphan: 'Orphan',
@@ -41,6 +42,7 @@ export default function LintPanel({
   onNavigate: (path: string) => void;
   onSuggestEdit: (path: string) => void;
 }) {
+  const { t } = useLanguage();
   const { data: reports = [], mutate: mutateReports } = useSWR<LintReport[]>(
     'lint-reports',
     api.listLintReports,
@@ -137,7 +139,7 @@ export default function LintPanel({
         <header className="px-5 py-3 border-b border-line flex items-center justify-between">
           <div>
             <h3 className="font-medium text-[1rem] flex items-center gap-2">
-              <ShieldCheck size={15} className="text-accent" /> Wiki lint
+              <ShieldCheck size={15} className="text-accent" /> {t('lint.title')}
             </h3>
             <div className="text-[0.8214rem] text-muted">
               Read-only audit pass. Findings are surfaced; the agent never auto-edits.
@@ -153,11 +155,11 @@ export default function LintPanel({
             className="btn btn-primary"
             onClick={runNow}
             disabled={running || isPlanning}
-            title="Queue a new lint pass"
+            title={t('lint.runLintTitle')}
           >
             {running || isPlanning
-              ? <><Loader2 size={13} className="animate-spin" /> Lint running…</>
-              : <><Play size={13} /> Run lint</>}
+              ? <><Loader2 size={13} className="animate-spin" /> {t('lint.runLint')}…</>
+              : <><Play size={13} /> {t('lint.runLint')}</>}
           </button>
           {activeReport && (
             <span className="text-[0.8214rem] text-muted">

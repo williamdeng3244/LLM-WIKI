@@ -1,7 +1,11 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, Send, Trash2, Layers, BookOpen } from 'lucide-react';
+import {
+  Sparkles, Send, Trash2, Layers, BookOpen,
+  PanelRightClose, PanelRightOpen,
+} from 'lucide-react';
 import Markdown from './Markdown';
+import { useLanguage } from '@/lib/i18n';
 import { api, type Citation } from '@/lib/api';
 
 type ChatMode = 'sources' | 'wiki';
@@ -23,9 +27,12 @@ const SUGGESTIONS = [
 
 export default function ChatPanel({
   onCitationClick, knownPaths,
+  collapsed = false, onToggleCollapse,
 }: {
   onCitationClick: (path: string) => void;
   knownPaths: Set<string>;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -33,6 +40,7 @@ export default function ChatPanel({
   const [mode, setMode] = useState<ChatMode>('sources');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const { t } = useLanguage();
 
   // Persist history per-tab and chat mode globally.
   useEffect(() => {
@@ -87,11 +95,32 @@ export default function ChatPanel({
     try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
   }
 
+  // Collapsed state: render a narrow rail with a single toggle button in
+  // the same top-right screen position the expanded header uses. The rest
+  // of the component (history, input, mode, draft text) stays mounted so
+  // reopening preserves state exactly.
+  if (collapsed) {
+    return (
+      <div className="flex flex-col h-full border-l border-black/8 bg-panel/55">
+        <div className="px-1.5 py-2.5 flex items-center justify-center border-b border-black/8">
+          <button
+            onClick={onToggleCollapse}
+            className="text-muted hover:text-ink p-1 rounded transition-colors"
+            title={t('chat.expand')}
+            aria-label={t('chat.expand')}
+          >
+            <PanelRightOpen size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-3 py-2.5 border-b border-black/8 flex items-center justify-between gap-2">
         <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted flex items-center gap-1.5 shrink-0">
-          <Sparkles size={12} /> Assistant
+          <Sparkles size={12} /> {t('chat.assistant')}
         </div>
         <div className="flex items-center bg-white/[0.04] border border-white/[0.06] rounded-md p-0.5 text-[0.75rem]">
           <button
@@ -99,7 +128,7 @@ export default function ChatPanel({
               mode === 'sources' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
             }`}
             onClick={() => setMode('sources')}
-            title="Sources mode — chunk-level RAG with line-range citations"
+            title={t('chat.mode.sources')}
           >
             <Layers size={11} /> Sources
           </button>
@@ -108,7 +137,7 @@ export default function ChatPanel({
               mode === 'wiki' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
             }`}
             onClick={() => setMode('wiki')}
-            title="Wiki mode — synthesize from full pages, follow [[wikilinks]]"
+            title={t('chat.mode.wiki')}
           >
             <BookOpen size={11} /> Wiki
           </button>
@@ -117,9 +146,21 @@ export default function ChatPanel({
           <button
             onClick={clearChat}
             className="text-muted hover:text-ink shrink-0"
-            title="Clear chat"
+            title={t('chat.clear')}
           >
             <Trash2 size={13} />
+          </button>
+        )}
+        {/* Collapse button — right-pinned. Same screen position as the
+            collapsed rail's button so the affordance doesn't move. */}
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="text-muted hover:text-ink shrink-0"
+            title={t('chat.collapse')}
+            aria-label={t('chat.collapse')}
+          >
+            <PanelRightClose size={14} />
           </button>
         )}
       </div>
@@ -127,11 +168,9 @@ export default function ChatPanel({
       <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-5">
         {messages.length === 0 ? (
           <div className="text-muted leading-relaxed text-[0.8929rem]">
-            Ask anything about the wiki. Answers cite only published content.
+            {t('chat.intro')}
             <div className="mt-1 text-[0.7857rem] text-muted/85">
-              {mode === 'wiki'
-                ? 'Wiki mode: synthesizes across full pages and follows [[wikilinks]]. Best for "explain this concept" questions.'
-                : 'Sources mode: chunk-level retrieval with line-range citations. Best for "where is X documented" questions.'}
+              {mode === 'wiki' ? t('chat.intro.wiki') : t('chat.intro.sources')}
             </div>
             <div className="mt-3 space-y-1.5">
               {SUGGESTIONS.map((s) => (
