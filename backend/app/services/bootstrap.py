@@ -54,21 +54,27 @@ async def ensure_categories(session: AsyncSession) -> dict[str, Category]:
     return by_slug
 
 
-async def import_disk_vault(session: AsyncSession, admin: User) -> int:
-    """Read every .md in the vault and create published pages from them.
+async def import_disk_vault(
+    session: AsyncSession,
+    admin: User,
+    base_path=None,
+    source_label: str = "disk vault",
+) -> int:
+    """Read every .md under `base_path` and create published pages.
 
     Idempotent: skips files whose path already exists in the DB.
+    `base_path=None` reads from `settings.vault_path` (the user's vault).
     """
     cats = await ensure_categories(session)
     created = 0
-    for rel in list_files():
+    for rel in list_files(base=base_path):
         # Existing?
         existing = (await session.execute(
             select(Page).where(Page.path == rel)
         )).scalar_one_or_none()
         if existing:
             continue
-        vf = read_file(rel)
+        vf = read_file(rel, base=base_path)
         if vf is None:
             continue
         category_slug = rel.split("/")[0] if "/" in rel else "sources"
@@ -86,7 +92,7 @@ async def import_disk_vault(session: AsyncSession, admin: User) -> int:
         rev = Revision(
             page_id=page.id, title=vf.title, body=vf.body, tags=all_tags,
             status=RevisionStatus.accepted, author_id=admin.id, reviewer_id=admin.id,
-            rationale="Initial import from disk",
+            rationale=f"Initial import from {source_label}",
         )
         session.add(rev)
         await session.flush()
@@ -96,5 +102,27 @@ async def import_disk_vault(session: AsyncSession, admin: User) -> int:
     await session.commit()
     if created > 0:
         await resolve_all_links(session)
-    log.info("Imported %d pages from disk vault.", created)
+    log.info("Imported %d pages from %s.", created, source_label)
     return created
+
+
+async def import_examples_if_enabled(session: AsyncSession, admin: User) -> int:
+    """Opt-in: import the bundled demo pages from `examples_vault_path`.
+
+    No-op unless `SEED_EXAMPLES=true`. Lets new users populate the wiki
+    with sample content for evaluation without having to ship demo
+    pages in every clean install.
+    """
+    if not settings.seed_examples:
+        return 0
+    if not settings.examples_vault_path.exists():
+        log.warning(
+            "SEED_EXAMPLES=true but %s is missing — examples directory "
+            "not mounted? Skipping.", settings.examples_vault_path,
+        )
+        return 0
+    return await import_disk_vault(
+        session, admin,
+        base_path=settings.examples_vault_path,
+        source_label="examples vault",
+    )

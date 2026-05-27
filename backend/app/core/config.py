@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     raw_path: Path = Path("/raw")  # immutable raw input documents
     config_path: Path = Path("/config")  # idea file, lint config, future agent state
 
+    # Opt-in demo content (Engineering/Product/Design/Operations/Research
+    # sample pages). Mounted read-only at `examples_vault_path` and only
+    # imported on first boot if `seed_examples=true`. Fresh installs are
+    # empty by default; users who want a populated wiki for evaluation
+    # set SEED_EXAMPLES=true in .env.
+    seed_examples: bool = False
+    examples_vault_path: Path = Path("/examples/vault")
+
     auth_mode: Literal["stub", "oidc"] = "stub"
     jwt_secret: str = "dev-secret-change-in-prod"
     oidc_issuer: str = ""

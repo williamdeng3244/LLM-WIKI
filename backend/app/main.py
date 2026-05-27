@@ -13,7 +13,10 @@ from app.routers import (
     admin, auth, chat, comments, graph, ingest_runs, mcp, mcp_tokens,
     notifications, pages, raw_sources, revisions, search, users,
 )
-from app.services.bootstrap import ensure_default_admin, ensure_categories, import_disk_vault
+from app.services.bootstrap import (
+    ensure_default_admin, ensure_categories,
+    import_disk_vault, import_examples_if_enabled,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -138,6 +141,12 @@ async def lifespan(app: FastAPI):
             count = await import_disk_vault(session, admin)
             if count > 0:
                 log.info("Bootstrap imported %d pages from disk", count)
+            # Opt-in: SEED_EXAMPLES=true ingests the bundled demo pages
+            # from /examples/vault. Default is off so fresh installs
+            # start empty (see issue #7).
+            ex_count = await import_examples_if_enabled(session, admin)
+            if ex_count > 0:
+                log.info("Bootstrap imported %d demo pages from examples", ex_count)
         except Exception as e:
             log.exception("Bootstrap import failed: %s", e)
     yield

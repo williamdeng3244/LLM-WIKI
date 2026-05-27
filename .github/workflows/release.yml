@@ -195,10 +195,13 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.name }}"
           DIR="llm-wiki-${TAG}"
-          mkdir -p "$DIR/raw"
-          cp -r vault config "$DIR/"
+          mkdir -p "$DIR/raw" "$DIR/vault"
+          # `vault/` is shipped empty (just .gitkeep) so installs start
+          # clean. Demo content lives in `examples/vault/` and is only
+          # imported when SEED_EXAMPLES=true.
+          cp -r examples config "$DIR/"
           cp docker-compose.yml docker-compose.prod.yml .env.example README.md "$DIR/"
-          touch "$DIR/raw/.gitkeep"
+          touch "$DIR/raw/.gitkeep" "$DIR/vault/.gitkeep"
           ARCHIVE="llm-wiki-${TAG}-bundle.tar.gz"
           tar czf "$ARCHIVE" "$DIR"
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"

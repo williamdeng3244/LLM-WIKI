@@ -41,8 +41,8 @@ def _derive_title(rel_path: str, body: str) -> str:
     return Path(rel_path).stem.replace("-", " ").replace("_", " ").title()
 
 
-def read_file(rel_path: str) -> Optional[VaultFile]:
-    abs_path = settings.vault_path / rel_path
+def read_file(rel_path: str, base: Optional[Path] = None) -> Optional[VaultFile]:
+    abs_path = (base or settings.vault_path) / rel_path
     if not abs_path.exists() or not abs_path.is_file():
         return None
     raw = abs_path.read_text(encoding="utf-8")
@@ -59,8 +59,8 @@ def read_file(rel_path: str) -> Optional[VaultFile]:
     )
 
 
-def list_files() -> Iterator[str]:
-    root = settings.vault_path
+def list_files(base: Optional[Path] = None) -> Iterator[str]:
+    root = base or settings.vault_path
     if not root.exists():
         return
     for p in sorted(root.rglob("*.md")):

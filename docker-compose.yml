@@ -53,6 +53,8 @@ services:
       MINERU_ENABLED: ${MINERU_ENABLED:-false}
       MINERU_URL: ${MINERU_URL:-http://mineru:8080}
       VAULT_PATH: /vault
+      SEED_EXAMPLES: ${SEED_EXAMPLES:-false}
+      EXAMPLES_VAULT_PATH: /examples/vault
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-prod}
       AUTH_MODE: ${AUTH_MODE:-stub}
       OIDC_ISSUER: ${OIDC_ISSUER:-}
@@ -63,6 +65,9 @@ services:
       - ./raw:/raw
       - ./config:/config
       - ./backend:/app
+      # Bundled demo pages, read-only. Only imported when
+      # SEED_EXAMPLES=true (see config.py).
+      - ./examples/vault:/examples/vault:ro
     ports:
       - "8000:8000"
     # Python is in the slim image (curl is not). start_period gives the
@@ -102,11 +107,14 @@ services:
       MINERU_ENABLED: ${MINERU_ENABLED:-false}
       MINERU_URL: ${MINERU_URL:-http://mineru:8080}
       VAULT_PATH: /vault
+      SEED_EXAMPLES: ${SEED_EXAMPLES:-false}
+      EXAMPLES_VAULT_PATH: /examples/vault
     volumes:
       - ./vault:/vault
       - ./raw:/raw
       - ./config:/config
       - ./backend:/app
+      - ./examples/vault:/examples/vault:ro
     # Probe the broker directly so docker-compose can restart the worker
     # if its Redis connection dies silently (Bug #2). Without this the
     # worker's `unless-stopped` policy doesn't help — the process IS
