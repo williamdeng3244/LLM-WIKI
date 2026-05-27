@@ -240,8 +240,12 @@ export default function Home() {
   // Stable callbacks (avoid breaking memoized components). Navigation now
   // routes through the tab system: clicking a file replaces the active
   // tab's content with the page, matching Obsidian's default behavior.
-  const navigate = useCallback((path: string) => {
-    tabs.openPage(path);
+  const navigate = useCallback((path: string, inNewTab?: boolean) => {
+    // `inNewTab` is opt-in: wikilinks inside a note default to new-tab
+    // (so following a link doesn't lose your place); file-tree clicks,
+    // search-result clicks, etc. pass nothing and replace the active
+    // tab as before.
+    tabs.openPage(path, !!inNewTab);
     setShowSearch(false);
     setShowNotifs(false);
     setShowQuickSwitcher(false);
@@ -604,9 +608,15 @@ export default function Home() {
           grid-template-columns transitions smoothly via Tailwind arbitrary
           transition-property so the swap interpolates cleanly. */}
       <div
-        className="flex-1 grid min-h-0 transition-[grid-template-columns] duration-200 ease-out"
+        className="flex-1 grid min-h-0 overflow-hidden transition-[grid-template-columns] duration-200 ease-out"
         style={{
           gridTemplateColumns: `240px 1fr ${chatCollapsed ? '40px' : '320px'}`,
+          // Pin row height to the available space. Without this, the
+          // implicit grid row defaults to `auto` which sizes to
+          // content — so a tall chat panel (or any pane with tall
+          // content) pushes the whole grid taller than the viewport
+          // and the page scrolls instead of the inner pane scrolling.
+          gridTemplateRows: 'minmax(0, 1fr)',
         }}
       >
         <aside className="border-r border-white/[0.06] bg-panel/60 overflow-y-auto scroll-thin">
@@ -778,6 +788,7 @@ export default function Home() {
         <ProposeDialog
           page={proposeAsNew ? null : (selected ? page : null)}
           allPaths={allPaths}
+          customFolders={customFolders.folders}
           onClose={async () => {
             setShowPropose(false);
             setProposeAsNew(false);

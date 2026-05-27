@@ -269,11 +269,13 @@ export default function SourcesPanel({
                       )}
                       {canUpload && s.ingest_status !== 'ingesting' && (
                         <button
-                          className="btn"
+                          className={s.ingest_status === 'failed' ? 'btn btn-primary' : 'btn'}
                           onClick={() => requestIngest(s)}
-                          title="Plan an ingest — agent reads the source, you review proposed edits before any drafts are created."
+                          title={s.ingest_status === 'failed'
+                            ? 'Retry ingest — the previous run failed; this kicks a fresh plan phase.'
+                            : 'Plan an ingest — agent reads the source, you review proposed edits before any drafts are created.'}
                         >
-                          <Play size={13} /> Ingest
+                          <Play size={13} /> {s.ingest_status === 'failed' ? 'Retry ingest' : 'Ingest'}
                         </button>
                       )}
                       <button

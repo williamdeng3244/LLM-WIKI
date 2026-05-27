@@ -57,15 +57,54 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
     };
   }, []);
 
-  // Keep within the viewport once we know our size.
+  // Viewport clamping with a generous bottom safety margin.
+  //
+  // We don't trust `window.innerHeight` as the actual visible area: on
+  // Windows the OS taskbar (or browser auto-hide UI) can overlap the
+  // bottom strip of the viewport without changing `innerHeight`, so a
+  // menu rendered "inside" the viewport per browser metrics still
+  // ends up visually hidden behind the taskbar. Reserve ~80px (or
+  // 12% of H, whichever is larger) at the bottom and ensure the menu
+  // never crosses that line — when the click is near the bottom this
+  // pushes the menu up into the middle of the screen, which is what
+  // the user wants ("偏中间高度") so the lower-half items (Bookmark,
+  // Move file to…, Delete) are always reachable.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
     const W = window.innerWidth;
     const H = window.innerHeight;
-    if (rect.right > W - 4) el.style.left = `${Math.max(4, W - rect.width - 4)}px`;
-    if (rect.bottom > H - 4) el.style.top = `${Math.max(4, H - rect.height - 4)}px`;
+    const SAFE_BOTTOM = Math.max(80, Math.round(H * 0.12));
+    const SAFE_TOP = 8;
+    const usableH = H - SAFE_TOP - SAFE_BOTTOM;
+    // Cap max-height to the usable area so we never need to render
+    // pixels into the unsafe bottom strip.
+    el.style.maxHeight = `${Math.max(120, usableH)}px`;
+
+    // Measure after max-height applies.
+    const rect = el.getBoundingClientRect();
+    const menuW = rect.width;
+    const menuH = rect.height;
+
+    // Horizontal clamp: shift left if overflowing the right edge.
+    if (x + menuW > W - 4) {
+      el.style.left = `${Math.max(4, W - menuW - 4)}px`;
+    }
+
+    // Vertical anchor:
+    //   - prefer to keep the menu's TOP at cursor y (default behaviour)
+    //   - if its bottom would cross the safe line, shift it up so the
+    //     bottom sits exactly at the safe line (menu floats into the
+    //     middle of the screen rather than disappearing behind the
+    //     taskbar)
+    //   - if the menu is taller than the usable area, pin top at
+    //     SAFE_TOP and let overflow-y:auto handle internal scroll.
+    const safeBottomY = H - SAFE_BOTTOM;
+    if (menuH >= usableH) {
+      el.style.top = `${SAFE_TOP}px`;
+    } else if (y + menuH > safeBottomY) {
+      el.style.top = `${Math.max(SAFE_TOP, safeBottomY - menuH)}px`;
+    }
   }, [x, y]);
 
   // Render into document.body so the menu escapes any local stacking
@@ -79,7 +118,7 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
   const menu = (
     <div
       ref={ref}
-      className="fixed z-[100] min-w-[210px] bg-panel border border-line rounded-md shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7),0_0_60px_-20px_rgba(124,156,255,0.20)] py-1 text-[0.8929rem] backdrop-blur"
+      className="fixed z-[100] min-w-[210px] overflow-y-auto scroll-thin bg-panel border border-line rounded-md shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7),0_0_60px_-20px_rgba(124,156,255,0.20)] py-1 text-[0.8929rem] backdrop-blur"
       style={{ left: x, top: y }}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}

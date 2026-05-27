@@ -24,30 +24,55 @@ from app.core.config import settings
 
 log = logging.getLogger(__name__)
 
-_anthropic_client: Any = None
-_openai_client: Any = None
-
-
 # ── Client construction ────────────────────────────────────────────────
+#
+# Bug #8 (asyncio-loop reuse, LLM-client edition).
+#
+# Both AsyncAnthropic and AsyncOpenAI wrap an httpx.AsyncClient. httpx's
+# async transport binds its connection pool to the event loop alive when
+# the FIRST request goes out. If we cache a single instance globally,
+# the second Celery task (which runs under a fresh asyncio.run() loop
+# per worker.py task scoping — see _task_session there) inherits the
+# stale connection pool and hangs silently until the SDK's 3-min
+# timeout fires, surfacing as "AnthropicError: Connection error.".
+#
+# Fix: construct a fresh client inside each call. Cost is one TLS
+# handshake per ingest/lint task — negligible vs the model latency.
+# Caller `chat()` / `tool_call()` create one client and pass it down.
+
+# 5-minute generous timeout. Sonnet on an ingest call (PDF doc block,
+# 8000 max_tokens, forced tool use with a 20-item edit schema) routinely
+# takes 30–90s of model time; the SDK's default surfaces as "Connection
+# error" around the 60s mark on long calls. (Bug #10.) Setting an
+# explicit 300s timeout overrides whatever httpx defaults inherit.
+_LLM_TIMEOUT_S = 300.0
+
 
 def _get_anthropic():
-    global _anthropic_client
-    if _anthropic_client is None:
-        from anthropic import AsyncAnthropic
-        _anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key or None)
-    return _anthropic_client
+    from anthropic import AsyncAnthropic
+    # max_retries=0 (Bug #9): the SDK's default retry-on-429/5xx with
+    # exponential backoff was masking real RateLimitErrors as 3-minute
+    # "Connection error" hangs (the final attempt surfaces as a generic
+    # APIConnectionError rather than the original 429). Fail fast so the
+    # actual rate-limit message lands in run.error and the user can see
+    # what's wrong. Ingest is a one-shot per task — caller retries via
+    # the API if they want.
+    return AsyncAnthropic(
+        api_key=settings.anthropic_api_key or None,
+        max_retries=0,
+        timeout=_LLM_TIMEOUT_S,
+    )
 
 
 def _get_openai():
-    global _openai_client
-    if _openai_client is None:
-        from openai import AsyncOpenAI
-        # OpenAI-compatible endpoints (Ollama, vLLM, LM Studio, ...) often
-        # ignore the key but the SDK requires a non-empty string.
-        key = settings.openai_api_key or "sk-no-key-required"
-        base_url = settings.openai_base_url or "https://api.openai.com/v1"
-        _openai_client = AsyncOpenAI(api_key=key, base_url=base_url)
-    return _openai_client
+    from openai import AsyncOpenAI
+    # OpenAI-compatible endpoints (Ollama, vLLM, LM Studio, ...) often
+    # ignore the key but the SDK requires a non-empty string.
+    key = settings.openai_api_key or "sk-no-key-required"
+    base_url = settings.openai_base_url or "https://api.openai.com/v1"
+    return AsyncOpenAI(
+        api_key=key, base_url=base_url, max_retries=0, timeout=_LLM_TIMEOUT_S,
+    )
 
 
 def active_provider() -> str:
@@ -249,14 +274,19 @@ async def tool_call(
             f"endpoint may not support function calling."
         )
 
-    # Anthropic
+    # Anthropic — use streaming. (Bug #11.) Non-streaming long calls
+    # (ingest: PDF + 8000 max_tokens + forced tool use) sit idle on the
+    # HTTP connection while the model thinks; something between us and
+    # the Anthropic LB (WSL2 Docker NAT, or the LB itself) drops the
+    # connection at ~60s, surfacing as a generic "Connection error".
+    # Streaming keeps the connection alive with token-by-token output.
     client = _get_anthropic()
     anth: list[dict] = []
     for role, c in norm:
         if isinstance(c, list):
             c = _to_anthropic_blocks(c)
         anth.append({"role": role, "content": c})
-    resp = await client.messages.create(
+    async with client.messages.stream(
         model=settings.chat_model,
         max_tokens=max_tokens,
         system=system,
@@ -267,8 +297,13 @@ async def tool_call(
             "input_schema": tool_schema,
         }],
         tool_choice={"type": "tool", "name": tool_name},
-    )
-    for block in resp.content:
+    ) as stream:
+        # Drain events so the SDK accumulates the deltas internally and
+        # the network stays warm. We don't need the events themselves.
+        async for _event in stream:
+            pass
+        final = await stream.get_final_message()
+    for block in final.content:
         if getattr(block, "type", None) == "tool_use" and block.name == tool_name:
             return block.input  # type: ignore[no-any-return,return-value]
     raise RuntimeError(f"Anthropic model did not return a tool call for {tool_name}")

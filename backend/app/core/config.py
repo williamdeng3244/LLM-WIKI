@@ -45,5 +45,14 @@ class Settings(BaseSettings):
     # without revoking individual user tokens.
     mcp_enabled: bool = True
 
+    # MinerU sidecar — high-fidelity PDF parsing (layout-aware, OCR,
+    # table extraction). When enabled, every uploaded PDF is sent to the
+    # MinerU service for Markdown extraction BEFORE the agent sees it;
+    # the LLM then receives clean Markdown text instead of the native
+    # PDF document block. Disabled by default because the first boot
+    # pulls multi-GB of ML model weights and CPU parsing is slow.
+    mineru_enabled: bool = False
+    mineru_url: str = "http://mineru:8080"
+
 
 settings = Settings()

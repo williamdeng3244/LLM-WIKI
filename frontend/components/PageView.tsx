@@ -30,7 +30,7 @@ export default function PageView({
   users: Map<number, User>;
   onPropose: () => void;
   onLock: (locked: boolean) => void;
-  onNavigate: (path: string) => void;
+  onNavigate: (path: string, inNewTab?: boolean) => void;
   onRevealInTree?: (path: string) => void;
   onShowVersionHistory?: (path: string) => void;
 }) {

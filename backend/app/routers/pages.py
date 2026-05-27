@@ -29,27 +29,10 @@ async def list_pages(
     return rows
 
 
-@router.get("/{page_path:path}", response_model=PageOut)
-async def get_page(
-    page_path: str,
-    session: AsyncSession = Depends(get_session),
-    user: User = Depends(current_user),
-):
-    page = (await session.execute(
-        select(Page).where(Page.path == page_path)
-    )).scalar_one_or_none()
-    if not page:
-        raise HTTPException(404, "Page not found")
-    body = ""
-    if page.current_revision_id:
-        rev = await session.get(Revision, page.current_revision_id)
-        if rev:
-            body = rev.body
-    out = PageSummary.model_validate(page).model_dump()
-    out["body"] = body
-    out["current_revision_id"] = page.current_revision_id
-    out["updated_at"] = page.updated_at
-    return out
+# Note: `/{page_path:path}` is a greedy match — it would eat the
+# `/revisions`, `/backlinks`, `/lock` suffixes of the other routes below
+# and never let them dispatch. (Bug #13.) The detail route lives at the
+# BOTTOM of this file so all the suffix routes match first.
 
 
 @router.get("/{page_path:path}/revisions", response_model=list[RevisionOut])
@@ -157,3 +140,28 @@ async def backlinks(
         .order_by(Page.path)
     )).scalars().unique().all()
     return rows
+
+
+# Detail route is last so the specific-suffix routes above match first.
+# See note near the top of the file. (Bug #13.)
+@router.get("/{page_path:path}", response_model=PageOut)
+async def get_page(
+    page_path: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),
+):
+    page = (await session.execute(
+        select(Page).where(Page.path == page_path)
+    )).scalar_one_or_none()
+    if not page:
+        raise HTTPException(404, "Page not found")
+    body = ""
+    if page.current_revision_id:
+        rev = await session.get(Revision, page.current_revision_id)
+        if rev:
+            body = rev.body
+    out = PageSummary.model_validate(page).model_dump()
+    out["body"] = body
+    out["current_revision_id"] = page.current_revision_id
+    out["updated_at"] = page.updated_at
+    return out

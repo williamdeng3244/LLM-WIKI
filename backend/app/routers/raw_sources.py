@@ -94,12 +94,24 @@ async def upload_source(
             out.write(chunk)
     await file.close()
 
+    # MIME resolution: trust the client's Content-Type if it's specific;
+    # otherwise sniff from extension. curl uploads without an explicit
+    # content-type, and some browsers, both default to
+    # 'application/octet-stream' — which `_read_raw_source_block` would
+    # then reject as "Unsupported MIME". Use mimetypes.guess_type to
+    # recover the obvious cases. (Bug #7.)
+    import mimetypes
+    client_mime = (file.content_type or "").lower()
+    if not client_mime or client_mime == "application/octet-stream":
+        guessed, _ = mimetypes.guess_type(file.filename or disk_name)
+        client_mime = guessed or "application/octet-stream"
+
     rs = RawSource(
         title=(title.strip() or (file.filename or disk_name)),
         description=description.strip() or None,
         original_filename=file.filename or disk_name,
         disk_filename=disk_name,
-        mime_type=(file.content_type or "application/octet-stream"),
+        mime_type=client_mime,
         size_bytes=size,
         uploaded_by_id=user.id,
     )

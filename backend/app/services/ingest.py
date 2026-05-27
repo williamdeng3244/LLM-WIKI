@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import mimetypes
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -29,6 +30,7 @@ from app.models import (
     Page, PageStability, RawSource, Revision, RevisionProvenance,
     RevisionStatus, Role, User,
 )
+from app.services.converters import convert_via_mineru
 from app.services.llm_client import active_model, tool_call as llm_tool_call
 from app.services.retrieval import RetrievalContext, gather_context
 from app.services.workflow import create_draft, submit_for_review
@@ -38,6 +40,14 @@ log = logging.getLogger(__name__)
 MAX_EDITS = 20  # v1 hard cap; excess get logged in run.summary
 TEXT_MIME_PREFIXES = ("text/", "application/json", "application/x-yaml")
 PDF_MIME = "application/pdf"
+# MIME types MinerU 3.x can convert to Markdown when enabled.
+# Office formats are handled via mammoth (docx) / python-pptx (pptx) /
+# openpyxl (xlsx) plus its layout pipeline.
+MINERU_OFFICE_MIMES = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # .pptx
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # .xlsx
+}
 INGEST_TOOL_NAME = "submit_ingest_result"
 
 INGEST_TOOL_SCHEMA: dict[str, Any] = {
@@ -192,11 +202,22 @@ async def _recent_reject_feedback(session: AsyncSession) -> str:
 # The block shape here matches `services.llm_client` generic blocks, not any
 # specific vendor SDK. The LLM client translates to Anthropic/OpenAI shapes.
 
-def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]]:
+async def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]]:
+    """Async because PDF ingest may detour through the MinerU sidecar
+    (high-fidelity Markdown extraction). Falls back to the native
+    Anthropic document block if MinerU is disabled or unreachable."""
     path = Path(settings.raw_path) / rs.disk_filename
     if not path.exists():
         return None, f"Raw file missing on disk: {path}"
     mime = (rs.mime_type or "application/octet-stream").lower()
+    # If the stored MIME is the generic octet-stream (rows uploaded
+    # before Bug #7's upload-time sniff landed), try once more to
+    # resolve it from the filename extension. Without this, e.g. a
+    # .docx uploaded via raw curl stays unprocessable forever.
+    if mime == "application/octet-stream":
+        guessed, _ = mimetypes.guess_type(rs.original_filename or rs.disk_filename)
+        if guessed:
+            mime = guessed.lower()
     try:
         raw_bytes = path.read_bytes()
     except Exception as e:
@@ -210,11 +231,49 @@ def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]
         return {"type": "text", "text": f"--- raw source ({rs.original_filename}) ---\n{text}"}, None
 
     if mime == PDF_MIME:
+        # If MinerU is enabled, route through it first for layout-aware
+        # Markdown (preserves tables, multi-column reading order, OCR
+        # for scans). Returns None on failure → fall through to the
+        # native Anthropic document block so ingest still works.
+        md = await convert_via_mineru(raw_bytes, rs.original_filename, mime)
+        if md:
+            return (
+                {
+                    "type": "text",
+                    "text": (
+                        f"--- raw source ({rs.original_filename}, "
+                        f"parsed by MinerU) ---\n{md}"
+                    ),
+                },
+                None,
+            )
         return {
             "type": "document",
             "media_type": "application/pdf",
             "data_base64": base64.b64encode(raw_bytes).decode("ascii"),
         }, None
+
+    # DOCX / PPTX / XLSX: only MinerU can handle these — there is no
+    # native Anthropic block type for Office formats. If MinerU is
+    # disabled or the call fails, return a hard error so the user knows
+    # they need to enable MinerU or convert the file to PDF/text first.
+    if mime in MINERU_OFFICE_MIMES:
+        md = await convert_via_mineru(raw_bytes, rs.original_filename, mime)
+        if md:
+            return (
+                {
+                    "type": "text",
+                    "text": (
+                        f"--- raw source ({rs.original_filename}, "
+                        f"parsed by MinerU) ---\n{md}"
+                    ),
+                },
+                None,
+            )
+        return None, (
+            f"Office format {mime} requires MinerU. Enable it "
+            f"(MINERU_ENABLED=true) or convert to PDF/markdown first."
+        )
 
     if mime.startswith("image/"):
         return {
@@ -302,7 +361,7 @@ async def run_plan_phase(
         return run
 
     try:
-        source_block, err = _read_raw_source_block(rs)
+        source_block, err = await _read_raw_source_block(rs)
         if err is not None:
             raise RuntimeError(err)
         assert source_block is not None
@@ -315,7 +374,24 @@ async def run_plan_phase(
             rs, ctx, source_block, reject_feedback=reject_feedback,
         )
 
-        edits = result.get("edits") or []
+        # Defensive shape validation (Bug #14). When the source has
+        # very little novel content, the agent sometimes emits `edits`
+        # as a list of bare strings ("No edits needed", etc.) rather
+        # than a list of edit-objects, despite the JSON schema. Filter
+        # those out so the post-processing below doesn't crash on
+        # `e.get(...)` against a string.
+        raw_edits = result.get("edits") or []
+        if not isinstance(raw_edits, list):
+            raw_edits = []
+        dropped_strings = sum(1 for e in raw_edits if not isinstance(e, dict))
+        edits = [e for e in raw_edits if isinstance(e, dict)]
+        if dropped_strings:
+            log.warning(
+                "Ingest run %d: dropped %d non-dict edit entries from agent output",
+                run_id, dropped_strings,
+            )
+        result["edits"] = edits
+
         # Counts for the preview UI.
         run.edits_count = len(edits)
         run.skipped_count = max(0, len(edits) - MAX_EDITS)

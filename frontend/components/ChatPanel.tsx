@@ -101,7 +101,7 @@ export default function ChatPanel({
   // reopening preserves state exactly.
   if (collapsed) {
     return (
-      <div className="flex flex-col h-full border-l border-black/8 bg-panel/55">
+      <div className="flex flex-col h-full min-h-0 overflow-hidden border-l border-black/8 bg-panel/55">
         <div className="px-1.5 py-2.5 flex items-center justify-center border-b border-black/8">
           <button
             onClick={onToggleCollapse}
@@ -117,7 +117,13 @@ export default function ChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    // `min-h-0 overflow-hidden` keeps the chat panel from pushing the
+    // grid row taller than the viewport when the conversation history
+    // grows. Without these, CSS Grid's default `min-height: auto` on
+    // grid items lets the cell grow with content, and the whole
+    // three-pane body becomes scrollable instead of just the chat
+    // history (which has its own internal `overflow-y-auto` below).
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       <div className="px-3 py-2.5 border-b border-black/8 flex items-center justify-between gap-2">
         <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted flex items-center gap-1.5 shrink-0">
           <Sparkles size={12} /> {t('chat.assistant')}

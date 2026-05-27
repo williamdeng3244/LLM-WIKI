@@ -1,9 +1,13 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { X, Check, RotateCcw, Bot, Quote, AlertTriangle } from 'lucide-react';
+import {
+  X, Check, RotateCcw, Bot, Quote, AlertTriangle,
+  ChevronDown, ChevronRight,
+} from 'lucide-react';
 import Markdown from './Markdown';
 import Diff from './Diff';
+import { useLanguage } from '@/lib/i18n';
 import { api, type Revision, type User } from '@/lib/api';
 
 type Tab = 'diff' | 'preview' | 'raw';
@@ -23,6 +27,11 @@ export default function ReviewQueue({
   // Phase 3.6: optional reviewer feedback fields when rejecting agent drafts.
   const [rejectReason, setRejectReason] = useState<string>('');
   const [rejectNotes, setRejectNotes] = useState<string>('');
+  // Collapsed by default so the source-grounding section doesn't push
+  // the Diff/Preview/Raw tabs and the accept/reject bar off-screen on
+  // agent drafts with many citations.
+  const [groundingOpen, setGroundingOpen] = useState(false);
+  const { t } = useLanguage();
 
   async function load() {
     const list = await api.reviewQueue();
@@ -105,9 +114,9 @@ export default function ReviewQueue({
       >
         <div className="px-5 py-3 border-b border-black/10 flex items-center justify-between">
           <h3 className="font-medium text-[1rem]">
-            Review queue
+            {t('review.title')}
             <span className="ml-2 text-[0.8571rem] text-muted font-normal">
-              ({items.length} pending)
+              ({items.length})
             </span>
           </h3>
           <button className="text-muted hover:text-ink" onClick={onClose}>
@@ -120,7 +129,7 @@ export default function ReviewQueue({
           <div className="border-r border-black/8 overflow-y-auto scroll-thin">
             {items.length === 0 ? (
               <div className="p-5 text-[0.9286rem] text-muted">
-                Empty. Nice and clean.
+                {t('review.empty')}
               </div>
             ) : (
               items.map((r) => {
@@ -152,86 +161,116 @@ export default function ReviewQueue({
               Select a revision to review.
             </div>
           ) : (
-            <div className="flex flex-col min-h-0">
+            <div className="flex flex-col min-h-0 overflow-hidden">
               {/* Header */}
-              <div className="px-6 pt-4 pb-3 border-b border-black/8">
-                <div className="text-[0.7857rem] text-muted">
-                  rev #{selected.id} ·{' '}
-                  {users.get(selected.author_id)?.name || `user #${selected.author_id}`}
+              {/* Compact header: title + meta inline on one row, tabs
+                  on the right. Rationale is a thin italic line. Agent
+                  badge + collapsible source-grounding move below the
+                  title row so the body section gets ~80px more room. */}
+              <div className="px-6 pt-3 pb-2.5 border-b border-black/8 shrink-0">
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span className="text-[1.0714rem] font-medium truncate min-w-0 flex-1">
+                    {selected.title}
+                  </span>
+                  <span className="text-[0.7857rem] text-muted shrink-0">
+                    {t('review.rev')} #{selected.id} · {t('review.byAuthor')}{' '}
+                    {users.get(selected.author_id)?.name || `user #${selected.author_id}`}
+                  </span>
+                  {/* Tabs right-aligned on the same row. */}
+                  <div className="flex bg-black/5 rounded-md p-0.5 shrink-0">
+                    {(['diff', 'preview', 'raw'] as Tab[]).map((tabKind) => (
+                      <button
+                        key={tabKind}
+                        className={`h-6 px-2.5 text-[0.7857rem] rounded ${
+                          tab === tabKind ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
+                        }`}
+                        onClick={() => setTab(tabKind)}
+                      >
+                        {tabKind === 'diff' ? t('review.tab.diff')
+                          : tabKind === 'preview' ? t('review.tab.preview')
+                          : t('review.tab.raw')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-[1.2857rem] font-medium mt-1">{selected.title}</div>
                 {selected.rationale && (
-                  <div className="mt-3 text-[0.9286rem] italic text-ink/85 bg-amber-500/[0.08] border-l-2 border-amber-400 px-3 py-2 rounded-r">
+                  <div className="mt-1.5 text-[0.8214rem] italic text-ink/75 truncate">
                     &ldquo;{selected.rationale}&rdquo;
                   </div>
                 )}
-
                 {provenance && provenance.is_agent_authored && (
-                  <div className="mt-3 bg-accent/[0.08] border border-accent/30 rounded-md px-3 py-2.5 text-[0.8571rem]">
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <Bot size={12} className="text-accent" />
-                      <span className="font-medium text-ink">Agent-authored</span>
-                      {provenance.edit_kind && (
-                        <span className="badge ml-1">{provenance.edit_kind}</span>
-                      )}
-                      {provenance.confidence && (
-                        <span
-                          className={`badge ml-1 ${
-                            provenance.confidence === 'high' ? 'accepted'
-                            : provenance.confidence === 'low' ? 'rejected'
-                            : 'proposed'
-                          }`}
-                        >
-                          confidence: {provenance.confidence}
-                        </span>
-                      )}
-                    </div>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap text-[0.7857rem]">
+                    <span className="inline-flex items-center gap-1 text-accent">
+                      <Bot size={11} /> {t('review.agentAuthored')}
+                    </span>
+                    {provenance.edit_kind && (
+                      <span className="badge">{provenance.edit_kind}</span>
+                    )}
+                    {provenance.confidence && (
+                      <span
+                        className={`badge ${
+                          provenance.confidence === 'high' ? 'accepted'
+                          : provenance.confidence === 'low' ? 'rejected'
+                          : 'proposed'
+                        }`}
+                      >
+                        {t('review.confidence')}: {provenance.confidence}
+                      </span>
+                    )}
                     {provenance.conflict_notes && (
-                      <div className="flex items-start gap-1.5 mb-2 text-rose-300">
-                        <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-                        <span><strong>Conflict:</strong> {provenance.conflict_notes}</span>
-                      </div>
+                      <span className="inline-flex items-center gap-1 text-rose-300">
+                        <AlertTriangle size={10} />
+                        <strong>{t('review.conflict')}:</strong>{' '}
+                        <span className="italic">{provenance.conflict_notes}</span>
+                      </span>
                     )}
                     {provenance.source_refs && provenance.source_refs.length > 0 && (
-                      <div className="space-y-1.5">
-                        <div className="text-[0.75rem] uppercase tracking-[0.18em] text-muted">
-                          Source grounding
-                        </div>
-                        {provenance.source_refs.map((r, i) => (
-                          <div key={i} className="flex items-start gap-1.5 text-muted">
-                            <Quote size={11} className="shrink-0 mt-0.5 text-accent" />
-                            <div>
-                              <div className="text-ink/85 italic">&ldquo;{r.quote_or_excerpt}&rdquo;</div>
-                              {r.location && (
-                                <div className="text-[0.75rem] text-muted/80 mt-0.5">
-                                  {r.location}
-                                  {r.source_id != null && <> · raw source #{r.source_id}</>}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setGroundingOpen((v) => !v)}
+                        className="inline-flex items-center gap-1 text-muted hover:text-ink transition-colors"
+                        title={
+                          groundingOpen
+                            ? t('review.sourceGrounding.collapse')
+                            : t('review.sourceGrounding.expand')
+                        }
+                      >
+                        {groundingOpen
+                          ? <ChevronDown size={10} />
+                          : <ChevronRight size={10} />}
+                        <span>{t('review.sourceGrounding')}</span>
+                        <span className="text-muted/70">
+                          ({t('review.sourceGrounding.count').replace(
+                            '{n}', String(provenance.source_refs.length),
+                          )})
+                        </span>
+                      </button>
                     )}
                   </div>
                 )}
-                <div className="mt-3 flex bg-black/5 rounded-md p-0.5 w-fit">
-                  {(['diff', 'preview', 'raw'] as Tab[]).map((t) => (
-                    <button
-                      key={t}
-                      className={`h-7 px-3 text-[0.7857rem] rounded ${
-                        tab === t ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
-                      }`}
-                      onClick={() => setTab(t)}
-                    >
-                      {t === 'diff' ? 'Diff' : t === 'preview' ? 'Preview' : 'Raw'}
-                    </button>
-                  ))}
-                </div>
+                {/* Source grounding details — open/close. */}
+                {groundingOpen && provenance?.source_refs && provenance.source_refs.length > 0 && (
+                  <div className="mt-2 max-h-[140px] overflow-y-auto scroll-thin space-y-1.5 bg-accent/[0.05] border border-accent/20 rounded px-3 py-2 text-[0.8214rem]">
+                    {provenance.source_refs.map((r, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-muted">
+                        <Quote size={11} className="shrink-0 mt-0.5 text-accent" />
+                        <div>
+                          <div className="text-ink/85 italic">&ldquo;{r.quote_or_excerpt}&rdquo;</div>
+                          {r.location && (
+                            <div className="text-[0.7143rem] text-muted/80 mt-0.5">
+                              {r.location}
+                              {r.source_id != null && <> · raw source #{r.source_id}</>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Body */}
-              <div className="flex-1 overflow-y-auto scroll-thin px-6 py-4">
+              <div className="flex-1 min-h-0 overflow-y-auto scroll-thin px-6 py-4">
                 {tab === 'diff' && (
                   <Diff oldText={parent?.body || ''} newText={selected.body} contextOnly />
                 )}
@@ -251,9 +290,9 @@ export default function ReviewQueue({
                   drafts. Surfaced only when this is an agent draft so human
                   reviews don't carry extra friction. */}
               {provenance?.is_agent_authored && (
-                <div className="px-6 py-3 border-t border-white/[0.04] bg-accent/[0.04]">
-                  <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
-                    Reviewer feedback (optional, agent drafts only)
+                <div className="shrink-0 px-6 py-2.5 border-t border-white/[0.04] bg-accent/[0.04]">
+                  <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-1.5">
+                    {t('review.feedback.heading')}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <select
@@ -261,21 +300,21 @@ export default function ReviewQueue({
                       value={rejectReason}
                       onChange={(e) => setRejectReason(e.target.value)}
                     >
-                      <option value="">— Reject reason —</option>
-                      <option value="wrong_page">Wrong page</option>
-                      <option value="unsupported_claim">Unsupported claim</option>
-                      <option value="bad_summary">Bad summary</option>
-                      <option value="duplicate">Duplicate</option>
-                      <option value="wrong_tags">Wrong tags</option>
-                      <option value="too_broad">Too broad</option>
-                      <option value="too_speculative">Too speculative</option>
-                      <option value="permission_concern">Permission concern</option>
-                      <option value="formatting_issue">Formatting issue</option>
-                      <option value="other">Other</option>
+                      <option value="">{t('review.feedback.reason.placeholder')}</option>
+                      <option value="wrong_page">{t('review.feedback.reason.wrong_page')}</option>
+                      <option value="unsupported_claim">{t('review.feedback.reason.unsupported_claim')}</option>
+                      <option value="bad_summary">{t('review.feedback.reason.bad_summary')}</option>
+                      <option value="duplicate">{t('review.feedback.reason.duplicate')}</option>
+                      <option value="wrong_tags">{t('review.feedback.reason.wrong_tags')}</option>
+                      <option value="too_broad">{t('review.feedback.reason.too_broad')}</option>
+                      <option value="too_speculative">{t('review.feedback.reason.too_speculative')}</option>
+                      <option value="permission_concern">{t('review.feedback.reason.permission_concern')}</option>
+                      <option value="formatting_issue">{t('review.feedback.reason.formatting_issue')}</option>
+                      <option value="other">{t('review.feedback.reason.other')}</option>
                     </select>
                     <input
                       className="form-input flex-1 h-8 text-[0.8929rem]"
-                      placeholder="Notes (consumed by future ingest prompts)"
+                      placeholder={t('review.feedback.notes.placeholder')}
                       value={rejectNotes}
                       onChange={(e) => setRejectNotes(e.target.value)}
                     />
@@ -283,34 +322,34 @@ export default function ReviewQueue({
                 </div>
               )}
 
-              {/* Decision bar */}
-              <div className="px-6 py-3 border-t border-black/10 flex items-center gap-3">
+              {/* Decision bar — pinned, never shrinks. */}
+              <div className="shrink-0 px-6 py-3 border-t border-black/10 flex items-center gap-3">
                 <input
                   className="form-input flex-1 h-9"
-                  placeholder="Comment (optional, shown to the author)"
+                  placeholder={t('review.decision.comment.placeholder')}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                 />
                 <button
                   className="btn"
                   onClick={() => review('reject')}
-                  title="Reject this proposal"
+                  title={t('review.decision.reject.title')}
                 >
-                  <X size={13} /> Reject
+                  <X size={13} /> {t('review.decision.reject')}
                 </button>
                 <button
                   className="btn"
                   onClick={() => review('request_changes')}
-                  title="Send back to author"
+                  title={t('review.decision.requestChanges.title')}
                 >
-                  <RotateCcw size={13} /> Request changes
+                  <RotateCcw size={13} /> {t('review.decision.requestChanges')}
                 </button>
                 <button
                   className="btn btn-primary"
                   onClick={() => review('accept')}
-                  title="Accept and publish"
+                  title={t('review.decision.accept.title')}
                 >
-                  <Check size={13} /> Accept and publish
+                  <Check size={13} /> {t('review.decision.accept')}
                 </button>
               </div>
             </div>

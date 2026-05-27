@@ -41,12 +41,48 @@ function preprocess(md: string, withCitations: boolean): string {
 
 export type MarkdownProps = {
   children: string;
-  onWikiLinkClick?: (path: string) => void;
+  /**
+   * Called when the user clicks a `[[wikilink]]`. The `path` is the
+   * resolved page path (e.g. `people/aristotle.md`) when found in
+   * `knownPaths`, or the raw wikilink target otherwise (broken link).
+   * `inNewTab` is true on plain click (default behaviour: don't lose
+   * the current page when following a citation) and false when the
+   * user held Cmd/Ctrl to indicate they want to stay in flow.
+   */
+  onWikiLinkClick?: (path: string, inNewTab?: boolean) => void;
   knownPaths?: Set<string>;
   citations?: Map<number, Citation>;
   onCiteClick?: (citation: Citation) => void;
   className?: string;
 };
+
+
+// Resolve `[[Aristotle]]` → `people/aristotle.md`. Mirrors the
+// backend's `normalize_link_target` in `services/linker.py` so links
+// inside page bodies navigate even when the wikilink uses the bare
+// human-readable name instead of the full path.
+function resolveWikiTarget(raw: string, knownPaths?: Set<string>): string {
+  if (!knownPaths || knownPaths.size === 0) return raw;
+  const norm = raw.trim().toLowerCase();
+  const rawNoMd = norm.endsWith('.md') ? norm.slice(0, -3) : norm;
+
+  const strip = (p: string) => {
+    const pl = p.toLowerCase();
+    return pl.endsWith('.md') ? pl.slice(0, -3) : pl;
+  };
+
+  // Exact path match first.
+  for (const p of knownPaths) {
+    if (strip(p) === rawNoMd) return p;
+  }
+  // Fallback: slug match (`[[Al-Kindi]]` → `people/al-kindi.md`).
+  const slug = rawNoMd.replace(/\s+/g, '-');
+  for (const p of knownPaths) {
+    const ps = strip(p);
+    if (ps === slug || ps.endsWith('/' + slug)) return p;
+  }
+  return raw;
+}
 
 function MarkdownInner({
   children, onWikiLinkClick, knownPaths, citations, onCiteClick, className,
@@ -74,14 +110,31 @@ function MarkdownInner({
             const h = href || '';
             if (h.startsWith('#wiki:')) {
               const target = decodeURIComponent(h.slice(6));
-              const broken = knownPaths && !knownPaths.has(target);
+              // Resolve via the same algorithm the backend uses so a
+              // wikilink like `[[Aristotle]]` actually navigates to
+              // `people/aristotle.md`. If unresolvable, `resolved`
+              // falls back to the raw target and we mark broken.
+              const resolved = resolveWikiTarget(target, knownPaths);
+              const broken = !!(knownPaths && !knownPaths.has(resolved));
               return (
                 <a
                   className={`wiki-link${broken ? ' broken' : ''}`}
                   href={h}
                   onClick={(e) => {
                     e.preventDefault();
-                    wikiHandlerRef.current?.(target);
+                    // Default: open in a new tab so following a chain
+                    // of wikilinks doesn't lose the page you started
+                    // reading. Hold Cmd/Ctrl to navigate in place
+                    // (power-user / "I know where I'm going" mode).
+                    const inSameTab = e.metaKey || e.ctrlKey;
+                    wikiHandlerRef.current?.(resolved, !inSameTab);
+                  }}
+                  onAuxClick={(e) => {
+                    // Middle-click → new tab (browser convention).
+                    if (e.button === 1) {
+                      e.preventDefault();
+                      wikiHandlerRef.current?.(resolved, true);
+                    }
                   }}
                 >
                   {children}

@@ -1,33 +1,64 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { X, Eye, Edit3, Columns2 } from 'lucide-react';
+import { X, Eye, Edit3 } from 'lucide-react';
 import Markdown from './Markdown';
 import { useLanguage } from '@/lib/i18n';
 import { api, type Page } from '@/lib/api';
 
-type ViewMode = 'edit' | 'preview' | 'split';
+type ViewMode = 'edit' | 'preview';
+
+// Seed categories (translated via i18n) that always appear in the
+// dropdown even if no page is filed under them yet. Anything else is
+// derived dynamically from existing paths + user-created folders.
+const SEED_CATEGORIES = [
+  'engineering', 'product', 'design', 'operations', 'research', 'sources',
+] as const;
+
+function deriveCategories(
+  allPaths: Set<string>,
+  customFolders: readonly string[],
+): string[] {
+  const seen = new Set<string>(SEED_CATEGORIES);
+  for (const f of customFolders) seen.add(f);
+  for (const p of allPaths) {
+    const first = p.split('/')[0];
+    if (first) seen.add(first);
+  }
+  return Array.from(seen).sort();
+}
 
 export default function ProposeDialog({
-  page, allPaths, onClose, initialPath,
+  page, allPaths, customFolders, onClose, initialPath,
 }: {
   page: Page | null;
   allPaths: Set<string>;
+  /** Folders the user has manually created via the file-tree toolbar.
+   *  Included in the category dropdown alongside ones derived from
+   *  existing page paths. Optional for backwards compatibility. */
+  customFolders?: readonly string[];
   onClose: () => void;
   initialPath?: string;
 }) {
   const { t } = useLanguage();
   const [mode, setMode] = useState<'edit-existing' | 'new'>(page ? 'edit-existing' : 'new');
-  const [view, setView] = useState<ViewMode>('split');
+  const [view, setView] = useState<ViewMode>('edit');
   const [title, setTitle] = useState(page?.title || '');
   const [body, setBody] = useState(page?.body || '');
   const [tags, setTags] = useState((page?.tags || []).join(', '));
   const [rationale, setRationale] = useState('');
   const [newPath, setNewPath] = useState(initialPath || '');
+
+  const categories = useMemo(
+    () => deriveCategories(allPaths, customFolders || []),
+    [allPaths, customFolders],
+  );
+
   const [newCategory, setNewCategory] = useState(() => {
-    // Pre-pick the category if the initial path starts with a known slug.
+    // Pre-pick the category if the initial path starts with one we know about.
     const guess = (initialPath || '').split('/')[0];
-    const known = ['engineering', 'product', 'design', 'operations', 'research', 'sources'];
-    return known.includes(guess) ? guess : 'engineering';
+    return guess && (categories.includes(guess) || SEED_CATEGORIES.includes(guess as typeof SEED_CATEGORIES[number]))
+      ? guess
+      : 'engineering';
   });
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<{ revisionId: number; status: string } | null>(null);
@@ -98,7 +129,7 @@ export default function ProposeDialog({
       onClick={onClose}
     >
       <div
-        className="bg-panel border border-line rounded-lg w-[1080px] max-w-[97vw] h-[88vh] flex flex-col shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7),0_0_60px_-20px_rgba(124,156,255,0.25)]"
+        className="bg-panel border border-line rounded-lg w-[1280px] max-w-[97vw] h-[88vh] flex flex-col shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7),0_0_60px_-20px_rgba(124,156,255,0.25)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-3 border-b border-black/10 flex items-center justify-between">
@@ -121,35 +152,19 @@ export default function ProposeDialog({
           </div>
           <div className="flex items-center gap-2">
             {!done && (
-              <div className="flex bg-black/5 rounded-md p-0.5">
-                <button
-                  className={`h-7 px-2 text-[0.7857rem] rounded flex items-center gap-1 ${
-                    view === 'edit' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
-                  }`}
-                  onClick={() => setView('edit')}
-                  title="Edit"
-                >
-                  <Edit3 size={12} />
-                </button>
-                <button
-                  className={`h-7 px-2 text-[0.7857rem] rounded flex items-center gap-1 ${
-                    view === 'split' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
-                  }`}
-                  onClick={() => setView('split')}
-                  title="Split"
-                >
-                  <Columns2 size={12} />
-                </button>
-                <button
-                  className={`h-7 px-2 text-[0.7857rem] rounded flex items-center gap-1 ${
-                    view === 'preview' ? 'bg-elev text-ink shadow-sm' : 'text-muted hover:text-ink'
-                  }`}
-                  onClick={() => setView('preview')}
-                  title="Preview"
-                >
-                  <Eye size={12} />
-                </button>
-              </div>
+              // Single-button toggle: Edit ⇄ Preview. The split mode
+              // was dropped per UX — the dialog is now wide enough
+              // that the editor uses the full width, and the user
+              // toggles to Preview when they want to see the render.
+              <button
+                className="h-7 px-2.5 text-[0.7857rem] rounded flex items-center gap-1.5 bg-black/5 hover:bg-black/10 text-ink"
+                onClick={() => setView(view === 'edit' ? 'preview' : 'edit')}
+                title={view === 'edit' ? t('propose.preview') : t('propose.markdown')}
+              >
+                {view === 'edit'
+                  ? <><Eye size={12} /> {t('propose.preview')}</>
+                  : <><Edit3 size={12} /> {t('propose.markdown')}</>}
+              </button>
             )}
             <button className="text-muted hover:text-ink" onClick={onClose}>
               <X size={16} />
@@ -173,89 +188,89 @@ export default function ProposeDialog({
           </div>
         ) : (
           <>
-            {/* Metadata strip */}
-            <div className="px-5 py-3 border-b border-black/8 grid grid-cols-2 gap-3">
+            {/* Compact metadata strip — 4 columns on one row in 'new'
+                mode (Path / Category / Title / Tags), 2 columns when
+                editing (Title / Tags). Tighter padding so the body
+                gets ~2/3 of the dialog instead of ~1/2. */}
+            <div className={`px-5 py-2.5 border-b border-black/8 grid gap-3 shrink-0 ${
+              mode === 'new' ? 'grid-cols-12' : 'grid-cols-12'
+            }`}>
               {mode === 'new' && (
                 <>
-                  <div>
-                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">Path</label>
+                  <div className="col-span-4">
+                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.path')}</label>
                     <input
-                      className="form-input mt-1"
+                      className="form-input mt-0.5 h-8 text-[0.8929rem]"
                       value={newPath}
                       onChange={(e) => setNewPath(e.target.value)}
-                      placeholder="engineering/new-thing"
+                      placeholder={t('propose.field.path.placeholder')}
                     />
                   </div>
-                  <div>
-                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">Category</label>
+                  <div className="col-span-2">
+                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.category')}</label>
                     <select
-                      className="form-input mt-1"
+                      className="form-input mt-0.5 h-8 text-[0.8929rem]"
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
                     >
-                      <option value="engineering">Engineering</option>
-                      <option value="product">Product</option>
-                      <option value="design">Design</option>
-                      <option value="operations">Operations</option>
-                      <option value="research">Research</option>
-                      <option value="sources">Sources</option>
+                      {categories.map((c) => {
+                        // Show translated label for seed categories;
+                        // raw folder name for user-derived ones.
+                        const i18nKey = `propose.category.${c}` as
+                          'propose.category.engineering' | 'propose.category.product'
+                          | 'propose.category.design' | 'propose.category.operations'
+                          | 'propose.category.research' | 'propose.category.sources';
+                        const isSeed = (SEED_CATEGORIES as readonly string[]).includes(c);
+                        return (
+                          <option key={c} value={c}>
+                            {isSeed ? t(i18nKey) : c}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </>
               )}
-              <div className={mode === 'new' ? 'col-span-2' : ''}>
-                <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">Title</label>
+              <div className={mode === 'new' ? 'col-span-3' : 'col-span-8'}>
+                <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.title')}</label>
                 <input
-                  className="form-input mt-1"
+                  className="form-input mt-0.5 h-8 text-[0.8929rem]"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </div>
-              <div className={mode === 'new' ? 'col-span-2' : 'col-span-2'}>
+              <div className={mode === 'new' ? 'col-span-3' : 'col-span-4'}>
                 <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">
-                  Tags (comma-separated)
+                  {t('propose.field.tags')}
                 </label>
                 <input
-                  className="form-input mt-1"
+                  className="form-input mt-0.5 h-8 text-[0.8929rem]"
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
-                  placeholder="architecture, database"
+                  placeholder={t('propose.field.tags.placeholder')}
                 />
               </div>
             </div>
 
-            {/* Body editor and preview */}
-            <div
-              className={`flex-1 min-h-0 grid ${
-                view === 'split' ? 'grid-cols-2' : 'grid-cols-1'
-              }`}
-            >
-              {(view === 'edit' || view === 'split') && (
-                <div className="flex flex-col min-h-0 border-r border-black/8">
-                  <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.12em] text-muted bg-black/[0.02] border-b border-black/8">
-                    Markdown
-                  </div>
-                  <textarea
-                    className="form-input form-textarea flex-1 rounded-none border-0 px-5 py-3 text-[0.9286rem] leading-[1.6] focus:shadow-none"
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    placeholder={'# Your page title\n\nWrite in markdown. Use [[wiki-links]] to link to other pages.'}
-                    spellCheck
-                  />
-                </div>
-              )}
-              {(view === 'preview' || view === 'split') && (
-                <div className="flex flex-col min-h-0">
-                  <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.12em] text-muted bg-black/[0.02] border-b border-black/8">
-                    Preview
-                  </div>
-                  <div className="flex-1 overflow-y-auto scroll-thin px-6 py-5">
-                    {body.trim() ? (
-                      <Markdown knownPaths={allPaths}>{body}</Markdown>
-                    ) : (
-                      <div className="text-muted text-[0.9286rem] italic">Nothing to preview yet.</div>
-                    )}
-                  </div>
+            {/* Body — single pane that toggles between Edit and Preview.
+                No more split view; the dialog is now wide enough that
+                the editor uses the full width. */}
+            <div className="flex-1 min-h-0 flex flex-col">
+              {view === 'edit' ? (
+                <textarea
+                  className="form-input form-textarea flex-1 rounded-none border-0 px-6 py-4 text-[0.9286rem] leading-[1.6] focus:shadow-none"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder={t('propose.body.placeholder')}
+                  spellCheck
+                />
+              ) : (
+                <div className="flex-1 overflow-y-auto scroll-thin px-8 py-6">
+                  {body.trim() ? (
+                    <Markdown knownPaths={allPaths}>{body}</Markdown>
+                  ) : (
+                    <div className="text-muted text-[0.9286rem] italic">{t('propose.preview.empty')}</div>
+                  )}
                 </div>
               )}
             </div>
@@ -264,11 +279,11 @@ export default function ProposeDialog({
             <div className="px-5 py-3 border-t border-black/10 flex items-center gap-3">
               <input
                 className="form-input flex-1 h-9"
-                placeholder="Rationale — why are you proposing this change?"
+                placeholder={t('propose.field.rationale.placeholder')}
                 value={rationale}
                 onChange={(e) => setRationale(e.target.value)}
               />
-              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn" onClick={onClose}>{t('propose.cancel')}</button>
               <button
                 className="btn btn-primary"
                 onClick={submit}
@@ -277,7 +292,7 @@ export default function ProposeDialog({
                   (mode === 'new' && !newPath.trim())
                 }
               >
-                {submitting ? 'Submitting…' : 'Submit for review'}
+                {submitting ? t('propose.submitting') : t('propose.submit.action')}
               </button>
             </div>
           </>
