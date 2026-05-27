@@ -60,6 +60,18 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
             arch_tag: linux-arm64
+          - service: mineru
+            context: ./mineru
+            image: llm-wiki-mineru
+            platform: linux/amd64
+            runner: ubuntu-latest
+            arch_tag: linux-amd64
+          - service: mineru
+            context: ./mineru
+            image: llm-wiki-mineru
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            arch_tag: linux-arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,6 +125,8 @@ jobs:
             image: llm-wiki-backend
           - service: frontend
             image: llm-wiki-frontend
+          - service: mineru
+            image: llm-wiki-mineru
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -213,7 +227,8 @@ jobs:
 
             ## Docker images
 
-            - Backend  → `ghcr.io/${{ github.repository_owner }}/llm-wiki-backend:${{ steps.tag.outputs.name }}`
-            - Frontend → `ghcr.io/${{ github.repository_owner }}/llm-wiki-frontend:${{ steps.tag.outputs.name }}`
+            - Backend / Worker → `ghcr.io/${{ github.repository_owner }}/llm-wiki-backend:${{ steps.tag.outputs.name }}`
+            - Frontend         → `ghcr.io/${{ github.repository_owner }}/llm-wiki-frontend:${{ steps.tag.outputs.name }}`
+            - MinerU           → `ghcr.io/${{ github.repository_owner }}/llm-wiki-mineru:${{ steps.tag.outputs.name }}` (opt-in; set `MINERU_ENABLED=true`)
 
-            Both are multi-arch (`linux/amd64` + `linux/arm64`).
+            All are multi-arch (`linux/amd64` + `linux/arm64`).
