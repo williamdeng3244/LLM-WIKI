@@ -23,6 +23,24 @@ class UserOut(BaseModel):
     is_active: bool = True
 
 
+class LoginRequest(BaseModel):
+    """Static-admin local login (issue #5)."""
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserOut
+
+
+class AuthConfig(BaseModel):
+    """Public auth-mode discovery shown on the login screen."""
+    mode: str            # 'stub' | 'oidc'
+    oidc_enabled: bool
+    local_admin_enabled: bool
+
+
 class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

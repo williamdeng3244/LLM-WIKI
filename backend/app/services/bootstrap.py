@@ -23,17 +23,45 @@ DEFAULT_CATEGORIES = [
 
 
 async def ensure_default_admin(session: AsyncSession) -> User:
-    """Create a default admin if none exists. Stub-mode convenience."""
-    admin = (await session.execute(
+    """Ensure exactly one admin account exists.
+
+    Preference order:
+    1. If `settings.admin_email` is set, that account is the admin.
+       Created with that exact email + role, or promoted to admin if
+       the user already exists with a lower role.
+    2. Otherwise, fall back to `admin@example.com` (legacy / stub-mode
+       convenience). Production deployments should always set ADMIN_EMAIL.
+
+    Idempotent across restarts.
+    """
+    target_email = (settings.admin_email or "").strip().lower() or "admin@example.com"
+    existing_named = (await session.execute(
+        select(User).where(User.email == target_email)
+    )).scalar_one_or_none()
+    if existing_named:
+        if existing_named.role != Role.admin:
+            existing_named.role = Role.admin
+            await session.commit()
+            log.info("Promoted %s to admin (from %s)", target_email, existing_named.role)
+        return existing_named
+
+    # No user with the target email yet — but maybe a legacy admin exists.
+    legacy_admin = (await session.execute(
         select(User).where(User.role == Role.admin).limit(1)
     )).scalar_one_or_none()
-    if admin:
-        return admin
-    admin = User(email="admin@example.com", name="Admin", role=Role.admin)
+    if legacy_admin and not settings.admin_email:
+        # Stub mode w/o explicit ADMIN_EMAIL → keep whatever admin we have.
+        return legacy_admin
+
+    admin = User(
+        email=target_email,
+        name=target_email.split("@")[0] or "Admin",
+        role=Role.admin,
+    )
     session.add(admin)
     await session.commit()
     await session.refresh(admin)
-    log.info("Created default admin: %s", admin.email)
+    log.info("Created admin: %s", admin.email)
     return admin
 
 

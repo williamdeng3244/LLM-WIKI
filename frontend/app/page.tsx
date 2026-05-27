@@ -33,6 +33,7 @@ import LintPanel from '@/components/LintPanel';
 import UserManual from '@/components/UserManual';
 import ShortcutSheet from '@/components/ShortcutSheet';
 import VersionLog from '@/components/VersionLog';
+import LoginModal from '@/components/LoginModal';
 import { useTheme } from '@/lib/theme';
 import { useLanguage } from '@/lib/i18n';
 import { api, type Page, type Role, type User } from '@/lib/api';
@@ -164,16 +165,31 @@ export default function Home() {
     [notifications],
   );
 
-  // Identity
-  useEffect(() => {
-    api.whoami().then(setUser).catch(() => {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('wiki:email', 'admin@example.com');
-        localStorage.setItem('wiki:role', 'admin');
-        api.whoami().then(setUser).catch(() => {});
-      }
+  // Identity. In stub mode the X-User-Email fallback header gets us a
+  // user transparently; in oidc mode we need a real JWT in localStorage,
+  // and on failure we surface the LoginModal.
+  const [needsLogin, setNeedsLogin] = useState(false);
+
+  const loadIdentity = useCallback(() => {
+    setNeedsLogin(false);
+    api.whoami().then((u) => { setUser(u); setNeedsLogin(false); }).catch(() => {
+      api.authConfig().then((cfg) => {
+        if (cfg.mode === 'oidc') {
+          setNeedsLogin(true);
+          return;
+        }
+        // Stub mode: keep the historical "auto-admin on first load"
+        // behavior so dev doesn't need to manually log in.
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('wiki:email', 'admin@example.com');
+          localStorage.setItem('wiki:role', 'admin');
+          api.whoami().then(setUser).catch(() => setNeedsLogin(true));
+        }
+      }).catch(() => setNeedsLogin(true));
     });
   }, []);
+
+  useEffect(() => { loadIdentity(); }, [loadIdentity]);
 
   // Keyboard: ⌘K = search; ⌘O = quick switcher; ⌘E = suggest edit;
   // ⌘T = new tab; ⌘W = close current tab; ⌘? = shortcut sheet.
@@ -493,6 +509,23 @@ export default function Home() {
             <option value="editor">{t('topbar.role.editor')}</option>
             <option value="admin">{t('topbar.role.admin')}</option>
           </select>
+          {user && (
+            <button
+              className="h-8 px-2 text-[0.8214rem] border border-line rounded-md bg-elev text-muted hover:text-ink"
+              title={`Sign out (${user.email})`}
+              onClick={() => {
+                if (typeof window === 'undefined') return;
+                localStorage.removeItem('wiki:jwt');
+                localStorage.removeItem('wiki:email');
+                localStorage.removeItem('wiki:role');
+                fetch(`${process.env.NEXT_PUBLIC_API_BASE || '/api'}/auth/logout`, {
+                  method: 'POST', credentials: 'include',
+                }).finally(() => window.location.reload());
+              }}
+            >
+              Sign out
+            </button>
+          )}
 
           {user && user.role !== 'reader' && (
             <button
@@ -817,6 +850,9 @@ export default function Home() {
       )}
       {showSchema && <SchemaEditor onClose={() => setShowSchema(false)} />}
       {showShortcuts && <ShortcutSheet onClose={() => setShowShortcuts(false)} />}
+      {needsLogin && (
+        <LoginModal onAuthed={() => { setNeedsLogin(false); loadIdentity(); }} />
+      )}
       <VersionLog />
       {showLint && (
         <LintPanel

@@ -51,8 +51,28 @@ async def _wait_for_db(max_attempts: int = 30, base_delay: float = 1.0) -> None:
             await asyncio.sleep(delay)
 
 
+def _validate_auth_config() -> None:
+    """Fail-fast if AUTH_MODE=oidc but the OIDC env vars are missing,
+    so deployments don't silently 401 every request (issue #5).
+    A configured static admin alone is enough to bypass the OIDC check —
+    that's the documented break-glass account."""
+    if settings.auth_mode != "oidc":
+        return
+    has_oidc = bool(settings.oidc_issuer and settings.oidc_client_id and settings.oidc_client_secret)
+    has_local_admin = bool(settings.admin_email and settings.admin_password)
+    if not (has_oidc or has_local_admin):
+        raise RuntimeError(
+            "AUTH_MODE=oidc requires either OIDC_ISSUER + OIDC_CLIENT_ID + "
+            "OIDC_CLIENT_SECRET to be set, or a static fallback admin via "
+            "ADMIN_EMAIL + ADMIN_PASSWORD. Neither was provided — refusing "
+            "to start because every request would 401."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _validate_auth_config()
+
     # Wait for the DB to be reachable before doing any DDL. Necessary so
     # transient infra issues (recreated network, slow PG init) don't
     # permanently kill the container.

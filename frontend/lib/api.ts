@@ -184,10 +184,25 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Public types for the new login flow.
+export type AuthConfigDTO = {
+  mode: 'stub' | 'oidc';
+  oidc_enabled: boolean;
+  local_admin_enabled: boolean;
+};
+export type LoginResponseDTO = { token: string; user: User };
+
 // ── API ──────────────────────────────────────────────────────────────
 export const api = {
   // Auth
   whoami: () => call<User>('/auth/whoami'),
+  authConfig: () => call<AuthConfigDTO>('/auth/config'),
+  localLogin: (email: string, password: string) =>
+    call<LoginResponseDTO>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+  oidcLoginUrl: () => `${API_BASE}/auth/oidc/login`,
   devLogin: (email: string, name: string, role: Role) =>
     call<{ token: string; user: User }>(
       `/auth/dev-login?email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}&role=${role}`,

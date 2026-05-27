@@ -47,9 +47,27 @@ class Settings(BaseSettings):
 
     auth_mode: Literal["stub", "oidc"] = "stub"
     jwt_secret: str = "dev-secret-change-in-prod"
+
+    # Static admin (issue #5). When set, anyone POSTing to /api/auth/login
+    # with these credentials gets an admin-role session JWT — works in
+    # any auth_mode. This is the bootstrap account: use it the first
+    # time you log in, before any OIDC user has been onboarded, or as
+    # an emergency break-glass account if OIDC breaks. ADMIN_PASSWORD
+    # is stored plaintext in env — keep .env file-permissioned tightly.
+    admin_email: str = ""
+    admin_password: str = ""
+
+    # OIDC (issue #5). Requires authlib in requirements.
     oidc_issuer: str = ""
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
+    # Where the IdP redirects back to after consent. Must be registered
+    # at the IdP. Defaults to the frontend's /auth/callback route.
+    oidc_redirect_uri: str = "http://localhost:3000/auth/callback"
+    oidc_scopes: str = "openid email profile"
+    # Default role for users created via OIDC. The hand-coded admin
+    # (admin_email above) always overrides this.
+    default_oidc_role: Literal["reader", "contributor"] = "reader"
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
