@@ -122,6 +122,13 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE IF EXISTS revision_provenance "
             "ADD COLUMN IF NOT EXISTS reject_notes TEXT"
         ))
+        # URL-ingest (issue #6): track the originating URL so the UI can
+        # show "open original" and a future re-fetch worker can detect
+        # content drift.
+        await conn.execute(text(
+            "ALTER TABLE IF EXISTS raw_sources "
+            "ADD COLUMN IF NOT EXISTS source_url TEXT"
+        ))
         # One-time data migration: legacy agent users get deactivated and
         # their tokens revoked. The new model uses real-user tokens only.
         await conn.execute(text(

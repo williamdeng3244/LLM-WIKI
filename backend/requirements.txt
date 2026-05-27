@@ -13,6 +13,10 @@ markdown-it-py==3.0.0
 celery==5.4.0
 redis==5.1.1
 httpx==0.27.2
+# URL-ingest (issue #6): readability strips nav/chrome from fetched HTML;
+# markdownify converts the cleaned HTML to markdown.
+readability-lxml==0.8.1
+markdownify==0.13.1
 authlib==1.3.2
 PyJWT==2.9.0
 python-multipart==0.0.12

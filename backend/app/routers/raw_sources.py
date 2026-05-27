@@ -22,11 +22,12 @@ from app.models import (
     Page, RawSource, Revision, Role, User,
 )
 from app.schemas import (
-    IngestRunOut, PendingDraftOut, RawSourceOut, RawSourceUpdate,
+    IngestRunOut, PendingDraftOut, RawSourceFromUrl, RawSourceOut, RawSourceUpdate,
 )
 from app.services.ingest import (
     list_pending_drafts_for_source, supersede_pending_runs,
 )
+from app.services.url_fetcher import fetch_url
 from sqlalchemy import select as sa_select  # alias to avoid shadowing imports below
 
 router = APIRouter()
@@ -121,6 +122,63 @@ async def upload_source(
         actor_id=user.id, action="raw.upload",
         target_type="raw_source", target_id=rs.id,
         payload={"filename": rs.original_filename, "size": size},
+    ))
+    await session.commit()
+    await session.refresh(rs)
+    return rs
+
+
+@router.post("/url", response_model=RawSourceOut)
+async def import_from_url(
+    body: RawSourceFromUrl,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Fetch a public http/https resource and store it as a RawSource.
+
+    Same pipeline as direct upload (returns a RawSource the caller can
+    then trigger ingest on via POST /api/raw/{id}/ingest). HTML pages
+    are stripped of nav/chrome and converted to markdown at fetch time.
+    See `services/url_fetcher.py` for size/timeout/SSRF guards.
+    """
+    if user.role == Role.reader:
+        raise HTTPException(403, "Readers cannot import sources")
+    if not body.url or not body.url.strip():
+        raise HTTPException(400, "url is required")
+
+    fetched = await fetch_url(body.url.strip())
+
+    raw_dir = _ensure_raw_dir()
+    disk_name = _disk_filename_for(fetched.filename)
+    target = raw_dir / disk_name
+    target.write_bytes(fetched.content)
+
+    display_title = (
+        (body.title or "").strip()
+        or fetched.title
+        or fetched.filename
+        or fetched.source_url
+    )
+    rs = RawSource(
+        title=display_title,
+        description=(body.description or "").strip() or None,
+        original_filename=fetched.filename,
+        disk_filename=disk_name,
+        mime_type=fetched.mime_type,
+        size_bytes=len(fetched.content),
+        source_url=fetched.source_url,
+        uploaded_by_id=user.id,
+    )
+    session.add(rs)
+    await session.flush()
+    session.add(AuditLog(
+        actor_id=user.id, action="raw.upload.url",
+        target_type="raw_source", target_id=rs.id,
+        payload={
+            "filename": rs.original_filename,
+            "size": rs.size_bytes,
+            "source_url": fetched.source_url,
+        },
     ))
     await session.commit()
     await session.refresh(rs)

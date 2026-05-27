@@ -147,6 +147,7 @@ export type RawSource = {
   original_filename: string;
   mime_type: string;
   size_bytes: number;
+  source_url: string | null;
   ingest_status: IngestStatus;
   last_ingested_at: string | null;
   last_ingest_notes: string | null;
@@ -352,6 +353,11 @@ export const api = {
     if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
     return res.json();
   },
+  importRawSourceFromUrl: (url: string, title?: string, description?: string) =>
+    call<RawSource>('/raw/url', {
+      method: 'POST',
+      body: JSON.stringify({ url, title, description }),
+    }),
   updateRawSource: (id: number, body: { title?: string; description?: string }) =>
     call<RawSource>(`/raw/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRawSource: (id: number) =>

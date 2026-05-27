@@ -226,6 +226,7 @@ class RawSourceOut(BaseModel):
     original_filename: str
     mime_type: str
     size_bytes: int
+    source_url: Optional[str] = None
     ingest_status: IngestStatus
     last_ingested_at: Optional[datetime] = None
     last_ingest_notes: Optional[str] = None
@@ -234,6 +235,13 @@ class RawSourceOut(BaseModel):
 
 
 class RawSourceUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RawSourceFromUrl(BaseModel):
+    """Request body for POST /api/raw/url — import knowledge by URL."""
+    url: str
     title: Optional[str] = None
     description: Optional[str] = None
 

@@ -4,6 +4,7 @@ import useSWR from 'swr';
 import {
   X, Upload, Download, Trash2, FileText, FileImage, FileType,
   Loader2, Play, AlertTriangle, Eye, History, RotateCcw,
+  Link2, ExternalLink,
 } from 'lucide-react';
 import { api, type RawSource, type IngestRun, type User } from '@/lib/api';
 import { useLanguage } from '@/lib/i18n';
@@ -42,6 +43,10 @@ export default function SourcesPanel({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
+  const [importMode, setImportMode] = useState<'file' | 'url'>('file');
+  const [urlInput, setUrlInput] = useState('');
+  const [urlTitle, setUrlTitle] = useState('');
+  const [importing, setImporting] = useState(false);
   const [ingestPrompt, setIngestPrompt] = useState<RawSource | null>(null);
   const [duplicateWarn, setDuplicateWarn] = useState<{
     source: RawSource;
@@ -87,6 +92,30 @@ export default function SourcesPanel({
       setError((e as Error).message);
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function importFromUrl() {
+    if (!canUpload) {
+      setError('Readers cannot import sources.');
+      return;
+    }
+    const url = urlInput.trim();
+    if (!url) {
+      setError('Enter an http:// or https:// URL.');
+      return;
+    }
+    setError(null);
+    setImporting(true);
+    try {
+      await api.importRawSourceFromUrl(url, urlTitle.trim() || undefined);
+      await mutate();
+      setUrlInput('');
+      setUrlTitle('');
+    } catch (e: unknown) {
+      setError((e as Error).message);
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -165,43 +194,102 @@ export default function SourcesPanel({
           </button>
         </header>
 
-        <div
-          className={`m-5 p-6 border-2 border-dashed rounded-md text-center transition-colors ${
-            drag ? 'border-accent bg-accent/[0.06]' : 'border-white/[0.10]'
-          } ${!canUpload ? 'opacity-50' : ''}`}
-          onDragOver={(e) => { e.preventDefault(); if (canUpload) setDrag(true); }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault(); setDrag(false);
-            if (canUpload && e.dataTransfer.files.length > 0) {
-              uploadFiles(e.dataTransfer.files);
-            }
-          }}
-        >
-          <Upload size={20} className="mx-auto text-muted mb-2" />
-          <div className="text-[0.9286rem] text-ink">{t('sources.dropHere')}</div>
-          <button
-            className="btn btn-primary mt-3 inline-flex"
-            disabled={!canUpload || uploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : 'Choose file'}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files.length > 0) uploadFiles(e.target.files);
-              e.target.value = '';
-            }}
-          />
-          <div className="text-[0.75rem] text-muted mt-2">PDF, markdown, text, images. 50 MB max per file.</div>
-          {!canUpload && (
-            <div className="text-[0.75rem] text-muted mt-1">{t('sources.signInToUpload')}</div>
-          )}
+        <div className="mx-5 mt-5 flex items-center gap-1 border-b border-white/[0.06]">
+          {(['file', 'url'] as const).map((m) => (
+            <button
+              key={m}
+              className={`px-3 py-1.5 text-[0.8214rem] -mb-px border-b-2 transition-colors ${
+                importMode === m
+                  ? 'border-accent text-ink'
+                  : 'border-transparent text-muted hover:text-ink'
+              }`}
+              onClick={() => setImportMode(m)}
+            >
+              {m === 'file'
+                ? <span className="flex items-center gap-1.5"><Upload size={12} /> Upload file</span>
+                : <span className="flex items-center gap-1.5"><Link2 size={12} /> From URL</span>}
+            </button>
+          ))}
         </div>
+
+        {importMode === 'file' ? (
+          <div
+            className={`mx-5 mt-3 mb-2 p-6 border-2 border-dashed rounded-md text-center transition-colors ${
+              drag ? 'border-accent bg-accent/[0.06]' : 'border-white/[0.10]'
+            } ${!canUpload ? 'opacity-50' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); if (canUpload) setDrag(true); }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => {
+              e.preventDefault(); setDrag(false);
+              if (canUpload && e.dataTransfer.files.length > 0) {
+                uploadFiles(e.dataTransfer.files);
+              }
+            }}
+          >
+            <Upload size={20} className="mx-auto text-muted mb-2" />
+            <div className="text-[0.9286rem] text-ink">{t('sources.dropHere')}</div>
+            <button
+              className="btn btn-primary mt-3 inline-flex"
+              disabled={!canUpload || uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : 'Choose file'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) uploadFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            <div className="text-[0.75rem] text-muted mt-2">PDF, markdown, text, images. 50 MB max per file.</div>
+            {!canUpload && (
+              <div className="text-[0.75rem] text-muted mt-1">{t('sources.signInToUpload')}</div>
+            )}
+          </div>
+        ) : (
+          <div className={`mx-5 mt-3 mb-2 p-4 border border-white/[0.10] rounded-md ${!canUpload ? 'opacity-50' : ''}`}>
+            <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">URL</label>
+            <input
+              type="url"
+              className="form-input mt-1 h-9 w-full text-[0.8929rem]"
+              placeholder="https://example.com/article"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              disabled={!canUpload || importing}
+              onKeyDown={(e) => { if (e.key === 'Enter') importFromUrl(); }}
+            />
+            <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mt-2 block">
+              Title (optional)
+            </label>
+            <input
+              type="text"
+              className="form-input mt-1 h-9 w-full text-[0.8929rem]"
+              placeholder="Leave blank to use the page title"
+              value={urlTitle}
+              onChange={(e) => setUrlTitle(e.target.value)}
+              disabled={!canUpload || importing}
+            />
+            <button
+              className="btn btn-primary mt-3 inline-flex"
+              disabled={!canUpload || importing || !urlInput.trim()}
+              onClick={importFromUrl}
+            >
+              {importing
+                ? <><Loader2 size={13} className="animate-spin" /> Fetching…</>
+                : <><Link2 size={12} /> Import URL</>}
+            </button>
+            <div className="text-[0.75rem] text-muted mt-2">
+              HTML, markdown, plain text, and PDFs are supported. Private and loopback addresses are blocked by default.
+            </div>
+            {!canUpload && (
+              <div className="text-[0.75rem] text-muted mt-1">{t('sources.signInToUpload')}</div>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="mx-5 mb-2 text-[0.8214rem] bg-rose-500/10 border border-rose-500/30 text-rose-300 px-3 py-2 rounded">
@@ -235,6 +323,18 @@ export default function SourcesPanel({
                       <div className="text-[0.7857rem] text-muted mt-0.5 truncate font-mono">
                         {s.original_filename} · {fmtSize(s.size_bytes)} · {s.mime_type}
                       </div>
+                      {s.source_url && (
+                        <a
+                          href={s.source_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[0.75rem] text-accent hover:underline mt-1 inline-flex items-center gap-1 truncate max-w-full"
+                          title={s.source_url}
+                        >
+                          <ExternalLink size={11} className="shrink-0" />
+                          <span className="truncate">{s.source_url}</span>
+                        </a>
+                      )}
                       <div className="text-[0.75rem] text-muted mt-1">
                         Uploaded by {uploader?.name || `user #${s.uploaded_by_id ?? '?'}`}
                         {' · '}

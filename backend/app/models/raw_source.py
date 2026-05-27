@@ -39,6 +39,11 @@ class RawSource(Base):
     mime_type: Mapped[str] = mapped_column(String)
     size_bytes: Mapped[int] = mapped_column(Integer)
 
+    # Set for URL-imported sources (issue #6). NULL for direct uploads.
+    # Lets the UI show an "open original" link without round-tripping the
+    # disk file, and a future re-fetch job can detect drift.
+    source_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     ingest_status: Mapped[IngestStatus] = mapped_column(
         Enum(IngestStatus), default=IngestStatus.pending, index=True,
     )

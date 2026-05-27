@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     seed_examples: bool = False
     examples_vault_path: Path = Path("/examples/vault")
 
+    # URL-ingest knobs (issue #6). `POST /api/raw/url` fetches a public
+    # http/https resource and feeds it through the existing pipeline.
+    # The defaults below are safe; tighten or loosen per deployment.
+    url_ingest_timeout_seconds: int = 60     # per-request fetch timeout
+    url_ingest_max_bytes: int = 50 * 1024 * 1024  # 50 MB hard cap
+    # Default-deny private / loopback / link-local destinations. Flip to
+    # true for self-hosted intranet docs (Confluence, internal wikis).
+    url_ingest_allow_private: bool = False
+
     auth_mode: Literal["stub", "oidc"] = "stub"
     jwt_secret: str = "dev-secret-change-in-prod"
     oidc_issuer: str = ""
