@@ -149,6 +149,21 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE IF EXISTS raw_sources "
             "ADD COLUMN IF NOT EXISTS source_url TEXT"
         ))
+        # Issue #12 backfill: pre-fix, review_requested notifications
+        # were never cleared when the revision left the `proposed`
+        # state. Mark all such stale rows as read so existing installs
+        # don't carry a stuck badge count. Idempotent — once the
+        # `review()` path keeps the table clean, this update finds 0
+        # rows on subsequent boots.
+        await conn.execute(text(
+            "UPDATE notifications "
+            "SET is_read = TRUE "
+            "WHERE kind = 'review_requested' "
+            "  AND is_read = FALSE "
+            "  AND EXISTS (SELECT 1 FROM revisions r "
+            "              WHERE r.status <> 'proposed' "
+            "                AND notifications.link = '/review/' || r.id)"
+        ))
         # One-time data migration: legacy agent users get deactivated and
         # their tokens revoked. The new model uses real-user tokens only.
         await conn.execute(text(

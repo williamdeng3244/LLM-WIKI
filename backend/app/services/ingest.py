@@ -78,7 +78,13 @@ INGEST_TOOL_SCHEMA: dict[str, Any] = {
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "required": ["quote_or_excerpt"],
+                            # A source ref must carry SOMETHING — either a
+                            # verbatim quote (preferred) or a location
+                            # pointer like "Chapter 3" / "§4.2". Issue #9.
+                            "anyOf": [
+                                {"required": ["quote_or_excerpt"]},
+                                {"required": ["location"]},
+                            ],
                             "properties": {
                                 "source_id": {"type": "integer"},
                                 "quote_or_excerpt": {"type": "string"},
@@ -95,6 +101,40 @@ INGEST_TOOL_SCHEMA: dict[str, Any] = {
 
 
 # ── Agent identity ──────────────────────────────────────────────────────────
+
+def _sanitize_source_refs(raw_refs: Any) -> tuple[list[dict], int]:
+    """Strip out source_refs the response schema would reject (issue #8).
+
+    Returns (kept, dropped_count). A ref is kept if it has at least one
+    of `quote_or_excerpt` or `location`; refs that have neither are
+    silently dropped so the model can't poison `revision_provenance`
+    with rows that 500 the read endpoint. The dropped count is
+    surfaced through `conflict_notes` so the human reviewer sees what
+    the agent tried to claim but couldn't substantiate.
+    """
+    if not isinstance(raw_refs, list):
+        return [], 0
+    kept: list[dict] = []
+    dropped = 0
+    for r in raw_refs:
+        if not isinstance(r, dict):
+            dropped += 1
+            continue
+        quote = (r.get("quote_or_excerpt") or "").strip() if isinstance(r.get("quote_or_excerpt"), str) else ""
+        loc = (r.get("location") or "").strip() if isinstance(r.get("location"), str) else ""
+        if not quote and not loc:
+            dropped += 1
+            continue
+        cleaned: dict = {}
+        if isinstance(r.get("source_id"), int):
+            cleaned["source_id"] = r["source_id"]
+        if quote:
+            cleaned["quote_or_excerpt"] = quote
+        if loc:
+            cleaned["location"] = loc
+        kept.append(cleaned)
+    return kept, dropped
+
 
 async def ensure_ingest_agent(session: AsyncSession, owner: User) -> User:
     email = f"agent+{owner.id}+ingest@local"
@@ -305,8 +345,13 @@ def _assemble_user_message(
         f"Description from uploader: {rs.description or '(none)'}\n\n"
         "Apply the playbook to merge the source content into the wiki. Output your "
         "decisions via the `submit_ingest_result` tool. Each edit MUST include "
-        "rationale and source_refs. Use kind=conflict (don't overwrite) when the "
-        "raw source contradicts an existing page; include conflict_notes there.\n"
+        "rationale and source_refs. Each source_ref should carry a verbatim "
+        "`quote_or_excerpt` when you can copy text from the source; when you "
+        "are summarizing rather than quoting, a `location` reference (e.g. "
+        "\"Chapter 3\", \"§4.2\", \"page 7\") is acceptable. At least one of "
+        "the two fields must be populated. Use kind=conflict (don't overwrite) "
+        "when the raw source contradicts an existing page; include "
+        "conflict_notes there.\n"
         f"Hard cap: {MAX_EDITS} edits. Skipped suggestions go in summary.\n\n"
         f"Existing page directory ({len(ctx.directory)} pages):\n{directory_lines}\n\n"
         f"Full text of pages most likely affected ({len(ctx.focus)}):\n{focus_text}\n"
@@ -585,14 +630,27 @@ async def run_apply_phase(
             )
             await submit_for_review(session, rev, agent, force_review=True)
 
+            # Sanitize before persist: the LLM tool schema is advisory
+            # (some providers don't strictly enforce `required` /
+            # `anyOf`), so refs without quote OR location would 500 the
+            # provenance read endpoint later. Issue #8.
+            kept_refs, dropped_refs = _sanitize_source_refs(e.get("source_refs"))
+            conflict_notes = e.get("conflict_notes") or ""
+            if dropped_refs:
+                tag = (
+                    f"[planner-validation] dropped {dropped_refs} source_ref "
+                    f"entry{'s' if dropped_refs > 1 else ''} with neither quote "
+                    "nor location — see #8."
+                )
+                conflict_notes = (conflict_notes + "\n\n" + tag).strip() if conflict_notes else tag
             session.add(RevisionProvenance(
                 revision_id=rev.id,
                 raw_source_id=rs.id,
                 ingest_run_id=run.id,
                 edit_id=edit_id,
                 confidence=e.get("confidence"),
-                source_refs=e.get("source_refs") or [],
-                conflict_notes=e.get("conflict_notes"),
+                source_refs=kept_refs,
+                conflict_notes=conflict_notes or None,
                 edit_kind=kind,
                 is_agent_authored=True,
             ))

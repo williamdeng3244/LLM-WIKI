@@ -71,6 +71,15 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # DB connection pool sizing (issue #10). SQLAlchemy defaults are
+    # 5 + 10 = 15 connections per process, which an ingest workload
+    # blows through quickly if a single endpoint starts 500-ing and
+    # the frontend retries hold connections. Raise the ceiling here
+    # so a failing endpoint can't cascade into pool exhaustion.
+    db_pool_size: int = 20
+    db_max_overflow: int = 20
+    db_pool_recycle: int = 1800     # 30 min — bounce stale connections
+
     chat_model: str = "claude-sonnet-4-6"
     # Local embedding model (sentence-transformers all-MiniLM-L6-v2 = 384-dim).
     embedding_dim: int = 384

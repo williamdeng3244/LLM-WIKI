@@ -265,8 +265,16 @@ class RawSourceFromUrl(BaseModel):
 
 
 class SourceRef(BaseModel):
+    """One reference into a RawSource.
+
+    Both `quote_or_excerpt` and `location` are optional — a ref is valid
+    as long as at least one is set. (Pre-#9 the tool schema demanded a
+    verbatim quote always; some models honored that, others emitted
+    location-only refs. We accept both shapes on the read side so
+    legacy DB rows from looser models don't 500. See issues #8/#9/#11.)
+    """
     source_id: Optional[int] = None
-    quote_or_excerpt: str
+    quote_or_excerpt: Optional[str] = None
     location: Optional[str] = None
 
 

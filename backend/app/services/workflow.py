@@ -74,6 +74,25 @@ async def submit_for_review(
     return revision
 
 
+async def _clear_review_requested(session: AsyncSession, revision: Revision) -> None:
+    """Mark this revision's review_requested notifications as read (#12).
+
+    Called from every terminal branch of review() — accept / reject /
+    request_changes — because the closure is "a decision was reached",
+    not "what the decision was". Without this the reviewer's bell
+    badge stays stuck on the original count.
+    """
+    await session.execute(
+        update(Notification)
+        .where(
+            Notification.kind == "review_requested",
+            Notification.link == f"/review/{revision.id}",
+            Notification.is_read.is_(False),
+        )
+        .values(is_read=True)
+    )
+
+
 async def review(
     session: AsyncSession, revision: Revision, reviewer: User,
     decision: str, comment: Optional[str] = None, *,
@@ -90,6 +109,7 @@ async def review(
     revision.reviewer_id = reviewer.id
     revision.review_comment = comment
     revision.reviewed_at = datetime.now(timezone.utc)
+    await _clear_review_requested(session, revision)
 
     if decision == "accept":
         return await _publish(session, revision, page, reviewer=reviewer, comment=comment)
