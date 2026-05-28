@@ -184,6 +184,14 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type Bookmark = {
+  id: number;
+  page_id: number;
+  page_path: string;
+  page_title: string;
+  created_at: string;
+};
+
 // Public types for the new login flow.
 export type AuthConfigDTO = {
   mode: 'stub' | 'oidc';
@@ -373,6 +381,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ url, title, description }),
     }),
+  // ── Pages: delete + move ─────────────────────────────────────────
+  deletePage: (path: string) =>
+    call<void>(`/pages/${encodeURI(path)}`, { method: 'DELETE' }),
+  movePage: (oldPath: string, newPath: string) =>
+    call<Page>(`/pages/${encodeURI(oldPath)}/path`, {
+      method: 'PATCH',
+      body: JSON.stringify({ new_path: newPath }),
+    }),
+  // ── Bookmarks ────────────────────────────────────────────────────
+  listBookmarks: () => call<Bookmark[]>('/bookmarks'),
+  addBookmark: (path: string) =>
+    call<Bookmark>(`/bookmarks/${encodeURI(path)}`, { method: 'POST' }),
+  removeBookmark: (path: string) =>
+    call<void>(`/bookmarks/${encodeURI(path)}`, { method: 'DELETE' }),
   updateRawSource: (id: number, body: { title?: string; description?: string }) =>
     call<RawSource>(`/raw/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRawSource: (id: number) =>

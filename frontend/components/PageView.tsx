@@ -3,9 +3,8 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import {
   Flag as FlagIcon, Lock, Unlock, Pencil, MoreVertical,
-  BookOpen, FolderInput, Bookmark, GitMerge, FileDown,
-  SearchIcon, Replace, Clipboard, History, Network, LocateFixed,
-  Trash2, Plus,
+  FolderInput, Bookmark, BookmarkCheck, GitMerge, FileDown,
+  Clipboard, History, LocateFixed, Trash2,
 } from 'lucide-react';
 import Markdown from './Markdown';
 import ContextMenu, { type MenuItem } from './ContextMenu';
@@ -23,6 +22,7 @@ function formatDate(s: string): string {
 export default function PageView({
   page, currentUser, allPaths, users, onPropose, onLock, onNavigate,
   onRevealInTree, onShowVersionHistory,
+  isBookmarked, onToggleBookmark, onDeletePage,
 }: {
   page: Page | null;
   currentUser: User | null;
@@ -33,6 +33,16 @@ export default function PageView({
   onNavigate: (path: string, inNewTab?: boolean) => void;
   onRevealInTree?: (path: string) => void;
   onShowVersionHistory?: (path: string) => void;
+  isBookmarked?: boolean;
+  onToggleBookmark?: (path: string, next: boolean) => Promise<void> | void;
+  /** Admin-only delete handler. When provided, the More-actions
+   *  "Delete file" item is enabled and clicks land here. The parent
+   *  is responsible for confirming, closing tabs, and refetching. */
+  onDeletePage?: (path: string) => Promise<void> | void;
+  /** Editor/admin move-to-folder handler. When provided, the
+   *  More-actions "Move file to…" item is enabled and clicks open
+   *  the parent-managed MovePageDialog. */
+  onMovePage?: (path: string) => void;
 }) {
   const [newComment, setNewComment] = useState('');
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number } | null>(null);
@@ -102,71 +112,27 @@ export default function PageView({
     const copyPath = async () => {
       try { await navigator.clipboard.writeText(p.path); } catch { /* ignore */ }
     };
+    // Trimmed list — removed Reading view / Add property / Find /
+    // Replace / Open linked view, all of which were either informational
+    // checkmarks or duplicate browser features. What's left are the
+    // operations the user will actually use plus disabled placeholders
+    // for rename/move/merge so they show in their final position.
     return [
       {
         kind: 'item',
-        label: t('menu.page.readingView'),
-        icon: <BookOpen size={13} />,
-        checked: true,
-        disabled: true,
-        hint: t('menu.page.readingView.hint'),
-      },
-      { kind: 'divider' },
-      {
-        kind: 'item',
-        label: t('menu.page.rename'),
-        icon: <Pencil size={13} />,
-        disabled: true,
-        hint: t('menu.page.backendNotWired'),
+        label: isBookmarked ? t('menu.page.unbookmark') : t('menu.page.bookmark'),
+        icon: isBookmarked ? <BookmarkCheck size={13} /> : <Bookmark size={13} />,
+        disabled: !onToggleBookmark,
+        onClick: onToggleBookmark
+          ? () => onToggleBookmark(p.path, !isBookmarked)
+          : undefined,
       },
       {
         kind: 'item',
-        label: t('menu.page.move'),
-        icon: <FolderInput size={13} />,
-        disabled: true,
-        hint: t('menu.page.backendNotWired'),
-      },
-      {
-        kind: 'item',
-        label: t('menu.page.bookmark'),
-        icon: <Bookmark size={13} />,
-        disabled: true,
-        hint: t('menu.page.bookmark.hint'),
-      },
-      {
-        kind: 'item',
-        label: t('menu.page.merge'),
-        icon: <GitMerge size={13} />,
-        disabled: true,
-        hint: t('menu.page.merge.hint'),
-      },
-      {
-        kind: 'item',
-        label: t('menu.page.addProp'),
-        icon: <Plus size={13} />,
-        disabled: true,
-        hint: t('menu.page.addProp.hint'),
-      },
-      {
-        kind: 'item',
-        label: t('menu.page.export'),
-        icon: <FileDown size={13} />,
-        onClick: () => window.print(),
-      },
-      { kind: 'divider' },
-      {
-        kind: 'item',
-        label: t('menu.page.find'),
-        icon: <SearchIcon size={13} />,
-        disabled: true,
-        hint: t('menu.page.find.hint'),
-      },
-      {
-        kind: 'item',
-        label: t('menu.page.replace'),
-        icon: <Replace size={13} />,
-        disabled: true,
-        hint: t('menu.page.replace.hint'),
+        label: t('menu.page.reveal'),
+        icon: <LocateFixed size={13} />,
+        disabled: !onRevealInTree,
+        onClick: () => onRevealInTree?.(p.path),
       },
       { kind: 'divider' },
       {
@@ -184,18 +150,32 @@ export default function PageView({
       },
       {
         kind: 'item',
-        label: t('menu.page.linked'),
-        icon: <Network size={13} />,
-        disabled: true,
-        hint: t('menu.page.linked.hint'),
+        label: t('menu.page.export'),
+        icon: <FileDown size={13} />,
+        onClick: () => window.print(),
       },
       { kind: 'divider' },
       {
         kind: 'item',
-        label: t('menu.page.reveal'),
-        icon: <LocateFixed size={13} />,
-        disabled: !onRevealInTree,
-        onClick: () => onRevealInTree?.(p.path),
+        label: t('menu.page.rename'),
+        icon: <Pencil size={13} />,
+        disabled: true,
+        hint: t('menu.page.backendNotWired'),
+      },
+      {
+        kind: 'item',
+        label: t('menu.page.move'),
+        icon: <FolderInput size={13} />,
+        disabled: !onMovePage,
+        hint: !onMovePage ? t('menu.page.move.adminOnly') : undefined,
+        onClick: onMovePage ? () => onMovePage(p.path) : undefined,
+      },
+      {
+        kind: 'item',
+        label: t('menu.page.merge'),
+        icon: <GitMerge size={13} />,
+        disabled: true,
+        hint: t('menu.page.merge.hint'),
       },
       { kind: 'divider' },
       {
@@ -203,8 +183,16 @@ export default function PageView({
         label: t('menu.page.delete'),
         icon: <Trash2 size={13} />,
         danger: true,
-        disabled: true,
-        hint: t('menu.page.backendNotWired'),
+        // Admin-only — onDeletePage is only passed from the parent
+        // when the current user has the admin role.
+        disabled: !onDeletePage,
+        hint: !onDeletePage ? t('menu.page.delete.adminOnly') : undefined,
+        onClick: onDeletePage
+          ? () => {
+              if (!confirm(t('menu.page.delete.confirm').replace('{title}', p.title))) return;
+              onDeletePage(p.path);
+            }
+          : undefined,
       },
     ];
   }

@@ -64,6 +64,20 @@ export function useTabs() {
     });
   }, [update]);
 
+  // After a page move/rename, rewrite every tab that was pointing at
+  // the old path so the user's tab strip follows the rename instead
+  // of leaving stale 404'd tabs behind.
+  const rewritePagePath = useCallback((oldPath: string, newPath: string) => {
+    update((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.kind === 'page' && t.path === oldPath
+          ? { ...t, path: newPath }
+          : t,
+      ),
+      activeId: s.activeId,
+    }));
+  }, [update]);
+
   const openGraph = useCallback((mode: '2d' | '3d', asNewTab = false) => {
     update((s) => {
       if (asNewTab) {
@@ -124,6 +138,7 @@ export function useTabs() {
     activeId: state.activeId,
     active,
     openPage,
+    rewritePagePath,
     openGraph,
     newTab,
     closeTab,

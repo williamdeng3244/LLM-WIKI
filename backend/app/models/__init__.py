@@ -14,6 +14,7 @@ from app.models.lint import (
     LintReport, LintReportStatus, LintIssue, LintIssueKind,
     LintIssueSeverity, LintIssueStatus,
 )
+from app.models.bookmark import Bookmark
 
 __all__ = [
     "User", "ApiToken", "Role", "ROLE_RANK",
@@ -25,4 +26,5 @@ __all__ = [
     "IngestRun", "IngestRunStatus",
     "LintReport", "LintReportStatus", "LintIssue", "LintIssueKind",
     "LintIssueSeverity", "LintIssueStatus",
+    "Bookmark",
 ]

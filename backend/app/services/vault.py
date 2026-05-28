@@ -76,3 +76,37 @@ def write_file(rel_path: str, title: str, tags: list[str], body: str) -> VaultFi
     result = read_file(rel_path)
     assert result is not None
     return result
+
+
+def delete_file(rel_path: str) -> bool:
+    """Remove the page's .md from disk. Idempotent — returns True if it
+    existed and was deleted, False if it didn't exist (so a delete that
+    races with a manual rm doesn't fail the API call).
+
+    Empty parent dirs are intentionally NOT pruned: a user could have
+    custom-folder placeholders we don't want to silently delete."""
+    abs_path = settings.vault_path / rel_path
+    try:
+        abs_path.unlink()
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def move_file(old_rel: str, new_rel: str) -> bool:
+    """Move/rename the page's .md on disk. Creates the destination's
+    parent dir if missing. Returns True if a file was moved, False if
+    the source didn't exist (so a move that races with a manual rm
+    doesn't fail the API call — the DB row is what we care about).
+
+    Refuses to silently overwrite an existing destination; that case
+    should be caught at the route layer before we touch disk."""
+    src = settings.vault_path / old_rel
+    dst = settings.vault_path / new_rel
+    if not src.exists():
+        return False
+    if dst.exists() and src.resolve() != dst.resolve():
+        raise FileExistsError(f"destination already exists: {new_rel}")
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    src.replace(dst)
+    return True

@@ -4,7 +4,8 @@ import {
   type GraphSettingsState,
   DEFAULTS,
   DEFAULT_COLORS,
-  CATEGORY_ORDER,
+  categoryColor,
+  visibleCategories,
 } from '@/lib/graphSettings';
 import { useLanguage } from '@/lib/i18n';
 
@@ -12,6 +13,11 @@ type Props = {
   settings: GraphSettingsState;
   onChange: (s: GraphSettingsState) => void;
   onClose: () => void;
+  /** Categories actually present in the graph data — passed by the
+   *  parent so the color grid always shows a swatch for every
+   *  category the user can see, including user-created ones like
+   *  `concepts` or `people` that aren't in the seed CATEGORY_ORDER. */
+  categories?: string[];
 };
 
 function Slider({
@@ -39,7 +45,7 @@ function Slider({
   );
 }
 
-export default function GraphSettings({ settings, onChange, onClose }: Props) {
+export default function GraphSettings({ settings, onChange, onClose, categories }: Props) {
   const { t } = useLanguage();
   const set = <K extends keyof GraphSettingsState>(k: K, v: GraphSettingsState[K]) =>
     onChange({ ...settings, [k]: v });
@@ -48,6 +54,11 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
     onChange({ ...settings, colors: { ...settings.colors, [cat]: color } });
 
   const resetAll = () => onChange({ ...DEFAULTS, colors: { ...DEFAULT_COLORS } });
+
+  // Categories to show in the color grid: union of seeds + whatever the
+  // graph data actually contains. Falls back to seeds-only when the
+  // parent didn't pass a list.
+  const catList = visibleCategories(categories || []);
 
   return (
     // Cap height + scrollable body so a tall panel doesn't get clipped at
@@ -69,10 +80,10 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
         </div>
         <div className="space-y-3">
           <Slider label={t('graphSettings.nodeSize')} value={settings.nodeSize}
-            min={0.5} max={2.0} step={0.05}
+            min={0.3} max={1.4} step={0.05}
             onInput={(v) => set('nodeSize', v)} />
           <Slider label={t('graphSettings.lineThickness')} value={settings.lineThickness}
-            min={0.5} max={3.0} step={0.1}
+            min={0.1} max={2.0} step={0.05}
             onInput={(v) => set('lineThickness', v)} />
           <Slider label={t('graphSettings.glow')} value={settings.glow}
             min={0} max={2.0} step={0.05}
@@ -104,13 +115,64 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
 
         <div className="mt-4 pt-3 border-t border-white/[0.06]">
           <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
+            {t('graphSettings.section.links')}
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[0.7857rem] text-muted">{t('graphSettings.linkColor')}</span>
+              <label className="relative w-7 h-5 rounded border border-white/15 overflow-hidden cursor-pointer"
+                     style={{ backgroundColor: settings.linkColor }}>
+                <input type="color" value={settings.linkColor}
+                  onChange={(e) => set('linkColor', e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer" />
+              </label>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[0.7857rem] text-muted">{t('graphSettings.linkStyle')}</span>
+              <div className="flex border border-white/[0.10] rounded overflow-hidden">
+                {(['solid', 'dashed'] as const).map((s) => (
+                  <button key={s}
+                    className={`px-2 py-0.5 text-[0.75rem] transition-colors ${
+                      settings.linkStyle === s
+                        ? 'bg-accent/20 text-ink'
+                        : 'text-muted hover:text-ink'
+                    }`}
+                    onClick={() => set('linkStyle', s)}
+                  >
+                    {t(`graphSettings.linkStyle.${s}` as 'graphSettings.linkStyle.solid' | 'graphSettings.linkStyle.dashed')}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Slider label={t('graphSettings.particleCount')} value={settings.particleCount}
+              min={0} max={5} step={1}
+              onInput={(v) => set('particleCount', Math.round(v))}
+              fmt={(v) => v.toFixed(0)} />
+            <Slider label={t('graphSettings.particleSpeed')} value={settings.particleSpeed}
+              min={0.001} max={0.02} step={0.0005}
+              onInput={(v) => set('particleSpeed', v)}
+              fmt={(v) => v.toFixed(4)} />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[0.7857rem] text-muted">{t('graphSettings.particleColor')}</span>
+              <label className="relative w-7 h-5 rounded border border-white/15 overflow-hidden cursor-pointer"
+                     style={{ backgroundColor: settings.particleColor }}>
+                <input type="color" value={settings.particleColor}
+                  onChange={(e) => set('particleColor', e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-white/[0.06]">
+          <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
             {t('graphSettings.section.colors')}
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {CATEGORY_ORDER.map((cat) => {
-              const hex = settings.colors[cat] || '#9aa1b8';
+            {catList.map((cat) => {
+              const hex = categoryColor(cat, settings.colors);
               return (
-                <label key={cat} className="flex items-center gap-1.5 cursor-pointer group">
+                <label key={cat} title={cat} className="flex items-center gap-1.5 cursor-pointer group">
                   <span
                     className="relative w-5 h-5 rounded-full border border-white/15 shrink-0 shadow-[0_0_8px_-1px] overflow-hidden"
                     style={{ backgroundColor: hex, boxShadow: `0 0 10px -1px ${hex}` }}
@@ -132,16 +194,7 @@ export default function GraphSettings({ settings, onChange, onClose }: Props) {
         </div>
       </div>
 
-      <div className="px-4 pt-2.5 pb-3 border-t border-white/[0.06] flex items-center justify-between shrink-0">
-        <label className="flex items-center gap-2 cursor-pointer text-[0.7857rem]">
-          <input
-            type="checkbox"
-            checked={settings.motionEnabled}
-            onChange={(e) => set('motionEnabled', e.target.checked)}
-            className="accent-accent cursor-pointer"
-          />
-          <span className="text-muted">{t('graphSettings.bgMotion')}</span>
-        </label>
+      <div className="px-4 pt-2.5 pb-3 border-t border-white/[0.06] flex items-center justify-end shrink-0">
         <button
           className="text-muted hover:text-ink flex items-center gap-1 text-[0.75rem]"
           onClick={resetAll}

@@ -28,10 +28,23 @@ async def graph(
     )
     counts = {r.target_id: r.c for r in (await session.execute(counts_q)).all()}
 
+    # Category for graph-coloring purposes. When the page has an explicit
+    # `category_id` we use that; otherwise we fall back to the path's
+    # first segment (e.g. `concepts/foo.md` → `concepts`). Without this
+    # fallback, agent-created folders that don't have matching Category
+    # rows in the DB end up as `null` on every node — the GraphSettings
+    # color grid has no way to surface them, so users can't recolor them.
+    def _derived_category(p: Page) -> str | None:
+        if p.category_id and (slug := cats.get(p.category_id)):
+            return slug
+        if "/" in p.path:
+            return p.path.split("/", 1)[0]
+        return None
+
     nodes = [
         GraphNode(
             id=p.path, title=p.title,
-            category=cats.get(p.category_id) if p.category_id else None,
+            category=_derived_category(p),
             tags=list(p.tags or []), backlinks=counts.get(p.id, 0),
         ) for p in pages
     ]

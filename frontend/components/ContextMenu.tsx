@@ -125,14 +125,14 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
     >
       {items.map((it, i) => {
         if (it.kind === 'divider') {
-          return <div key={i} className="h-px my-1 bg-white/[0.06]" />;
+          return <div key={i} className="h-px my-0.5 bg-white/[0.06]" />;
         }
         return (
           <button
             key={i}
             disabled={it.disabled}
             title={it.disabled ? it.hint : undefined}
-            className={`w-full text-left px-3 py-1.5 flex items-center gap-2.5 transition-colors ${
+            className={`w-full text-left px-3 py-1 flex items-center gap-2.5 transition-colors ${
               it.disabled
                 ? 'opacity-40 cursor-not-allowed text-muted'
                 : it.danger

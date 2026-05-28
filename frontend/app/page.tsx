@@ -5,13 +5,14 @@ import {
   Bell, Plug, Pencil, Inbox, Search, BookOpen, Sliders,
   SquarePen, FolderPlus, ArrowDownAZ, ArrowDownZA,
   ChevronsDownUp, ChevronsUpDown,
-  Copy, Clipboard, History, Bookmark, FolderInput, Trash2,
+  Copy, Clipboard, History, Bookmark, BookmarkCheck, FolderInput, Trash2,
   ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon, HelpCircle,
 } from 'lucide-react';
 import FileTree, {
   type FileTreeHandle, type SortMode, type ContextMenuInfo,
 } from '@/components/FileTree';
 import { useCustomFolders } from '@/lib/customFolders';
+import { useFolderOrder } from '@/lib/folderOrder';
 import ContextMenu, { type MenuItem } from '@/components/ContextMenu';
 import VersionHistory from '@/components/VersionHistory';
 import TabBar from '@/components/TabBar';
@@ -34,6 +35,7 @@ import UserManual from '@/components/UserManual';
 import ShortcutSheet from '@/components/ShortcutSheet';
 import VersionLog from '@/components/VersionLog';
 import LoginModal from '@/components/LoginModal';
+import MovePageDialog from '@/components/MovePageDialog';
 import { useTheme } from '@/lib/theme';
 import { useLanguage } from '@/lib/i18n';
 import { api, type Page, type Role, type User } from '@/lib/api';
@@ -86,6 +88,93 @@ export default function Home() {
       return next;
     });
   }, []);
+
+  // Resizable file tree (left sidebar). Width persists across reloads.
+  // Bounds: 180px (cramped floor) – 480px (don't dominate the layout).
+  // Default 240px matches the literal width used before this change.
+  const TREE_DEFAULT_W = 240;
+  const TREE_MIN_W = 180;
+  const TREE_MAX_W = 480;
+  const clampTreeW = (n: number) =>
+    Math.max(TREE_MIN_W, Math.min(TREE_MAX_W, Math.round(n)));
+  const [treeWidth, setTreeWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return TREE_DEFAULT_W;
+    try {
+      const raw = localStorage.getItem('wiki:tree-width');
+      const n = raw ? parseInt(raw, 10) : NaN;
+      return Number.isFinite(n) ? clampTreeW(n) : TREE_DEFAULT_W;
+    } catch { return TREE_DEFAULT_W; }
+  });
+  // Drag context lives in a ref so the mousemove listener reads fresh
+  // values without stale-closure shenanigans, and so updating it on
+  // 60–120 Hz doesn't trigger React re-renders.
+  const treeDragRef = useRef<{
+    startX: number; startWidth: number; lastWidth: number;
+  } | null>(null);
+  // Ref to the grid container so the drag can mutate --tree-w
+  // directly on the DOM. Bypasses React re-renders AND bypasses the
+  // grid-template-columns transition (which would otherwise tween the
+  // column toward the new width over 200ms and feel ~200ms laggy).
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+
+  const startTreeDrag = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    treeDragRef.current = {
+      startX: e.clientX, startWidth: treeWidth, lastWidth: treeWidth,
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    // Disable the grid-column transition for the duration of the drag —
+    // otherwise every mousemove queues a 200ms tween and the column
+    // never catches up to the cursor.
+    const container = gridContainerRef.current;
+    if (container) container.style.transition = 'none';
+
+    const onMove = (ev: MouseEvent) => {
+      const ctx = treeDragRef.current;
+      if (!ctx) return;
+      const next = clampTreeW(ctx.startWidth + (ev.clientX - ctx.startX));
+      if (next === ctx.lastWidth) return;
+      ctx.lastWidth = next;
+      // Write straight to the DOM — no React state churn during the
+      // gesture. State syncs once on teardown for persistence + re-
+      // render correctness.
+      if (container) container.style.setProperty('--tree-w', `${next}px`);
+    };
+    const teardown = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', teardown);
+      window.removeEventListener('blur', teardown);
+      document.removeEventListener('mouseleave', teardown);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (container) container.style.transition = '';
+      const finalWidth = treeDragRef.current?.lastWidth ?? treeWidth;
+      treeDragRef.current = null;
+      // One React update at the end: persist + bring state in line
+      // with the DOM so the next render doesn't snap back.
+      setTreeWidth(finalWidth);
+      try { localStorage.setItem('wiki:tree-width', String(finalWidth)); } catch {}
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', teardown);
+    window.addEventListener('blur', teardown);
+    document.addEventListener('mouseleave', teardown);
+  }, [treeWidth]);
+
+  const resetTreeWidth = useCallback(() => {
+    setTreeWidth(TREE_DEFAULT_W);
+    try { localStorage.setItem('wiki:tree-width', String(TREE_DEFAULT_W)); } catch {}
+  }, []);
+
+  const nudgeTreeWidth = useCallback((delta: number) => {
+    setTreeWidth((w) => {
+      const next = clampTreeW(w + delta);
+      try { localStorage.setItem('wiki:tree-width', String(next)); } catch {}
+      return next;
+    });
+  }, []);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<FileTreeHandle>(null);
 
@@ -110,6 +199,7 @@ export default function Home() {
   const [pendingFolder, setPendingFolder] = useState<{ initial: string } | null>(null);
   const [treeOpenCount, setTreeOpenCount] = useState(0);
   const customFolders = useCustomFolders();
+  const folderOrder = useFolderOrder();
 
   // File-tree right-click menu + version-history modal. Store the original
   // ContextMenuInfo (not pre-built items) so the menu re-translates when
@@ -125,17 +215,16 @@ export default function Home() {
 
   const [graphSettings, setGraphSettings] = useGraphSettings();
 
-  // Mirror motion-enabled into the Plexus background. Fires on mount
-  // (after settings hydrate from localStorage) and on every change.
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('plexus:motion', {
-      detail: { enabled: graphSettings.motionEnabled },
-    }));
-  }, [graphSettings.motionEnabled]);
-
   // Data
   const { data: pages = [], mutate: refetchPages } = useSWR('pages', api.listPages, SWR_OPTS);
   const { data: graphData, mutate: refetchGraph } = useSWR('graph', api.graph, SWR_OPTS);
+  const { data: bookmarks = [], mutate: refetchBookmarks } = useSWR(
+    user ? 'bookmarks' : null, api.listBookmarks, SWR_OPTS,
+  );
+  const bookmarkedPaths = useMemo(
+    () => new Set(bookmarks.map((b) => b.page_path)),
+    [bookmarks],
+  );
   const { data: page = null, mutate: refetchPage } = useSWR<Page | null>(
     selected ? `page:${selected}` : null,
     () => (selected ? api.getPage(selected) : null),
@@ -279,6 +368,74 @@ export default function Home() {
     await Promise.all([refetchPage(), refetchPages()]);
   }, [page, refetchPage, refetchPages]);
 
+  const handleToggleBookmark = useCallback(async (path: string, next: boolean) => {
+    try {
+      if (next) await api.addBookmark(path);
+      else await api.removeBookmark(path);
+    } catch (e) {
+      console.error('bookmark toggle failed', e);
+    }
+    await refetchBookmarks();
+  }, [refetchBookmarks]);
+
+  // Move-page modal state. Lives at this level (rather than inside
+  // PageView / the file-context-menu) so it's the SAME modal whether
+  // triggered from the More-actions menu or from a tree right-click.
+  const [movingPagePath, setMovingPagePath] = useState<string | null>(null);
+  const movingPage = useMemo(() => {
+    if (!movingPagePath) return null;
+    const p = pages.find((x) => x.path === movingPagePath);
+    return p ? { path: p.path, title: p.title } : null;
+  }, [movingPagePath, pages]);
+
+  const handleMovePage = useCallback(async (oldPath: string, newPath: string) => {
+    const moved = await api.movePage(oldPath, newPath);
+    // Refetch the lists that surface the old path so the tree, graph,
+    // and bookmarks point at the new path immediately.
+    await Promise.all([
+      refetchPages(), refetchGraph(), refetchBookmarks(),
+    ]);
+    // Every tab still pointing at the old path follows the rename.
+    tabs.rewritePagePath(oldPath, moved.path);
+    // The "selected" path (which drives the active page-fetch) also
+    // needs to follow if it was the moved page.
+    if (selected === oldPath) setSelected(moved.path);
+  }, [tabs, refetchPages, refetchGraph, refetchBookmarks, selected]);
+
+  const handleDeletePage = useCallback(async (path: string) => {
+    let alreadyGone = false;
+    try {
+      await api.deletePage(path);
+    } catch (e: unknown) {
+      const msg = (e as Error).message || '';
+      // 404 = the page was already deleted in another tab/session (or by
+      // my own batch cleanup). Don't alarm the user — just refetch so
+      // the stale tree row disappears.
+      if (msg.startsWith('404')) {
+        alreadyGone = true;
+      } else {
+        alert(`Delete failed: ${msg}`);
+        return;
+      }
+    }
+    // Close every tab pointing at the now-deleted (or already-gone) page.
+    for (const tab of tabs.tabs) {
+      if (tab.kind === 'page' && tab.path === path) {
+        tabs.closeTab(tab.id);
+      }
+    }
+    // Refetch every list that surfaces page rows. The server cascade
+    // handles revisions/links/chunks/flags/comments/provenance/bookmarks.
+    await Promise.all([
+      refetchPages(), refetchGraph(), refetchBookmarks(),
+    ]);
+    if (alreadyGone) {
+      // Light hint instead of an error — user gets feedback that
+      // something happened even though it was a no-op.
+      console.info(`Page ${path} was already gone — UI refreshed.`);
+    }
+  }, [tabs, refetchPages, refetchGraph, refetchBookmarks]);
+
   const refreshAfterMutation = useCallback(async () => {
     await Promise.all([
       refetchPages(), refetchGraph(), refetchPage(),
@@ -345,28 +502,42 @@ export default function Home() {
         icon: <History size={13} />,
         onClick: () => { setHistoryForPath(info.pagePath); },
       },
-      {
-        kind: 'item',
-        label: t('menu.file.bookmark'),
-        icon: <Bookmark size={13} />,
-        disabled: true,
-        hint: t('menu.file.bookmark.disabled'),
-      },
+      (() => {
+        const isBm = bookmarkedPaths.has(info.pagePath);
+        return {
+          kind: 'item' as const,
+          label: isBm ? t('menu.page.unbookmark') : t('menu.page.bookmark'),
+          icon: isBm ? <BookmarkCheck size={13} /> : <Bookmark size={13} />,
+          disabled: !user,
+          hint: !user ? t('menu.page.bookmark.hint') : undefined,
+          onClick: user ? () => handleToggleBookmark(info.pagePath, !isBm) : undefined,
+        };
+      })(),
       { kind: 'divider' },
       {
         kind: 'item',
         label: t('menu.file.move'),
         icon: <FolderInput size={13} />,
-        disabled: true,
-        hint: t('menu.file.backendNotWired'),
+        // Editor or admin can move. Contributors can suggest body
+        // edits but path changes are gated tighter (other people's
+        // wikilinks depend on them).
+        disabled: !user || (user.role !== 'admin' && user.role !== 'editor'),
+        hint: !user || (user.role !== 'admin' && user.role !== 'editor')
+          ? t('menu.page.move.adminOnly') : undefined,
+        onClick: () => setMovingPagePath(info.pagePath),
       },
       {
         kind: 'item',
         label: t('menu.file.delete'),
         icon: <Trash2 size={13} />,
         danger: true,
-        disabled: true,
-        hint: t('menu.file.backendNotWired'),
+        disabled: user?.role !== 'admin',
+        hint: user?.role !== 'admin' ? t('menu.page.delete.adminOnly') : undefined,
+        onClick: user?.role === 'admin' ? () => {
+          const title = getTabTitle(info.pagePath);
+          if (!confirm(t('menu.page.delete.confirm').replace('{title}', title))) return;
+          handleDeletePage(info.pagePath);
+        } : undefined,
       },
     ];
   }
@@ -641,9 +812,15 @@ export default function Home() {
           grid-template-columns transitions smoothly via Tailwind arbitrary
           transition-property so the swap interpolates cleanly. */}
       <div
-        className="flex-1 grid min-h-0 overflow-hidden transition-[grid-template-columns] duration-200 ease-out"
+        ref={gridContainerRef}
+        className="flex-1 grid min-h-0 overflow-hidden transition-[grid-template-columns] duration-200 ease-out relative"
         style={{
-          gridTemplateColumns: `240px 1fr ${chatCollapsed ? '40px' : '320px'}`,
+          // CSS vars so the tree-resize gutter can position itself
+          // off the same value the grid uses for the tree column —
+          // no React state needed to keep them in sync.
+          ['--tree-w' as string]: `${treeWidth}px`,
+          ['--chat-w' as string]: chatCollapsed ? '40px' : '320px',
+          gridTemplateColumns: 'var(--tree-w) 1fr var(--chat-w)',
           // Pin row height to the available space. Without this, the
           // implicit grid row defaults to `auto` which sizes to
           // content — so a tall chat panel (or any pane with tall
@@ -652,6 +829,33 @@ export default function Home() {
           gridTemplateRows: 'minmax(0, 1fr)',
         }}
       >
+        {/* Tree-resize gutter. Absolutely-positioned over the
+            tree/main boundary so it stays out of the grid's layout
+            math and doesn't fight FileTree's overflow-y-auto.
+            Transform centers the 6px hit area on the 1px border. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={treeWidth}
+          aria-valuemin={TREE_MIN_W}
+          aria-valuemax={TREE_MAX_W}
+          aria-label="Resize file tree"
+          tabIndex={0}
+          className="absolute top-0 bottom-0 w-1.5 z-20 cursor-col-resize group"
+          style={{ left: 'var(--tree-w)', transform: 'translateX(-3px)' }}
+          onMouseDown={startTreeDrag}
+          onDoubleClick={resetTreeWidth}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeTreeWidth(-16); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeTreeWidth(16); }
+          }}
+        >
+          {/* Thin visual line — invisible at rest, accent-tinted on
+              hover/focus. The 1px stripe is centered inside the 6px
+              hit area so it overlaps the existing border. */}
+          <div className="h-full w-px mx-auto bg-transparent group-hover:bg-accent/40 group-focus-visible:bg-accent/50 transition-colors duration-100" />
+        </div>
+
         <aside className="border-r border-white/[0.06] bg-panel/60 overflow-y-auto scroll-thin">
           <div className="px-2 pt-2 pb-1.5 flex items-center justify-end gap-0.5 sticky top-0 bg-panel/85 backdrop-blur z-10 border-b border-white/[0.04]">
             <button
@@ -715,6 +919,43 @@ export default function Home() {
               3D
             </button>
           </div>
+
+          {/* Bookmarks — collapsible section above the file tree.
+              Renders only when the user has at least one bookmark, so
+              fresh installs don't show a perpetually-empty header.
+              Click navigates; star icon removes the bookmark inline. */}
+          {bookmarks.length > 0 && (
+            <div className="px-1.5 mt-1 mb-2">
+              <div className="px-2 py-1 text-[0.6875rem] uppercase tracking-[0.12em] text-muted/80">
+                Bookmarks
+              </div>
+              <ul className="space-y-0">
+                {bookmarks.map((b) => (
+                  <li key={b.id} className="group flex items-center">
+                    <button
+                      title={b.page_title}
+                      className={`flex-1 text-left px-2 py-[3px] rounded text-[0.8929rem] truncate transition-colors ${
+                        selected === b.page_path
+                          ? 'bg-accent/[0.18] text-ink font-medium'
+                          : 'hover:bg-white/[0.05] text-muted hover:text-ink'
+                      }`}
+                      onClick={() => navigate(b.page_path)}
+                    >
+                      {b.page_title}
+                    </button>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 px-1.5 text-muted hover:text-rose-300 transition-opacity"
+                      title="Remove bookmark"
+                      onClick={() => handleToggleBookmark(b.page_path, false)}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="h-px mx-2 mt-2 bg-white/[0.06]" />
+            </div>
+          )}
           <FileTree
             ref={treeRef}
             pages={pages}
@@ -731,6 +972,8 @@ export default function Home() {
             onOpenChange={setTreeOpenCount}
             onContextMenu={onTreeContextMenu}
             onHover={setHoveredTree}
+            folderOrder={folderOrder.order}
+            onReorderFolders={folderOrder.move}
           />
         </aside>
 
@@ -762,6 +1005,11 @@ export default function Home() {
                 settings={graphSettings}
                 onChange={setGraphSettings}
                 onClose={() => setShowGraphSettings(false)}
+                categories={Array.from(new Set(
+                  (graphData?.nodes || [])
+                    .map((n) => n.category)
+                    .filter((c): c is string => !!c),
+                ))}
               />
             )}
 
@@ -791,6 +1039,14 @@ export default function Home() {
                 onNavigate={navigate}
                 onRevealInTree={(p) => treeRef.current?.reveal(p)}
                 onShowVersionHistory={(p) => setHistoryForPath(p)}
+                isBookmarked={page ? bookmarkedPaths.has(page.path) : false}
+                onToggleBookmark={user ? handleToggleBookmark : undefined}
+                onDeletePage={user?.role === 'admin' ? handleDeletePage : undefined}
+                onMovePage={
+                  user && (user.role === 'admin' || user.role === 'editor')
+                    ? (p) => setMovingPagePath(p)
+                    : undefined
+                }
               />
             ) : (
               <NewTab
@@ -852,6 +1108,15 @@ export default function Home() {
       {showShortcuts && <ShortcutSheet onClose={() => setShowShortcuts(false)} />}
       {needsLogin && (
         <LoginModal onAuthed={() => { setNeedsLogin(false); loadIdentity(); }} />
+      )}
+      {movingPage && (
+        <MovePageDialog
+          page={movingPage}
+          allPaths={allPaths}
+          customFolders={customFolders.folders}
+          onClose={() => setMovingPagePath(null)}
+          onConfirm={(newPath) => handleMovePage(movingPage.path, newPath)}
+        />
       )}
       <VersionLog />
       {showLint && (

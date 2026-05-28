@@ -41,6 +41,22 @@ class AuthConfig(BaseModel):
     local_admin_enabled: bool
 
 
+class BookmarkOut(BaseModel):
+    id: int
+    page_id: int
+    page_path: str
+    page_title: str
+    created_at: datetime
+
+
+class MovePageBody(BaseModel):
+    """Request body for PATCH /api/pages/{old_path}/path — move (or
+    rename) a page. The frontend typically supplies a destination
+    folder; constructing `new_path` as `{folder}/{filename}` is the
+    caller's job."""
+    new_path: str
+
+
 class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

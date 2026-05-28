@@ -25,6 +25,7 @@ type TreeNode = {
 
 function buildTree(
   pages: PageSummary[], sort: SortMode, customFolders: string[],
+  folderOrder: string[] = [],
 ): TreeNode {
   const root: TreeNode = { name: '', path: '', isFile: false, children: [] };
   for (const p of pages) {
@@ -57,7 +58,8 @@ function buildTree(
       root.children.push({ name: f, path: f, isFile: false, children: [] });
     }
   }
-  // Folders first; files honour sort mode.
+  // Default sort: folders first, then alphabetical by name with the
+  // file sort applied to file rows.
   const sortRec = (n: TreeNode) => {
     n.children.sort((a, b) => {
       if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
@@ -67,6 +69,24 @@ function buildTree(
     n.children.forEach(sortRec);
   };
   sortRec(root);
+  // After alphabetical pass, lift any folders that the user has
+  // explicitly ordered (drag-to-reorder) to the top in their chosen
+  // sequence. Only applied at the root — nested folders keep
+  // alphabetical because reordering nested folders is more confusing
+  // than helpful at this point.
+  if (folderOrder.length > 0) {
+    const rank = new Map(folderOrder.map((p, i) => [p, i]));
+    root.children.sort((a, b) => {
+      const ra = rank.get(a.path);
+      const rb = rank.get(b.path);
+      // Files always stay below folders regardless of explicit order.
+      if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
+      if (ra != null && rb != null) return ra - rb;
+      if (ra != null) return -1;
+      if (rb != null) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
   return root;
 }
 
@@ -105,6 +125,7 @@ function NodeRow({
     return (
       <button
         data-path={node.pagePath}
+        title={node.name}
         className={`w-full text-left px-2 py-[3px] rounded text-[0.8929rem] flex items-center gap-1.5 transition-colors ${
           isSel
             ? 'bg-accent/[0.18] text-ink font-medium'
@@ -134,6 +155,7 @@ function NodeRow({
   return (
     <div>
       <button
+        title={node.name || 'Wiki'}
         className="w-full text-left px-2 py-[3px] rounded text-[0.8929rem] font-medium flex items-center gap-1.5 hover:bg-white/[0.05] text-ink select-none transition-colors"
         onClick={() => toggleOpen(node.path)}
         onMouseEnter={() => onHover?.({ kind: 'folder', path: node.path })}
@@ -235,6 +257,14 @@ const FileTree = forwardRef<FileTreeHandle, {
   // forwards this to GraphView so hovering a folder/file in the tree
   // lights up the corresponding node(s) in the graph.
   onHover?: (info: { kind: 'file' | 'folder'; path: string } | null) => void;
+  /** Optional manual ordering of top-level folders (drag-to-reorder).
+   *  Folders listed here render in this order before the rest sort
+   *  alphabetically. */
+  folderOrder?: string[];
+  /** Fires when the user drops folder `draggedPath` immediately
+   *  before folder `targetPath`. Parent persists; FileTree just
+   *  surfaces the event. */
+  onReorderFolders?: (draggedPath: string, targetPath: string) => void;
 }>(function FileTree({
   pages, selected, onSelect,
   sort = 'asc',
@@ -245,10 +275,12 @@ const FileTree = forwardRef<FileTreeHandle, {
   onOpenChange,
   onContextMenu,
   onHover,
+  folderOrder = [],
+  onReorderFolders,
 }, ref) {
   const tree = useMemo(
-    () => buildTree(pages, sort, customFolders),
-    [pages, sort, customFolders],
+    () => buildTree(pages, sort, customFolders, folderOrder),
+    [pages, sort, customFolders, folderOrder],
   );
   const [openSet, setOpenSet] = useState<Set<string>>(() => {
     const s = new Set<string>();
@@ -256,6 +288,14 @@ const FileTree = forwardRef<FileTreeHandle, {
     return s;
   });
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // Top-level folder reorder via drag. Local state holds the drag
+  // source while a drop target is under the cursor; we don't store
+  // the dragged path in dataTransfer alone because Firefox refuses
+  // to expose its value during dragover for security reasons.
+  const [dragFolder, setDragFolder] = useState<string | null>(null);
+  const [dropOnFolder, setDropOnFolder] = useState<string | null>(null);
+  const canReorder = !!onReorderFolders;
 
   // Notify parent on open-state change so the toolbar can flip
   // collapse-all ↔ expand-all without lifting state.
@@ -303,18 +343,63 @@ const FileTree = forwardRef<FileTreeHandle, {
           onCancel={onPendingFolderCancel}
         />
       )}
-      {tree.children.map((c) => (
-        <NodeRow
-          key={c.path}
-          node={c}
-          selected={selected}
-          onSelect={onSelect}
-          openSet={openSet}
-          toggleOpen={toggle}
-          onContextMenu={onContextMenu}
-          onHover={onHover}
-        />
-      ))}
+      {tree.children.map((c) => {
+        // Only top-level FOLDERS are draggable. Files stay as-is (no
+        // tree-reorder gesture for them; users move files via the
+        // right-click "Move file to…" dialog). Wrap the folder row in
+        // a drop-aware div that handles reorder events at this level.
+        const isReorderable = !c.isFile && canReorder;
+        const draggingThis = dragFolder === c.path;
+        const dropHere = dropOnFolder === c.path && dragFolder && dragFolder !== c.path;
+        return (
+          <div
+            key={c.path}
+            draggable={isReorderable}
+            onDragStart={isReorderable ? (e) => {
+              setDragFolder(c.path);
+              // Firefox requires dataTransfer to have SOMETHING set or
+              // the drag is aborted; we use the React-state path as
+              // the source of truth and only use dataTransfer to
+              // signal "this is a folder drag".
+              e.dataTransfer.setData('text/x-wiki-folder', c.path);
+              e.dataTransfer.effectAllowed = 'move';
+            } : undefined}
+            onDragEnd={isReorderable ? () => {
+              setDragFolder(null);
+              setDropOnFolder(null);
+            } : undefined}
+            onDragOver={isReorderable ? (e) => {
+              if (!dragFolder || dragFolder === c.path) return;
+              e.preventDefault();          // required to allow drop
+              e.dataTransfer.dropEffect = 'move';
+              if (dropOnFolder !== c.path) setDropOnFolder(c.path);
+            } : undefined}
+            onDragLeave={isReorderable ? () => {
+              if (dropOnFolder === c.path) setDropOnFolder(null);
+            } : undefined}
+            onDrop={isReorderable ? (e) => {
+              e.preventDefault();
+              const src = dragFolder;
+              setDragFolder(null);
+              setDropOnFolder(null);
+              if (src && src !== c.path) onReorderFolders?.(src, c.path);
+            } : undefined}
+            className={`${draggingThis ? 'opacity-40' : ''} ${
+              dropHere ? 'relative before:absolute before:left-1.5 before:right-1.5 before:-top-px before:h-0.5 before:bg-accent before:rounded-full' : ''
+            }`}
+          >
+            <NodeRow
+              node={c}
+              selected={selected}
+              onSelect={onSelect}
+              openSet={openSet}
+              toggleOpen={toggle}
+              onContextMenu={onContextMenu}
+              onHover={onHover}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 });

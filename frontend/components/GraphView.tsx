@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Play, Square } from 'lucide-react';
 import type { GraphData, PageSummary } from '@/lib/api';
-import { type GraphSettingsState, DEFAULTS } from '@/lib/graphSettings';
+import { type GraphSettingsState, DEFAULTS, categoryColor } from '@/lib/graphSettings';
 import { useLanguage } from '@/lib/i18n';
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
 
-const ACCENT = '#ff7a00';  // edges — saturated orange to match the node palette
+// Was a hardcoded module-level constant; now `settings.linkColor` is
+// the source of truth and threads through to every link/particle call.
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -341,7 +342,7 @@ export default function GraphView({
     const glow = settings.glow;
     const sz = settings.nodeSize;
     for (const m of meshesRef.current.values()) {
-      const color = settings.colors[m.category] || '#9aa1b8';
+      const color = categoryColor(m.category, settings.colors);
       m.group.scale.setScalar(sz);
       m.core.material.color.set(color);
       m.inner.material.opacity = Math.min(1, 0.55 * glow);
@@ -505,7 +506,7 @@ export default function GraphView({
             // freshly-mounted nodes; skip the frame if positions are not
             // finite yet, otherwise createRadialGradient throws.
             if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
-            const color = settings.colors[node.category || ''] || '#9aa1b8';
+            const color = categoryColor(node.category, settings.colors);
             const focused = isFocusedNode(node.id);
             const baseAlpha = focused ? 1 : 0.18;
             const r = (3.4 + Math.sqrt((node.backlinks || 0) + 1) * 1.7) * settings.nodeSize;
@@ -579,22 +580,29 @@ export default function GraphView({
             // Wiki-links lead; tags soften; folders barely there.
             const onAlpha  = kind === 'wiki' ? 0.65 : kind === 'tag' ? 0.36 : 0.22;
             const offAlpha = kind === 'wiki' ? 0.10 : kind === 'tag' ? 0.06 : 0.04;
-            return hexToRgba(ACCENT, focused ? onAlpha : offAlpha);
+            return hexToRgba(settings.linkColor, focused ? onAlpha : offAlpha);
           }}
+          // Effective line-thickness multiplier is halved here so the
+          // 0.1–2.0 slider range produces finer lines than the old
+          // 0.5–3.0 range did — see graphSettings.ts comment.
           linkWidth={(l: any) => {
             const kind: 'wiki' | 'folder' | 'tag' = l.kind || 'wiki';
             const base = kind === 'wiki' ? 0.9 : kind === 'tag' ? 0.55 : 0.40;
             const scale = kind === 'wiki' ? 0.22 : 0.10;
-            return (base + Math.min(l.weight || 1, 8) * scale) * settings.lineThickness;
+            return (base + Math.min(l.weight || 1, 8) * scale) * settings.lineThickness * 0.5;
           }}
-          linkDirectionalParticles={(l: any) => l.kind === 'wiki' || !l.kind ? 2 : 0}
-          linkDirectionalParticleSpeed={0.005}
+          linkLineDash={() =>
+            settings.linkStyle === 'dashed' ? [6, 4] : null
+          }
+          linkDirectionalParticles={(l: any) =>
+            (l.kind === 'wiki' || !l.kind) ? settings.particleCount : 0}
+          linkDirectionalParticleSpeed={settings.particleSpeed}
           linkDirectionalParticleWidth={(l: any) =>
-            (1.8 + Math.min(l.weight || 1, 6) * 0.25) * settings.lineThickness}
+            (1.8 + Math.min(l.weight || 1, 6) * 0.25) * settings.lineThickness * 0.5}
           linkDirectionalParticleColor={(l: any) => {
             const src = typeof l.source === 'object' ? l.source.id : l.source;
             const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-            return isFocusedLink(src, tgt) ? '#ffd9a8' : 'rgba(0,0,0,0)';
+            return isFocusedLink(src, tgt) ? settings.particleColor : 'rgba(0,0,0,0)';
           }}
           cooldownTicks={120}
         />
@@ -619,7 +627,7 @@ export default function GraphView({
         nodeThreeObject={(n: any) => {
           const baseSize = 4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2;
           const cat = n.category || '';
-          const color = settings.colors[cat] || '#9aa1b8';
+          const color = categoryColor(cat, settings.colors);
           const group = new THREE.Group();
 
           const core = new THREE.Mesh(
@@ -676,22 +684,23 @@ export default function GraphView({
           const kind: 'wiki' | 'folder' | 'tag' = l.kind || 'wiki';
           const onAlpha  = kind === 'wiki' ? 0.85 : kind === 'tag' ? 0.45 : 0.28;
           const offAlpha = kind === 'wiki' ? 0.12 : kind === 'tag' ? 0.07 : 0.05;
-          return hexToRgba(ACCENT, focused ? onAlpha : offAlpha);
+          return hexToRgba(settings.linkColor, focused ? onAlpha : offAlpha);
         }}
         linkWidth={(l: any) => {
           const kind: 'wiki' | 'folder' | 'tag' = l.kind || 'wiki';
           const base = kind === 'wiki' ? 0.7 : kind === 'tag' ? 0.45 : 0.32;
           const scale = kind === 'wiki' ? 0.22 : 0.10;
-          return (base + Math.min(l.weight || 1, 8) * scale) * settings.lineThickness;
+          return (base + Math.min(l.weight || 1, 8) * scale) * settings.lineThickness * 0.5;
         }}
         linkOpacity={0.85}
-        linkDirectionalParticles={(l: any) => l.kind === 'wiki' || !l.kind ? 2 : 0}
-        linkDirectionalParticleSpeed={0.006}
-        linkDirectionalParticleWidth={2.0 * settings.lineThickness}
+        linkDirectionalParticles={(l: any) =>
+          (l.kind === 'wiki' || !l.kind) ? settings.particleCount : 0}
+        linkDirectionalParticleSpeed={settings.particleSpeed}
+        linkDirectionalParticleWidth={2.0 * settings.lineThickness * 0.5}
         linkDirectionalParticleColor={(l: any) => {
           const src = typeof l.source === 'object' ? l.source.id : l.source;
           const tgt = typeof l.target === 'object' ? l.target.id : l.target;
-          return isFocusedLink(src, tgt) ? '#ffe6c2' : 'rgba(0,0,0,0)';
+          return isFocusedLink(src, tgt) ? settings.particleColor : 'rgba(0,0,0,0)';
         }}
       />
     </div>
