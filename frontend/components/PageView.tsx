@@ -22,7 +22,7 @@ function formatDate(s: string): string {
 export default function PageView({
   page, currentUser, allPaths, users, onPropose, onLock, onNavigate,
   onRevealInTree, onShowVersionHistory,
-  isBookmarked, onToggleBookmark, onDeletePage,
+  isBookmarked, onToggleBookmark, onDeletePage, onMovePage,
 }: {
   page: Page | null;
   currentUser: User | null;

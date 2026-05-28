@@ -396,11 +396,11 @@ export default function Home() {
       refetchPages(), refetchGraph(), refetchBookmarks(),
     ]);
     // Every tab still pointing at the old path follows the rename.
+    // `selected` is derived from `activeTab.path`, so rewriting the
+    // tab automatically updates the selection too — no separate
+    // setter needed.
     tabs.rewritePagePath(oldPath, moved.path);
-    // The "selected" path (which drives the active page-fetch) also
-    // needs to follow if it was the moved page.
-    if (selected === oldPath) setSelected(moved.path);
-  }, [tabs, refetchPages, refetchGraph, refetchBookmarks, selected]);
+  }, [tabs, refetchPages, refetchGraph, refetchBookmarks]);
 
   const handleDeletePage = useCallback(async (path: string) => {
     let alreadyGone = false;
