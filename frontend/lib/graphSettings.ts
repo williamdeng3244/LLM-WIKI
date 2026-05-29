@@ -17,6 +17,12 @@ export type GraphSettingsState = {
   particleColor: string;       // hex
   linkColor: string;           // hex, base color of every link
   linkStyle: 'solid' | 'dashed';
+  /** Per-depth size decay: each path segment below the root scales
+   *  the node's rendered radius by this factor. 1.0 = uniform size
+   *  regardless of nesting; 0.92 (default) makes notes inside a
+   *  deeper folder visibly smaller than the top-level ones. Applied
+   *  AFTER `nodeSize` so it composes correctly. */
+  depthScale: number;          // 0.7–1.0
 };
 
 // Default palette for the seed categories that ship with the app.
@@ -103,6 +109,7 @@ export const DEFAULTS: GraphSettingsState = {
   particleColor: '#ffd9a8',
   linkColor: '#ff7a00',
   linkStyle: 'solid',
+  depthScale: 0.92,
 };
 
 // Bumped from `wiki:graph-settings` (cyan/amber palette) so the new
@@ -130,6 +137,7 @@ function loadSettings(): GraphSettingsState {
     merged.lineThickness = clamp(merged.lineThickness, 0.1, 2.0);
     merged.particleCount = clamp(Math.round(merged.particleCount), 0, 5);
     merged.particleSpeed = clamp(merged.particleSpeed, 0.001, 0.02);
+    merged.depthScale = clamp(merged.depthScale, 0.7, 1.0);
     if (merged.linkStyle !== 'solid' && merged.linkStyle !== 'dashed') {
       merged.linkStyle = 'solid';
     }

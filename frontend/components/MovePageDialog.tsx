@@ -1,7 +1,36 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { X, FolderInput, Loader2 } from 'lucide-react';
+import { X, FolderInput, Loader2, ChevronRight, Folder, FolderOpen } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
+
+// Local tree node used only by the folder picker. We rebuild it from
+// the flat list of folder paths because the parent doesn't have an
+// API for "get me a folder tree" — and computing it locally keeps the
+// dialog independent of FileTree's own buildTree.
+type FolderNode = {
+  path: string;       // full slash path, '' for root
+  name: string;       // last segment (or 'root')
+  children: FolderNode[];
+};
+
+function buildFolderTree(folderPaths: string[]): FolderNode {
+  const root: FolderNode = { path: '', name: '', children: [] };
+  const sorted = [...folderPaths].sort();
+  for (const p of sorted) {
+    const parts = p.split('/').filter(Boolean);
+    let node = root;
+    for (let i = 0; i < parts.length; i++) {
+      const segPath = parts.slice(0, i + 1).join('/');
+      let child = node.children.find((c) => c.path === segPath);
+      if (!child) {
+        child = { path: segPath, name: parts[i], children: [] };
+        node.children.push(child);
+      }
+      node = child;
+    }
+  }
+  return root;
+}
 
 /** Move a page to another folder.
  *
@@ -23,24 +52,50 @@ export default function MovePageDialog({
   const [error, setError] = useState<string | null>(null);
   const [target, setTarget] = useState<string>('');
 
-  // Compute the available folder list: every path-prefix that exists
-  // in any page's path, union'd with user-created custom folders.
-  // Sorted alphabetically; the empty string is the root option.
-  const folders = useMemo(() => {
+  // Folder paths to pick from: every path-prefix that exists in any
+  // page's path, plus every nested segment from those prefixes (so
+  // we surface intermediate folders even if no page sits directly
+  // inside them), plus user-created custom folders.
+  const folderTree = useMemo(() => {
     const set = new Set<string>();
-    for (const p of allPaths) {
-      const i = p.lastIndexOf('/');
-      if (i > 0) set.add(p.slice(0, i));
+    const addAllPrefixes = (p: string) => {
+      const parts = p.split('/').filter(Boolean);
+      // Up to but not including the last segment — that segment is the file.
+      for (let i = 1; i < parts.length; i++) {
+        set.add(parts.slice(0, i).join('/'));
+      }
+    };
+    for (const p of allPaths) addAllPrefixes(p);
+    for (const f of customFolders) {
+      // Custom folders are pure-folder paths — include all prefix levels
+      // so a path like `meeting-notes/hr/q3` exposes its parents too.
+      const parts = f.split('/').filter(Boolean);
+      for (let i = 1; i <= parts.length; i++) {
+        set.add(parts.slice(0, i).join('/'));
+      }
     }
-    for (const f of customFolders) set.add(f);
-    // Don't show the page's current folder as an option — moving to it
-    // would be a no-op anyway, and seeing it selectable is confusing.
-    const currentFolder = page.path.lastIndexOf('/') > 0
-      ? page.path.slice(0, page.path.lastIndexOf('/'))
-      : '';
-    set.delete(currentFolder);
-    return Array.from(set).sort();
-  }, [allPaths, customFolders, page.path]);
+    return buildFolderTree(Array.from(set));
+  }, [allPaths, customFolders]);
+
+  // Expand every node that is an ancestor of the page's current
+  // folder so the user can see context immediately.
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const out = new Set<string>(['']);
+    const cur = page.path.split('/').slice(0, -1);
+    for (let i = 0; i < cur.length; i++) {
+      out.add(cur.slice(0, i + 1).join('/'));
+    }
+    return out;
+  });
+  const toggle = (p: string) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(p)) next.delete(p); else next.add(p);
+    return next;
+  });
+
+  const currentFolder = page.path.lastIndexOf('/') > 0
+    ? page.path.slice(0, page.path.lastIndexOf('/'))
+    : '';
 
   // Esc closes; body scroll lock.
   useEffect(() => {
@@ -96,22 +151,27 @@ export default function MovePageDialog({
             {t('movePage.description').replace('{title}', page.title)}
           </div>
 
-          <label className="block">
-            <span className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">
+          <div>
+            <div className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mb-1.5">
               {t('movePage.target')}
-            </span>
-            <select
-              className="form-input mt-1 h-9 w-full text-[0.8929rem]"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              disabled={busy}
-            >
-              <option value="">{t('movePage.root')}</option>
-              {folders.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
-          </label>
+            </div>
+            {/* Collapsible folder tree. The root (no folder) is always
+                offered as a target. Sub-folders expand on chevron
+                click so a deep tree doesn't dominate the dialog. */}
+            <div className="max-h-[260px] overflow-y-auto scroll-thin border border-white/[0.08] rounded bg-black/15 py-1">
+              <FolderTreeRow
+                node={folderTree}
+                depth={0}
+                expanded={expanded}
+                onToggle={toggle}
+                selected={target}
+                onSelect={setTarget}
+                currentFolder={currentFolder}
+                t={t}
+                isRoot
+              />
+            </div>
+          </div>
 
           <div className="text-[0.7857rem] text-muted">
             {t('movePage.preview')}{' '}
@@ -142,6 +202,81 @@ export default function MovePageDialog({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Recursive row for the folder tree picker. Children render with
+ *  increased left padding so depth is visible. Clicking the row
+ *  body selects the folder; clicking the chevron expands/collapses
+ *  children without disturbing the selection. */
+function FolderTreeRow({
+  node, depth, expanded, onToggle, selected, onSelect, currentFolder, t, isRoot = false,
+}: {
+  node: FolderNode;
+  depth: number;
+  expanded: Set<string>;
+  onToggle: (path: string) => void;
+  selected: string;
+  onSelect: (path: string) => void;
+  currentFolder: string;
+  // Match useLanguage's strict literal-keys signature so the call
+  // site doesn't widen back to plain (k: string) => string.
+  t: ReturnType<typeof useLanguage>['t'];
+  isRoot?: boolean;
+}) {
+  const isExpanded = expanded.has(node.path);
+  const isSelected = selected === node.path;
+  const isCurrent = node.path === currentFolder;
+  const hasChildren = node.children.length > 0;
+  return (
+    <div>
+      <div
+        className={`flex items-center gap-1 pr-2 py-[3px] text-[0.8929rem] cursor-pointer transition-colors ${
+          isSelected
+            ? 'bg-accent/[0.20] text-ink'
+            : isCurrent
+              ? 'text-muted/50 cursor-not-allowed'
+              : 'text-muted hover:bg-white/[0.05] hover:text-ink'
+        }`}
+        style={{ paddingLeft: 8 + depth * 14 }}
+        onClick={() => { if (!isCurrent) onSelect(node.path); }}
+        title={isCurrent ? 'Current folder' : node.path || '(root)'}
+      >
+        {hasChildren ? (
+          <button
+            className="w-3.5 h-3.5 grid place-items-center shrink-0 text-muted hover:text-ink"
+            onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            <ChevronRight
+              size={11}
+              className={`transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
+            />
+          </button>
+        ) : (
+          <span className="w-3.5 shrink-0" />
+        )}
+        {isExpanded
+          ? <FolderOpen size={12} className="shrink-0 text-muted/80" />
+          : <Folder size={12} className="shrink-0 text-muted/80" />}
+        <span className="truncate flex-1">
+          {isRoot ? t('movePage.root') : node.name}
+        </span>
+      </div>
+      {isExpanded && node.children.map((c) => (
+        <FolderTreeRow
+          key={c.path}
+          node={c}
+          depth={depth + 1}
+          expanded={expanded}
+          onToggle={onToggle}
+          selected={selected}
+          onSelect={onSelect}
+          currentFolder={currentFolder}
+          t={t}
+        />
+      ))}
     </div>
   );
 }

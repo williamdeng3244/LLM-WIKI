@@ -61,6 +61,10 @@ type NodeMeshes = {
   inner: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   halo: THREE.Sprite;
   category: string;
+  /** Folders-deep for this node. Stored so the slider-driven mesh
+   *  update can re-apply the depth scale without recomputing from
+   *  the original path. */
+  depth: number;
 };
 
 export default function GraphView({
@@ -341,16 +345,17 @@ export default function GraphView({
   useEffect(() => {
     const glow = settings.glow;
     const sz = settings.nodeSize;
+    const ds = settings.depthScale;
     for (const m of meshesRef.current.values()) {
       const color = categoryColor(m.category, settings.colors);
-      m.group.scale.setScalar(sz);
+      m.group.scale.setScalar(sz * Math.pow(ds, m.depth));
       m.core.material.color.set(color);
       m.inner.material.opacity = Math.min(1, 0.55 * glow);
       m.halo.material.opacity = Math.min(1, 0.95 * glow);
       m.halo.material.map = getHaloTexture(color);
       m.halo.material.needsUpdate = true;
     }
-  }, [settings.nodeSize, settings.glow, settings.colors]);
+  }, [settings.nodeSize, settings.glow, settings.colors, settings.depthScale]);
 
   // ── Timelapse: chronological reveal of nodes ───────────────────────────
   // Build a path → numeric-id map once. Page IDs are monotonic in this
@@ -509,7 +514,12 @@ export default function GraphView({
             const color = categoryColor(node.category, settings.colors);
             const focused = isFocusedNode(node.id);
             const baseAlpha = focused ? 1 : 0.18;
-            const r = (3.4 + Math.sqrt((node.backlinks || 0) + 1) * 1.7) * settings.nodeSize;
+            // Depth = how many folders deep this node sits. Subfolder
+            // notes shrink by `depthScale ^ depth` so the eye reads
+            // hierarchy at a glance. depthScale=1.0 disables the effect.
+            const depth = Math.max(0, String(node.id).split('/').length - 1);
+            const depthMul = Math.pow(settings.depthScale, depth);
+            const r = (3.4 + Math.sqrt((node.backlinks || 0) + 1) * 1.7) * settings.nodeSize * depthMul;
 
             let pulseAmp = 0;
             if (node.important) {
@@ -625,7 +635,10 @@ export default function GraphView({
         onNodeHover={(n: any) => setHoverId(n ? String(n.id) : null)}
         onNodeDragEnd={(n: any) => releaseNode(n, true)}
         nodeThreeObject={(n: any) => {
-          const baseSize = 4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2;
+          // Same depth-scale logic as 2D (deeper nodes shrink).
+          const depth = Math.max(0, String(n.id).split('/').length - 1);
+          const depthMul = Math.pow(settings.depthScale, depth);
+          const baseSize = (4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2) * depthMul;
           const cat = n.category || '';
           const color = categoryColor(cat, settings.colors);
           const group = new THREE.Group();
@@ -664,8 +677,10 @@ export default function GraphView({
           (inner as unknown as { raycast: () => void }).raycast = noRaycast;
 
           // Apply current size via group scale — letting the slider mutate
-          // group.scale later avoids rebuilding geometries.
-          group.scale.setScalar(settings.nodeSize);
+          // group.scale later avoids rebuilding geometries. Includes
+          // the depth scale so the very first paint matches the
+          // post-slider-update appearance.
+          group.scale.setScalar(settings.nodeSize * depthMul);
 
           meshesRef.current.set(n.id, {
             group,
@@ -673,6 +688,7 @@ export default function GraphView({
             inner: inner as NodeMeshes['inner'],
             halo,
             category: cat,
+            depth,
           });
           return group;
         }}

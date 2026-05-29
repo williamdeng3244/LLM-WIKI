@@ -206,6 +206,8 @@ export const MESSAGES = {
 
     // Folder right-click context menu
     'menu.folder.newNote': 'New note in folder',
+    'menu.folder.newSubfolder': 'New subfolder…',
+    'menu.folder.newSubfolder.prompt': 'New subfolder under "{parent}":',
     'menu.folder.rename': 'Rename folder…',
     'menu.folder.rename.disabled': 'Only user-created folders can be renamed',
     'menu.folder.rename.prompt': 'Rename folder:',
@@ -309,6 +311,7 @@ export const MESSAGES = {
     'graphSettings.repelForce': 'Repel force',
     'graphSettings.linkForce': 'Link force',
     'graphSettings.linkDistance': 'Link distance',
+    'graphSettings.depthScale': 'Depth scale',
     'graphSettings.section.links': 'Links',
     'graphSettings.linkColor': 'Link color',
     'graphSettings.linkStyle': 'Link style',
@@ -625,6 +628,8 @@ export const MESSAGES = {
 
     // Folder right-click context menu
     'menu.folder.newNote': '在此文件夹中新建笔记',
+    'menu.folder.newSubfolder': '新建子文件夹…',
+    'menu.folder.newSubfolder.prompt': '在 "{parent}" 下新建子文件夹：',
     'menu.folder.rename': '重命名文件夹…',
     'menu.folder.rename.disabled': '仅可重命名用户创建的文件夹',
     'menu.folder.rename.prompt': '重命名文件夹：',
@@ -728,6 +733,7 @@ export const MESSAGES = {
     'graphSettings.repelForce': '排斥力',
     'graphSettings.linkForce': '连接力',
     'graphSettings.linkDistance': '连线距离',
+    'graphSettings.depthScale': '层级缩放',
     'graphSettings.section.links': '连线',
     'graphSettings.linkColor': '连线颜色',
     'graphSettings.linkStyle': '连线样式',

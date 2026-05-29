@@ -160,6 +160,11 @@ function authHeaders(): HeadersInit {
   if (typeof window === 'undefined') return {};
   const jwt = localStorage.getItem('wiki:jwt');
   if (jwt) return { Authorization: `Bearer ${jwt}` };
+  // User explicitly clicked Sign out — don't send any stub headers,
+  // otherwise the dev-mode `|| 'admin@example.com'` fallback would
+  // silently re-authenticate them and the sign-out would appear
+  // to do nothing. Cleared when they log back in via /login.
+  if (localStorage.getItem('wiki:signed-out') === '1') return {};
   // Stub fallback: identify via headers
   return {
     'X-User-Email': localStorage.getItem('wiki:email') || 'admin@example.com',

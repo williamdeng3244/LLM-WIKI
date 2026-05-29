@@ -261,10 +261,20 @@ export default function Home() {
 
   const loadIdentity = useCallback(() => {
     setNeedsLogin(false);
+    // Explicit sign-out wins over the stub auto-auth convenience.
+    // The user clicked Sign out and we honor it until they log in.
+    const explicitlySignedOut = typeof window !== 'undefined'
+      && localStorage.getItem('wiki:signed-out') === '1';
+    if (explicitlySignedOut) {
+      window.location.href = '/login';
+      return;
+    }
     api.whoami().then((u) => { setUser(u); setNeedsLogin(false); }).catch(() => {
       api.authConfig().then((cfg) => {
         if (cfg.mode === 'oidc') {
-          setNeedsLogin(true);
+          // Send the user to the dedicated login page rather than a
+          // mid-app modal — feels more like a real sign-in.
+          if (typeof window !== 'undefined') window.location.href = '/login';
           return;
         }
         // Stub mode: keep the historical "auto-admin on first load"
@@ -274,7 +284,9 @@ export default function Home() {
           localStorage.setItem('wiki:role', 'admin');
           api.whoami().then(setUser).catch(() => setNeedsLogin(true));
         }
-      }).catch(() => setNeedsLogin(true));
+      }).catch(() => {
+        if (typeof window !== 'undefined') window.location.href = '/login';
+      });
     });
   }, []);
 
@@ -543,6 +555,11 @@ export default function Home() {
   }
 
   function buildFolderMenu(info: Extract<ContextMenuInfo, { kind: 'folder' }>): MenuItem[] {
+    // A folder is "user-managed" if its full nested path is in the
+    // custom-folders list (so nested folders count too, not just
+    // top-level). Folders that exist only because a page lives there
+    // can't be renamed or deleted via the menu — moving / deleting
+    // those pages handles them implicitly.
     const isCustom = customFolders.folders.includes(info.folderPath);
     return [
       {
@@ -556,6 +573,23 @@ export default function Home() {
           setShowPropose(true);
         },
       },
+      {
+        kind: 'item',
+        label: t('menu.folder.newSubfolder'),
+        icon: <FolderPlus size={13} />,
+        disabled: !user || user.role === 'reader',
+        onClick: () => {
+          const child = window.prompt(
+            t('menu.folder.newSubfolder.prompt').replace('{parent}', info.folderPath),
+            '',
+          );
+          const clean = (child || '').trim()
+            .replace(/^\/+|\/+$/g, '')
+            .replace(/\/+/g, '/');
+          if (!clean) return;
+          customFolders.add(`${info.folderPath}/${clean}`);
+        },
+      },
       { kind: 'divider' },
       {
         kind: 'item',
@@ -565,10 +599,24 @@ export default function Home() {
         hint: isCustom ? undefined : t('menu.folder.rename.disabled'),
         onClick: () => {
           const next = window.prompt(t('menu.folder.rename.prompt'), info.name);
-          const clean = (next || '').trim().replace(/^\/+|\/+$/g, '').replace(/\//g, '-');
-          if (!clean || clean === info.name) return;
-          customFolders.remove(info.name);
-          customFolders.add(clean);
+          // Allow `/` so the rename can itself be a relocate-within-
+          // tree action (e.g. "hr" → "people/hr"). Strip leading/
+          // trailing slashes and reject `..` segments.
+          const cleanSegment = (next || '').trim()
+            .replace(/^\/+|\/+$/g, '')
+            .replace(/\/+/g, '/');
+          if (!cleanSegment || cleanSegment === info.name) return;
+          if (cleanSegment.split('/').some((s) => s === '..' || s === '.')) return;
+          // Rebuild the full path: replace the LAST segment of the
+          // existing folder path with the user-provided value. If the
+          // user typed a slash, the new value's full content replaces
+          // the last segment.
+          const parentParts = info.folderPath.split('/').slice(0, -1);
+          const newPath = parentParts.length > 0
+            ? `${parentParts.join('/')}/${cleanSegment}`
+            : cleanSegment;
+          customFolders.remove(info.folderPath);
+          customFolders.add(newPath);
         },
       },
       {
@@ -589,7 +637,7 @@ export default function Home() {
           : !info.isEmpty
             ? t('menu.folder.delete.notEmpty')
             : undefined,
-        onClick: () => { customFolders.remove(info.name); },
+        onClick: () => { customFolders.remove(info.folderPath); },
       },
     ];
   }
@@ -689,9 +737,12 @@ export default function Home() {
                 localStorage.removeItem('wiki:jwt');
                 localStorage.removeItem('wiki:email');
                 localStorage.removeItem('wiki:role');
+                // Block the stub-mode auto-re-auth so sign-out actually
+                // signs the user out. Cleared on next successful login.
+                localStorage.setItem('wiki:signed-out', '1');
                 fetch(`${process.env.NEXT_PUBLIC_API_BASE || '/api'}/auth/logout`, {
                   method: 'POST', credentials: 'include',
-                }).finally(() => window.location.reload());
+                }).finally(() => { window.location.href = '/login'; });
               }}
             >
               Sign out

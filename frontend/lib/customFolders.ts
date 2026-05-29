@@ -31,11 +31,17 @@ export function useCustomFolders(): {
   useEffect(() => { setFolders(load()); }, []);
 
   const add = (name: string) => {
-    const clean = name.trim().replace(/^\/+|\/+$/g, '').replace(/\//g, '-');
-    if (!clean) return;
+    // Allow `/` so users can create nested folders like
+    // `meeting-criteria/hr-team`. Strip leading/trailing slashes and
+    // collapse runs of `/`. Reject path-traversal segments.
+    const cleaned = name.trim()
+      .replace(/^\/+|\/+$/g, '')
+      .replace(/\/+/g, '/');
+    if (!cleaned) return;
+    if (cleaned.split('/').some((seg) => seg === '..' || seg === '.')) return;
     setFolders((prev) => {
-      if (prev.includes(clean)) return prev;
-      const next = [...prev, clean];
+      if (prev.includes(cleaned)) return prev;
+      const next = [...prev, cleaned];
       save(next);
       return next;
     });

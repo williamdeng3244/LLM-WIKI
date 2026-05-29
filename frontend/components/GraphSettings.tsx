@@ -88,6 +88,9 @@ export default function GraphSettings({ settings, onChange, onClose, categories 
           <Slider label={t('graphSettings.glow')} value={settings.glow}
             min={0} max={2.0} step={0.05}
             onInput={(v) => set('glow', v)} />
+          <Slider label={t('graphSettings.depthScale')} value={settings.depthScale}
+            min={0.7} max={1.0} step={0.01}
+            onInput={(v) => set('depthScale', v)} />
         </div>
 
         <div className="mt-4 pt-3 border-t border-white/[0.06]">

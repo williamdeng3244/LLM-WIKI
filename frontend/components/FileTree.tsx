@@ -50,12 +50,22 @@ function buildTree(
       node = child;
     }
   }
-  // Append empty placeholder folders for any user-created folder name
-  // that doesn't yet have a top-level node from page paths.
-  const existing = new Set(root.children.map((c) => c.name));
+  // Append empty placeholder folders for any user-created folder, at
+  // arbitrary nesting depth. We walk each segment so a custom folder
+  // like `meetings/hr-team` creates BOTH the `meetings` parent node
+  // (if no page lives there) AND the `hr-team` child. Existing folder
+  // nodes from page paths are reused so we don't duplicate them.
   for (const f of customFolders) {
-    if (!existing.has(f)) {
-      root.children.push({ name: f, path: f, isFile: false, children: [] });
+    const parts = f.split('/').filter(Boolean);
+    let node = root;
+    for (let i = 0; i < parts.length; i++) {
+      const segPath = parts.slice(0, i + 1).join('/');
+      let child = node.children.find((c) => c.path === segPath && !c.isFile);
+      if (!child) {
+        child = { name: parts[i], path: segPath, isFile: false, children: [] };
+        node.children.push(child);
+      }
+      node = child;
     }
   }
   // Default sort: folders first, then alphabetical by name with the
