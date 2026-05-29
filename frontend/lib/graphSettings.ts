@@ -23,6 +23,18 @@ export type GraphSettingsState = {
    *  deeper folder visibly smaller than the top-level ones. Applied
    *  AFTER `nodeSize` so it composes correctly. */
   depthScale: number;          // 0.7–1.0
+  /** Per-folder overrides keyed by full folder path. When set, these
+   *  win over the category-wide values and the global slider values
+   *  for any node whose path starts with the key. The deepest matching
+   *  path wins, so `meetings/hr` can have a different repel than
+   *  `meetings`. */
+  folderOverrides: Record<string, FolderOverride>;
+};
+
+export type FolderOverride = {
+  color?: string;         // hex
+  nodeSize?: number;      // multiplier, 0.3–1.4
+  repelForce?: number;    // -300 to -10
 };
 
 // Default palette for the seed categories that ship with the app.
@@ -110,7 +122,27 @@ export const DEFAULTS: GraphSettingsState = {
   linkColor: '#ff7a00',
   linkStyle: 'solid',
   depthScale: 0.92,
+  folderOverrides: {},
 };
+
+/** Walk a node's path from deepest to shallowest, returning the first
+ *  matching folder-override value for `field`. Used by both the
+ *  renderer (color, nodeSize) and the d3 physics tuner (repelForce). */
+export function resolveFolderField<K extends keyof FolderOverride>(
+  nodePath: string,
+  field: K,
+  overrides: Record<string, FolderOverride>,
+): FolderOverride[K] | undefined {
+  if (!nodePath || !overrides) return undefined;
+  const parts = nodePath.split('/').filter(Boolean);
+  // Try every prefix from deepest to shallowest.
+  for (let i = parts.length; i > 0; i--) {
+    const prefix = parts.slice(0, i).join('/');
+    const v = overrides[prefix]?.[field];
+    if (v !== undefined) return v;
+  }
+  return undefined;
+}
 
 // Bumped from `wiki:graph-settings` (cyan/amber palette) so the new
 // orange/red defaults apply automatically without users having to hit
@@ -127,6 +159,9 @@ function loadSettings(): GraphSettingsState {
       ...DEFAULTS,
       ...parsed,
       colors: { ...DEFAULT_COLORS, ...(parsed.colors || {}) },
+      folderOverrides: parsed.folderOverrides && typeof parsed.folderOverrides === 'object'
+        ? parsed.folderOverrides
+        : {},
     };
     // Clamp into the current slider ranges so values saved under older
     // versions (when nodeSize went up to 2.0 etc.) don't peg the slider

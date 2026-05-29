@@ -1056,11 +1056,25 @@ export default function Home() {
                 settings={graphSettings}
                 onChange={setGraphSettings}
                 onClose={() => setShowGraphSettings(false)}
-                categories={Array.from(new Set(
-                  (graphData?.nodes || [])
-                    .map((n) => n.category)
-                    .filter((c): c is string => !!c),
-                ))}
+                folderPaths={(() => {
+                  // Build the full list of folder paths the settings
+                  // tree should display: every prefix of every page
+                  // path PLUS every user-created custom folder.
+                  const set = new Set<string>();
+                  for (const n of (graphData?.nodes || [])) {
+                    const parts = n.id.split('/').filter(Boolean);
+                    for (let i = 1; i < parts.length; i++) {
+                      set.add(parts.slice(0, i).join('/'));
+                    }
+                  }
+                  for (const f of customFolders.folders) {
+                    const parts = f.split('/').filter(Boolean);
+                    for (let i = 1; i <= parts.length; i++) {
+                      set.add(parts.slice(0, i).join('/'));
+                    }
+                  }
+                  return Array.from(set);
+                })()}
               />
             )}
 
@@ -1073,6 +1087,7 @@ export default function Home() {
                   settings={graphSettings}
                   treeHover={hoveredTree}
                   pages={pages}
+                  customFolders={customFolders.folders}
                 />
               ) : (
                 <div className="h-full flex items-center justify-center text-muted text-sm">

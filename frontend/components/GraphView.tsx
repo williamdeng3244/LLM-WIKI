@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Play, Square } from 'lucide-react';
 import type { GraphData, PageSummary } from '@/lib/api';
-import { type GraphSettingsState, DEFAULTS, categoryColor } from '@/lib/graphSettings';
+import { type GraphSettingsState, DEFAULTS, categoryColor, resolveFolderField } from '@/lib/graphSettings';
 import { useLanguage } from '@/lib/i18n';
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
@@ -69,6 +69,7 @@ type NodeMeshes = {
 
 export default function GraphView({
   data, mode, onSelect, settings = DEFAULTS, treeHover = null, pages = [],
+  customFolders = [],
 }: {
   data: GraphData; mode: '2d' | '3d';
   onSelect: (path: string) => void;
@@ -82,6 +83,11 @@ export default function GraphView({
   // Full page list, used by the timelapse animation to derive creation
   // order from numeric page.id (monotonic = chronological in practice).
   pages?: PageSummary[];
+  /** Empty-folder placeholders the user created in localStorage. We
+   *  use them to materialize folder nodes that have no pages yet,
+   *  so a freshly-created subfolder shows up in the graph
+   *  immediately. */
+  customFolders?: string[];
 }) {
   // Obsidian-style timelapse: when active, nodes appear one-by-one in
   // creation order so you can watch the wiki "grow" up to its current
@@ -150,7 +156,15 @@ export default function GraphView({
     try {
       const charge = ref.d3Force('charge');
       if (charge && typeof charge.strength === 'function') {
-        charge.strength(settings.repelForce);
+        // Per-node repel: folders/subfolders with an override get their
+        // own charge; everything else falls back to the global slider.
+        // d3-force's `strength` accepts a function (node, i, nodes) →
+        // number so this fans out at sim-tick time without us having
+        // to maintain a parallel sim per group.
+        charge.strength((n: { id: string }) => {
+          const ov = resolveFolderField(String(n.id), 'repelForce', settings.folderOverrides);
+          return ov ?? settings.repelForce;
+        });
       }
       const link = ref.d3Force('link');
       if (link) {
@@ -167,6 +181,7 @@ export default function GraphView({
     mode, data,
     settings.repelForce, settings.linkForce,
     settings.linkDistance, settings.centerForce,
+    settings.folderOverrides,
   ]);
 
   // Adjacency for Obsidian-style hover focus.
@@ -215,18 +230,72 @@ export default function GraphView({
   // All three feed the d3 link force, so structurally-related pages
   // naturally cluster.
   const graph = useMemo(() => {
-    const nodes = data.nodes.map((n) => ({
+    type GraphNode = {
+      id: string;
+      title?: string;
+      category?: string | null;
+      tags?: string[];
+      backlinks?: number;
+      important?: boolean;
+      /** Synthesized folder nodes have isFolder=true; pages are
+       *  undefined (treated as regular notes by the renderer). */
+      isFolder?: boolean;
+    };
+    const nodes: GraphNode[] = data.nodes.map((n) => ({
       ...n,
       important: (n.backlinks || 0) >= importanceThreshold,
     }));
 
+    // Synthesize folder nodes from page paths + user-created custom
+    // folders. Each unique path prefix becomes a folder node, so the
+    // user sees their tree structure mirrored in the graph and any
+    // new subfolder shows up immediately without a backend round-trip.
+    const folderSet = new Set<string>();
+    const addFolderPrefixes = (path: string, includeFinal: boolean) => {
+      const parts = path.split('/').filter(Boolean);
+      const limit = includeFinal ? parts.length : parts.length - 1;
+      for (let i = 1; i <= limit; i++) {
+        folderSet.add(parts.slice(0, i).join('/'));
+      }
+    };
+    for (const p of data.nodes) addFolderPrefixes(p.id, false);
+    for (const f of customFolders) addFolderPrefixes(f, true);
+    for (const folderPath of folderSet) {
+      const segs = folderPath.split('/');
+      nodes.push({
+        id: folderPath,
+        title: segs[segs.length - 1],
+        category: segs[0],     // top-level segment doubles as category
+        tags: [],
+        backlinks: 0,
+        important: false,
+        isFolder: true,
+      });
+    }
+    const folderIdSet = folderSet;
+
     type Link = {
       source: string; target: string;
-      weight: number; kind: 'wiki' | 'folder' | 'tag';
+      weight: number; kind: 'wiki' | 'folder' | 'tag' | 'parent';
     };
     const links: Link[] = [];
     const seen = new Set<string>();
     const key = (a: string, b: string) => a < b ? `${a}|${b}` : `${b}|${a}`;
+
+    // Parent edges: every page / folder connects to its immediate
+    // parent folder. This is what gives the graph its "tree skeleton".
+    const addParentEdge = (childPath: string) => {
+      const i = childPath.lastIndexOf('/');
+      if (i < 0) return;
+      const parent = childPath.slice(0, i);
+      if (!folderIdSet.has(parent)) return;
+      const k = key(parent, childPath);
+      if (seen.has(k)) return;
+      seen.add(k);
+      links.push({ source: parent, target: childPath, weight: 2, kind: 'parent' });
+    };
+    for (const n of data.nodes) addParentEdge(n.id);
+    for (const f of folderSet) addParentEdge(f);
 
     // Real [[wikilinks]] first; they take priority.
     for (const e of data.edges) {
@@ -291,7 +360,7 @@ export default function GraphView({
     }
 
     return { nodes, links };
-  }, [data, degree, importanceThreshold]);
+  }, [data, degree, importanceThreshold, customFolders]);
 
   // Adjacency rebuilt from the *combined* edge list so the hover-focus
   // mechanism (which dims non-neighbours) follows synthesised structural
@@ -346,16 +415,19 @@ export default function GraphView({
     const glow = settings.glow;
     const sz = settings.nodeSize;
     const ds = settings.depthScale;
-    for (const m of meshesRef.current.values()) {
-      const color = categoryColor(m.category, settings.colors);
-      m.group.scale.setScalar(sz * Math.pow(ds, m.depth));
+    for (const [nodeId, m] of meshesRef.current) {
+      const overrideColor = resolveFolderField(nodeId, 'color', settings.folderOverrides);
+      const overrideSize = resolveFolderField(nodeId, 'nodeSize', settings.folderOverrides);
+      const color = overrideColor ?? categoryColor(m.category, settings.colors);
+      const effectiveSize = overrideSize ?? sz;
+      m.group.scale.setScalar(effectiveSize * Math.pow(ds, m.depth));
       m.core.material.color.set(color);
       m.inner.material.opacity = Math.min(1, 0.55 * glow);
       m.halo.material.opacity = Math.min(1, 0.95 * glow);
       m.halo.material.map = getHaloTexture(color);
       m.halo.material.needsUpdate = true;
     }
-  }, [settings.nodeSize, settings.glow, settings.colors, settings.depthScale]);
+  }, [settings.nodeSize, settings.glow, settings.colors, settings.depthScale, settings.folderOverrides]);
 
   // ── Timelapse: chronological reveal of nodes ───────────────────────────
   // Build a path → numeric-id map once. Page IDs are monotonic in this
@@ -500,7 +572,9 @@ export default function GraphView({
           // Node param is `any` (matches `onNodeDragEnd` + `nodeCanvasObject`)
           // because the lib's NodeAccessor type uses `{id?: string|number}`,
           // narrower types like `{id: string}` get rejected in strict mode.
-          onNodeClick={(n: any) => onSelect(String(n.id))}
+          // Clicking a folder node is a no-op (it's not a page); pages
+          // open as usual.
+          onNodeClick={(n: any) => { if (!n.isFolder) onSelect(String(n.id)); }}
           onNodeHover={(n: any) => setHoverId(n ? String(n.id) : null)}
           onNodeDragEnd={(n: any) => releaseNode(n, false)}
           nodeRelSize={5}
@@ -511,7 +585,10 @@ export default function GraphView({
             // freshly-mounted nodes; skip the frame if positions are not
             // finite yet, otherwise createRadialGradient throws.
             if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
-            const color = categoryColor(node.category, settings.colors);
+            // Folder override → category override → hash-derived.
+            const overrideColor = resolveFolderField(node.id, 'color', settings.folderOverrides);
+            const color = overrideColor ?? categoryColor(node.category, settings.colors);
+            const overrideSize = resolveFolderField(node.id, 'nodeSize', settings.folderOverrides);
             const focused = isFocusedNode(node.id);
             const baseAlpha = focused ? 1 : 0.18;
             // Depth = how many folders deep this node sits. Subfolder
@@ -519,7 +596,11 @@ export default function GraphView({
             // hierarchy at a glance. depthScale=1.0 disables the effect.
             const depth = Math.max(0, String(node.id).split('/').length - 1);
             const depthMul = Math.pow(settings.depthScale, depth);
-            const r = (3.4 + Math.sqrt((node.backlinks || 0) + 1) * 1.7) * settings.nodeSize * depthMul;
+            // Folder nodes render ~1.4× a page at the same depth so the
+            // hierarchy is visually obvious (folder bigger than its notes).
+            const kindMul = node.isFolder ? 1.4 : 1.0;
+            const effectiveSize = overrideSize ?? settings.nodeSize;
+            const r = (3.4 + Math.sqrt((node.backlinks || 0) + 1) * 1.7) * effectiveSize * depthMul * kindMul;
 
             let pulseAmp = 0;
             if (node.important) {
@@ -614,7 +695,12 @@ export default function GraphView({
             const tgt = typeof l.target === 'object' ? l.target.id : l.target;
             return isFocusedLink(src, tgt) ? settings.particleColor : 'rgba(0,0,0,0)';
           }}
-          cooldownTicks={120}
+          // Run the sim perpetually instead of stopping at 120 ticks.
+          // Obsidian-style: every force-slider tweak settles in
+          // real-time without a freeze-then-thaw jump. d3-force is
+          // cheap enough on wiki-scale graphs to keep ticking.
+          cooldownTicks={Infinity}
+          cooldownTime={Infinity}
         />
       </div>
     );
@@ -631,16 +717,22 @@ export default function GraphView({
         showNavInfo={false}
         backgroundColor={GRAPH_BG}
         nodeLabel={(n: any) => n.title}
-        onNodeClick={(n: any) => onSelect(String(n.id))}
+        onNodeClick={(n: any) => { if (!n.isFolder) onSelect(String(n.id)); }}
         onNodeHover={(n: any) => setHoverId(n ? String(n.id) : null)}
         onNodeDragEnd={(n: any) => releaseNode(n, true)}
         nodeThreeObject={(n: any) => {
-          // Same depth-scale logic as 2D (deeper nodes shrink).
+          // Same depth-scale logic as 2D (deeper nodes shrink), plus
+          // a folder-vs-page multiplier so folders read as bigger
+          // "container" nodes than the notes inside them.
           const depth = Math.max(0, String(n.id).split('/').length - 1);
           const depthMul = Math.pow(settings.depthScale, depth);
-          const baseSize = (4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2) * depthMul;
+          const kindMul = n.isFolder ? 1.4 : 1.0;
+          const overrideSize = resolveFolderField(n.id, 'nodeSize', settings.folderOverrides);
+          const effectiveSize = overrideSize ?? settings.nodeSize;
+          const baseSize = (4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2) * depthMul * kindMul;
           const cat = n.category || '';
-          const color = categoryColor(cat, settings.colors);
+          const overrideColor = resolveFolderField(n.id, 'color', settings.folderOverrides);
+          const color = overrideColor ?? categoryColor(cat, settings.colors);
           const group = new THREE.Group();
 
           const core = new THREE.Mesh(
@@ -678,9 +770,9 @@ export default function GraphView({
 
           // Apply current size via group scale — letting the slider mutate
           // group.scale later avoids rebuilding geometries. Includes
-          // the depth scale so the very first paint matches the
-          // post-slider-update appearance.
-          group.scale.setScalar(settings.nodeSize * depthMul);
+          // the depth scale + folder-override so the very first paint
+          // matches the post-slider-update appearance.
+          group.scale.setScalar(effectiveSize * depthMul);
 
           meshesRef.current.set(n.id, {
             group,
@@ -718,6 +810,9 @@ export default function GraphView({
           const tgt = typeof l.target === 'object' ? l.target.id : l.target;
           return isFocusedLink(src, tgt) ? settings.particleColor : 'rgba(0,0,0,0)';
         }}
+        // Perpetual sim — see 2D comment above.
+        cooldownTicks={Infinity}
+        cooldownTime={Infinity}
       />
     </div>
   );
