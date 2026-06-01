@@ -355,6 +355,7 @@ select option { background: var(--bg-panel); color: var(--text); }
 /* Chrome surface colors: panel = white card; elev = same as panel but
    slightly more opaque for raised elements. */
 [data-theme="light"] .bg-panel        { background-color: rgba(255, 255, 255, 0.92); }
+[data-theme="light"] .bg-panel\/90    { background-color: rgba(255, 255, 255, 0.90); }
 [data-theme="light"] .bg-panel\/85    { background-color: rgba(255, 255, 255, 0.85); }
 [data-theme="light"] .bg-panel\/80    { background-color: rgba(255, 255, 255, 0.80); }
 [data-theme="light"] .bg-panel\/60    { background-color: rgba(255, 255, 255, 0.62); }

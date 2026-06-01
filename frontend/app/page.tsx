@@ -97,14 +97,19 @@ export default function Home() {
   const TREE_MAX_W = 480;
   const clampTreeW = (n: number) =>
     Math.max(TREE_MIN_W, Math.min(TREE_MAX_W, Math.round(n)));
-  const [treeWidth, setTreeWidth] = useState<number>(() => {
-    if (typeof window === 'undefined') return TREE_DEFAULT_W;
+  // SSR and the very first client render must match TREE_DEFAULT_W so
+  // React doesn't fire an `aria-valuenow` hydration mismatch warning
+  // when the persisted value differs from the default. The persisted
+  // value is applied in a post-mount effect below.
+  const [treeWidth, setTreeWidth] = useState<number>(TREE_DEFAULT_W);
+  useEffect(() => {
     try {
       const raw = localStorage.getItem('wiki:tree-width');
       const n = raw ? parseInt(raw, 10) : NaN;
-      return Number.isFinite(n) ? clampTreeW(n) : TREE_DEFAULT_W;
-    } catch { return TREE_DEFAULT_W; }
-  });
+      if (Number.isFinite(n)) setTreeWidth(clampTreeW(n));
+    } catch { /* localStorage unavailable */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Drag context lives in a ref so the mousemove listener reads fresh
   // values without stale-closure shenanigans, and so updating it on
   // 60–120 Hz doesn't trigger React re-renders.

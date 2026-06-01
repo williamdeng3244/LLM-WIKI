@@ -14,6 +14,12 @@ db_data/
 dist/
 .pytest_cache/
 
+# Editor / merge stragglers (nano `*.save`, emacs `*.bak`, merge `*.orig`).
+# Without this, half-edit backups silently get committed and bloat diffs.
+*.save
+*.bak
+*.orig
+
 # User-uploaded raw input documents (each install accumulates its own).
 raw/*
 !raw/.gitkeep

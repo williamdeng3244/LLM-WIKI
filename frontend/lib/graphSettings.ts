@@ -112,9 +112,12 @@ export const DEFAULTS: GraphSettingsState = {
   lineThickness: 0.5,      // half of the old default — finer lines out of the box
   glow: 1.0,
   centerForce: 0.05,
-  repelForce: -60,
+  // Stronger repel by default so the natural equilibrium between
+  // wiki-link pulls and inter-node push spreads the graph into a
+  // readable layout instead of a tight cluster. Tunable via slider.
+  repelForce: -150,
   linkForce: 0.7,
-  linkDistance: 80,
+  linkDistance: 60,
   colors: { ...DEFAULT_COLORS },
   particleCount: 2,
   particleSpeed: 0.005,

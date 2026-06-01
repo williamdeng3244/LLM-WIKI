@@ -1,14 +1,93 @@
 'use client';
-import dynamic from 'next/dynamic';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Component, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Play, Square } from 'lucide-react';
+// Force-graph (the lib underlying both react-force-graph-2d AND -3d)
+// uses d3-force-3d internally. Importing it directly lets us REPLACE
+// the simulation's force instances cleanly rather than mutating the
+// existing ones — the strength-mutation path turned out to be flaky
+// across react-force-graph's internal re-renders.
+// @ts-expect-error — d3-force-3d ships no types, but the public API
+// matches @types/d3-force closely enough for our usage.
+import { forceX, forceY } from 'd3-force-3d';
 import type { GraphData, PageSummary } from '@/lib/api';
 import { type GraphSettingsState, DEFAULTS, categoryColor, resolveFolderField } from '@/lib/graphSettings';
 import { useLanguage } from '@/lib/i18n';
 
-const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
-const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
+// next/dynamic + react-force-graph's forwardRef chain is broken in
+// Next 14 — the callback ref never fires, which left every d3Force
+// / d3ReheatSimulation call as a no-op. Bypass by lazy-loading the
+// libs manually in a useEffect and stashing them in state. This is
+// effectively what dynamic does, but keeps ref forwarding under
+// our control.
+type ForceGraphComp = React.ComponentType<Record<string, unknown> & { ref?: React.Ref<unknown> }>;
+let _fg2dPromise: Promise<ForceGraphComp> | null = null;
+let _fg3dPromise: Promise<ForceGraphComp> | null = null;
+/** Error boundary so a render-time crash inside ForceGraph3D
+ *  (THREE.js init, etc.) surfaces a readable error instead of a
+ *  silent black screen. Mounted around the dynamically-loaded
+ *  ForceGraph2D / ForceGraph3D components. */
+class GraphErrorBoundary extends Component<
+  { label: string; children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) {
+    // eslint-disable-next-line no-console
+    console.error(`[graph ${this.props.label}] render crash:`, error);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="absolute inset-0 flex items-center justify-center p-8">
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-md px-4 py-3 max-w-md">
+            <div className="text-rose-300 text-[0.8929rem] font-medium mb-1">
+              {this.props.label} crashed
+            </div>
+            <div className="text-muted text-[0.8214rem] font-mono">
+              {this.state.error.message}
+            </div>
+            <button
+              className="mt-3 text-[0.7857rem] text-muted hover:text-ink underline"
+              onClick={() => this.setState({ error: null })}
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function loadFg2d(): Promise<ForceGraphComp> {
+  if (!_fg2dPromise) {
+    _fg2dPromise = import('react-force-graph-2d').then((m) => {
+      const C = (m.default || m) as unknown as ForceGraphComp;
+      // eslint-disable-next-line no-console
+      console.log('[graph] fg2d module loaded; type:', typeof C);
+      return C;
+    });
+  }
+  return _fg2dPromise;
+}
+function loadFg3d(): Promise<ForceGraphComp> {
+  if (!_fg3dPromise) {
+    _fg3dPromise = import('react-force-graph-3d').then((m) => {
+      const C = (m.default || m) as unknown as ForceGraphComp;
+      // eslint-disable-next-line no-console
+      console.log('[graph] fg3d module loaded; type:', typeof C);
+      return C;
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('[graph] fg3d failed to load:', err);
+      throw err;
+    });
+  }
+  return _fg3dPromise;
+}
 
 // Was a hardcoded module-level constant; now `settings.linkColor` is
 // the source of truth and threads through to every link/particle call.
@@ -94,8 +173,93 @@ export default function GraphView({
   // shape. 2D only.
   const [timelapseStep, setTimelapseStep] = useState<number | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // Lazy-load the force-graph components into state. Once loaded,
+  // we render them directly (no next/dynamic in between), so refs
+  // forward cleanly.
+  const [Fg2d, setFg2d] = useState<ForceGraphComp | null>(null);
+  const [Fg3d, setFg3d] = useState<ForceGraphComp | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    loadFg2d().then((c) => setFg2d(() => c));
+    loadFg3d().then((c) => setFg3d(() => c));
+  }, []);
+
+  // Ambient idle rotation for the 3D graph. Uses three.js OrbitControls'
+  // built-in `autoRotate` (react-force-graph-3d exposes the controls via
+  // `ref.controls()`). The renderer's per-frame `controls.update()` is
+  // what actually advances the camera, so we just flip the flag based on
+  // a "time since last interaction" probe — no extra rAF loop, no fight
+  // with the library's animation cycle. Idle threshold ~1.5 s; speed is
+  // tuned to ~3 minutes per full orbit so it reads as gentle background
+  // motion, not as a turntable demo.
+  useEffect(() => {
+    if (mode !== '3d') return;
+    if (typeof window === 'undefined') return;
+    let raf = 0;
+    let stopped = false;
+    let lastInteraction = performance.now();
+    let canvas: HTMLCanvasElement | null = null;
+    let controls: { autoRotate?: boolean; autoRotateSpeed?: number } | null = null;
+    const markInteraction = () => { lastInteraction = performance.now(); };
+    const tryStart = () => {
+      if (stopped) return;
+      const ref = fg3dRef.current;
+      const ctl = ref && typeof ref.controls === 'function' ? ref.controls() : null;
+      const renderer = ref && typeof ref.renderer === 'function' ? ref.renderer() : null;
+      const dom = renderer?.domElement as HTMLCanvasElement | undefined;
+      // Bail out gracefully if the active control type doesn't expose
+      // autoRotate (e.g. trackball/fly mode — we never set controlType
+      // away from the default 'orbit', but be defensive anyway).
+      if (!ctl || !dom || !('autoRotate' in ctl)) {
+        raf = requestAnimationFrame(tryStart);
+        return;
+      }
+      controls = ctl as { autoRotate?: boolean; autoRotateSpeed?: number };
+      canvas = dom;
+      canvas.addEventListener('pointerdown', markInteraction);
+      canvas.addEventListener('wheel', markInteraction, { passive: true });
+      canvas.addEventListener('touchstart', markInteraction, { passive: true });
+      controls.autoRotateSpeed = 0.35;     // ~3 min per orbit
+      const IDLE_MS = 1500;
+      const loop = () => {
+        if (stopped || !controls) return;
+        raf = requestAnimationFrame(loop);
+        controls.autoRotate = performance.now() - lastInteraction > IDLE_MS;
+      };
+      loop();
+    };
+    tryStart();
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+      if (canvas) {
+        canvas.removeEventListener('pointerdown', markInteraction);
+        canvas.removeEventListener('wheel', markInteraction);
+        canvas.removeEventListener('touchstart', markInteraction);
+      }
+      if (controls) controls.autoRotate = false;
+    };
+  }, [mode, Fg3d]);
+
+  // Callback refs into the directly-imported components.
   const fg2dRef = useRef<any>(null);
   const fg3dRef = useRef<any>(null);
+  // Throttle reheat-on-slider-drag so 60+ slider events/sec don't
+  // pile up energy and spin the graph violently.
+  const lastReheatRef = useRef<number>(0);
+  const [refReady, setRefReady] = useState(false);
+  const set2dRef = useCallback((instance: any) => {
+    fg2dRef.current = instance;
+    setRefReady(!!instance);
+    // eslint-disable-next-line no-console
+    console.log('[graph] fg2d ref →', instance ? 'BOUND' : 'null');
+  }, []);
+  const set3dRef = useCallback((instance: any) => {
+    fg3dRef.current = instance;
+    setRefReady(!!instance);
+    // eslint-disable-next-line no-console
+    console.log('[graph] fg3d ref →', instance ? 'BOUND' : 'null');
+  }, []);
   const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -150,35 +314,162 @@ export default function GraphView({
   // Apply the d3 force tuning whenever any of the four force-related
   // settings change. Re-runs when `data` first arrives so the initial
   // sim is also reconfigured.
-  useEffect(() => {
+  // Diagnostic counter the visible overlay reads to confirm the
+  // effect is firing on slider drags.
+  const [effectTick, setEffectTick] = useState(0);
+  // Apply the current physics settings to the live d3 simulation.
+  // We expose this as a callable so external code (e.g. a slider
+  // drag handler) can fire it on demand instead of relying solely
+  // on React effects.
+  const applyPhysics = (reheat: boolean) => {
     const ref = mode === '2d' ? fg2dRef.current : fg3dRef.current;
+    // eslint-disable-next-line no-console
+    console.log('[graph applyPhysics]', {
+      mode, hasRef: !!ref,
+      repelForce: settings.repelForce,
+      linkForce: settings.linkForce,
+      linkDistance: settings.linkDistance,
+      centerForce: settings.centerForce,
+    });
     if (!ref || typeof ref.d3Force !== 'function') return;
-    try {
-      const charge = ref.d3Force('charge');
-      if (charge && typeof charge.strength === 'function') {
-        // Per-node repel: folders/subfolders with an override get their
-        // own charge; everything else falls back to the global slider.
-        // d3-force's `strength` accepts a function (node, i, nodes) →
-        // number so this fans out at sim-tick time without us having
-        // to maintain a parallel sim per group.
-        charge.strength((n: { id: string }) => {
-          const ov = resolveFolderField(String(n.id), 'repelForce', settings.folderOverrides);
-          return ov ?? settings.repelForce;
+    const charge = ref.d3Force('charge');
+    if (charge && typeof charge.strength === 'function') {
+      charge.strength((n: { id: string }) => {
+        const ov = resolveFolderField(String(n.id), 'repelForce', settings.folderOverrides);
+        return ov ?? settings.repelForce;
+      });
+      if (typeof charge.initialize === 'function') {
+        charge.initialize(ref.graphData?.()?.nodes || []);
+      }
+    }
+    const link = ref.d3Force('link');
+    if (link && typeof link.strength === 'function') {
+      // Per-link strength: real [[wikilinks]] use the full slider
+      // value; synthesized structural edges (folder siblings, tag
+      // overlap, parent-folder) pull softly so they HINT at clustering
+      // without collapsing everything into a tight ball. Without this
+      // every page would be link-pulled toward its folder siblings,
+      // tag co-occurrents, AND parent folder all at full strength,
+      // which dominates repel force and crushes the layout.
+      try {
+        link.strength((l: { kind?: string }) => {
+          const kind = l?.kind || 'wiki';
+          if (kind === 'wiki') return settings.linkForce;
+          if (kind === 'parent') return settings.linkForce * 0.25;
+          if (kind === 'tag') return settings.linkForce * 0.08;
+          return settings.linkForce * 0.05;
         });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[graph] link.strength failed:', e);
+        link.strength(settings.linkForce);   // safe scalar fallback
       }
-      const link = ref.d3Force('link');
-      if (link) {
-        if (typeof link.strength === 'function') link.strength(settings.linkForce);
-        if (typeof link.distance === 'function') link.distance(settings.linkDistance);
+      if (typeof link.distance === 'function') {
+        try {
+          link.distance((l: { kind?: string }) => {
+            const kind = l?.kind || 'wiki';
+            if (kind === 'wiki') return settings.linkDistance;
+            if (kind === 'parent') return settings.linkDistance * 1.5;
+            return settings.linkDistance * 2.5;
+          });
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[graph] link.distance failed:', e);
+          link.distance(settings.linkDistance);
+        }
       }
-      const center = ref.d3Force('center');
-      if (center && typeof center.strength === 'function') {
-        center.strength(settings.centerForce);
+    }
+    const center = ref.d3Force('center');
+    if (center && typeof center.strength === 'function') {
+      center.strength(settings.centerForce);
+    }
+    // Containment is purely a safety net for disconnected components
+    // — kept very low so the user-controlled Center force slider is
+    // the real knob. centerForce=0 → near-zero containment (max spread);
+    // centerForce=0.3 (max) → ~0.06 containment (moderate pull).
+    // This is what gives the graph room to breathe at low Center
+    // values, like Obsidian. Floor at a tiny 0.002 so a 1-node
+    // island doesn't drift to infinity.
+    const containment = Math.max(0.002, settings.centerForce * 0.2);
+    const existingX = ref.d3Force('x');
+    if (existingX && typeof existingX.strength === 'function') {
+      existingX.strength(containment);
+    } else {
+      ref.d3Force('x', forceX().strength(containment));
+    }
+    const existingY = ref.d3Force('y');
+    if (existingY && typeof existingY.strength === 'function') {
+      existingY.strength(containment);
+    } else {
+      ref.d3Force('y', forceY().strength(containment));
+    }
+    if (reheat && typeof ref.d3ReheatSimulation === 'function') {
+      // Reheat applies new forces visibly, but we throttle so a
+      // rapid slider drag (10–20 events/sec) doesn't pile up energy
+      // and spin the graph wildly. Only one reheat per ~150 ms
+      // window; the lib catches up with the latest forces on the
+      // next tick anyway.
+      //
+      // CRITICAL: kapsule debounces three-forcegraph's `update()` by 1 ms
+      // (kapsule.mjs ~line 118), so on the very first effect fire the
+      // simulation's internal `state.layout` is still undefined.
+      // `d3ReheatSimulation()` flips `state.engineRunning = true`
+      // without checking that `state.layout` exists; the next rAF then
+      // crashes with `Cannot read properties of undefined (reading 'tick')`
+      // inside three-forcegraph's `layoutTick`. d3-force(-3d) sets
+      // `node.index` on every node in `initializeNodes()`, which only
+      // runs when the lib's `update()` has called `.nodes(...)` on the
+      // sim — so `nodes[0].index` is a reliable "sim is initialized"
+      // probe. Skip the reheat until then; the lib's own update() block
+      // will start the sim via `resetCountdown` once `state.layout` is
+      // assigned.
+      const liveNodes = (typeof ref.graphData === 'function'
+        ? ref.graphData()?.nodes : null) || [];
+      const simReady = liveNodes.length > 0
+        && typeof liveNodes[0].index === 'number';
+      if (simReady) {
+        const now = performance.now();
+        const last = lastReheatRef.current;
+        if (now - last > 150) {
+          lastReheatRef.current = now;
+          ref.d3ReheatSimulation();
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('[graph] reheat skipped — sim not initialized yet');
       }
-      ref.d3ReheatSimulation?.();
-    } catch { /* lib not ready yet */ }
+    }
+  };
+  // Expose to window so a quick console test ("window._graphApply()")
+  // can prove the application works even if React isn't re-running
+  // the effect.
+  if (typeof window !== 'undefined') {
+    (window as unknown as { _graphApply: typeof applyPhysics })._graphApply = applyPhysics;
+  }
+  useEffect(() => {
+    // ForceGraph2D/3D are dynamic-imported and bind their ref
+    // asynchronously, so the first useEffect run hits a null ref and
+    // returns without bumping the tick counter. Poll briefly until
+    // the ref shows up, then apply the physics + start the counter.
+    let cancelled = false;
+    let pollCount = 0;
+    const tryApply = () => {
+      if (cancelled) return;
+      const ref = mode === '2d' ? fg2dRef.current : fg3dRef.current;
+      if (ref && typeof ref.d3Force === 'function') {
+        setEffectTick((t) => t + 1);
+        applyPhysics(true);
+        return;
+      }
+      // Up to ~3s of polling — that's well past the lazy-import boundary.
+      if (pollCount++ < 30) setTimeout(tryApply, 100);
+    };
+    tryApply();
+    return () => { cancelled = true; };
+    // applyPhysics depends on settings/mode; deps below cover that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    mode, data,
+    mode, data, refReady,
     settings.repelForce, settings.linkForce,
     settings.linkDistance, settings.centerForce,
     settings.folderOverrides,
@@ -359,7 +650,25 @@ export default function GraphView({
       }
     }
 
-    return { nodes, links };
+    // Dedupe nodes by id (a user-defined custom folder can collide
+    // with a page path) and drop any link whose endpoint isn't present —
+    // d3-force-3d's link force throws "node not found: <id>" otherwise,
+    // killing the entire per-frame tick and leaving the 3D canvas black.
+    // Page wins over folder on id collision.
+    const nodeById = new Map<string, GraphNode>();
+    for (const n of nodes) {
+      const prev = nodeById.get(n.id);
+      if (!prev || (prev.isFolder && !n.isFolder)) nodeById.set(n.id, n);
+    }
+    const finalNodes = Array.from(nodeById.values());
+    const finalLinks = links.filter(
+      (l) => nodeById.has(l.source) && nodeById.has(l.target),
+    );
+    // eslint-disable-next-line no-console
+    if (finalLinks.length !== links.length) console.warn(
+      `[graph] dropped ${links.length - finalLinks.length} dangling link(s)`,
+    );
+    return { nodes: finalNodes, links: finalLinks };
   }, [data, degree, importanceThreshold, customFolders]);
 
   // Adjacency rebuilt from the *combined* edge list so the hover-focus
@@ -516,12 +825,19 @@ export default function GraphView({
   useEffect(() => {
     if (mode !== '2d') return;
     let raf = 0;
+    let stopped = false;
     const loop = () => {
-      fg2dRef.current?.refresh();
+      if (stopped) return;
+      const ref = fg2dRef.current;
+      // Stale ref after HMR / mode-swap can be non-null but lack `.refresh`
+      // (or have a torn-down canvas) — both would throw.
+      if (ref && typeof ref.refresh === 'function') {
+        try { ref.refresh(); } catch { /* canvas mid-teardown */ }
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => { stopped = true; cancelAnimationFrame(raf); };
   }, [mode]);
 
   // Translucent wash behind the graph so the background video shows
@@ -544,9 +860,35 @@ export default function GraphView({
     ref?.d3ReheatSimulation?.();
   };
 
+  // Live debug overlay so users can see whether slider drags reach
+  // the simulation without opening DevTools. Reads the same state
+  // the force-tuning useEffect operates on.
+  const debugOverlay = (
+    <div className="absolute top-3 left-3 z-10 bg-panel/90 border border-line rounded-md px-3 py-2 text-[0.7143rem] font-mono tabular-nums text-muted backdrop-blur space-y-0.5 pointer-events-auto">
+      <div className="text-accent text-[0.6875rem] uppercase tracking-[0.12em] mb-0.5">
+        Physics — tick #{effectTick} {refReady ? '✓' : '⚠ no ref'}
+      </div>
+      <div>repel:    {settings.repelForce.toFixed(0)}</div>
+      <div>link:     {settings.linkForce.toFixed(2)}</div>
+      <div>linkDist: {settings.linkDistance.toFixed(0)}</div>
+      <div>center:   {settings.centerForce.toFixed(3)}</div>
+      <button
+        className="mt-1 px-2 py-0.5 text-[0.7143rem] border border-white/10 rounded hover:bg-white/5 hover:text-ink transition-colors"
+        onClick={() => {
+          const ref = mode === '2d' ? fg2dRef.current : fg3dRef.current;
+          ref?.d3ReheatSimulation?.();
+        }}
+        title="Reheat the simulation manually"
+      >
+        Reheat
+      </button>
+    </div>
+  );
+
   if (mode === '2d') {
     return (
       <div ref={containerRef} className="w-full h-full relative">
+        {debugOverlay}
         {/* Play / Stop timelapse — 2D only. */}
         <button
           className="absolute top-3 right-14 z-10 w-8 h-8 grid place-items-center rounded-md border border-line bg-panel/85 text-muted hover:text-ink backdrop-blur transition-colors"
@@ -562,10 +904,25 @@ export default function GraphView({
               .replace('{total}', String(chronoOrder.length))}
           </div>
         )}
-        <ForceGraph2D
-          ref={fg2dRef}
+        {!Fg2d && (
+          <div className="absolute inset-0 flex items-center justify-center text-muted text-sm">
+            Loading graph engine…
+          </div>
+        )}
+        <GraphErrorBoundary label="ForceGraph2D">
+        {Fg2d && <Fg2d
+          ref={set2dRef}
           graphData={renderGraph}
           backgroundColor={GRAPH_BG}
+          // Physics tuning. Defaults are alphaDecay=0.0228,
+          // velocityDecay=0.4. We use slightly slower-than-default
+          // alphaDecay so motion is visible when sliders change,
+          // and slightly LIGHTER velocityDecay so dragged nodes
+          // glide instead of slamming. The aggressive "snap back"
+          // behavior came from a strong containment force, not
+          // from these — containment is now ~0.025 (was 0.15+).
+          d3AlphaDecay={0.018}
+          d3VelocityDecay={0.35}
           // No `nodeLabel` here — the canvas rendering below draws labels
           // itself (only for the focused node + neighbors, themed). The
           // lib's default would also pop up an HTML tooltip → double label.
@@ -669,8 +1026,10 @@ export default function GraphView({
             const focused = isFocusedLink(src, tgt);
             const kind: 'wiki' | 'folder' | 'tag' = l.kind || 'wiki';
             // Wiki-links lead; tags soften; folders barely there.
-            const onAlpha  = kind === 'wiki' ? 0.65 : kind === 'tag' ? 0.36 : 0.22;
-            const offAlpha = kind === 'wiki' ? 0.10 : kind === 'tag' ? 0.06 : 0.04;
+            // Hierarchy compressed: wiki still wins, but tag / folder /
+            // parent edges stay visible instead of fading to invisible.
+            const onAlpha  = kind === 'wiki' ? 0.65 : kind === 'tag' ? 0.48 : 0.38;
+            const offAlpha = kind === 'wiki' ? 0.10 : kind === 'tag' ? 0.08 : 0.07;
             return hexToRgba(settings.linkColor, focused ? onAlpha : offAlpha);
           }}
           // Effective line-thickness multiplier is halved here so the
@@ -678,8 +1037,11 @@ export default function GraphView({
           // 0.5–3.0 range did — see graphSettings.ts comment.
           linkWidth={(l: any) => {
             const kind: 'wiki' | 'folder' | 'tag' = l.kind || 'wiki';
-            const base = kind === 'wiki' ? 0.9 : kind === 'tag' ? 0.55 : 0.40;
-            const scale = kind === 'wiki' ? 0.22 : 0.10;
+            // Bases lifted for non-wiki kinds so the visual gradient is
+            // ~1.4× wiki:other instead of ~2.2×. Folder/parent edges no
+            // longer disappear at default lineThickness.
+            const base = kind === 'wiki' ? 0.9 : kind === 'tag' ? 0.75 : 0.65;
+            const scale = kind === 'wiki' ? 0.22 : 0.15;
             return (base + Math.min(l.weight || 1, 8) * scale) * settings.lineThickness * 0.5;
           }}
           linkLineDash={() =>
@@ -701,103 +1063,111 @@ export default function GraphView({
           // cheap enough on wiki-scale graphs to keep ticking.
           cooldownTicks={Infinity}
           cooldownTime={Infinity}
-        />
+        />}
+        </GraphErrorBoundary>
       </div>
     );
   }
+
+  // Pre-compute the 3D node-builder OUTSIDE the JSX. If a closure
+  // capture throws, having it as a named function makes the stack
+  // trace point at the real line, not somewhere inside react-force-
+  // graph-3d's internals.
+  const build3dNode = useCallback((n: { id: string; backlinks?: number; category?: string; isFolder?: boolean }) => {
+    try {
+      const depth = Math.max(0, String(n.id).split('/').length - 1);
+      const depthMul = Math.pow(settings.depthScale, depth);
+      const kindMul = n.isFolder ? 1.4 : 1.0;
+      const overrideSize = resolveFolderField(n.id, 'nodeSize', settings.folderOverrides);
+      const effectiveSize = overrideSize ?? settings.nodeSize;
+      const baseSize = (4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2) * kindMul;
+      const cat = n.category || '';
+      const overrideColor = resolveFolderField(n.id, 'color', settings.folderOverrides);
+      const color = overrideColor ?? categoryColor(cat, settings.colors);
+      const group = new THREE.Group();
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(baseSize * 0.65, 24, 24),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }),
+      );
+      group.add(core);
+      const inner = new THREE.Mesh(
+        new THREE.SphereGeometry(baseSize * 0.42, 16, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff, transparent: true,
+          opacity: Math.min(1, 0.55 * settings.glow),
+        }),
+      );
+      group.add(inner);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: getHaloTexture(color), transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        opacity: Math.min(1, 0.95 * settings.glow),
+      }));
+      halo.scale.set(baseSize * 8, baseSize * 8, 1);
+      group.add(halo);
+      const noRaycast = () => {};
+      (halo as unknown as { raycast: () => void }).raycast = noRaycast;
+      (inner as unknown as { raycast: () => void }).raycast = noRaycast;
+      group.scale.setScalar(effectiveSize * depthMul);
+      meshesRef.current.set(n.id, {
+        group,
+        core: core as NodeMeshes['core'],
+        inner: inner as NodeMeshes['inner'],
+        halo, category: cat, depth,
+      });
+      return group;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[graph build3dNode] failed for node', n.id, e);
+      return new THREE.Group();    // empty group keeps render alive
+    }
+  }, [settings.depthScale, settings.nodeSize, settings.glow, settings.colors, settings.folderOverrides]);
 
   // 3D — replace the default flat sphere with a custom glowing-orb group
   // (core + white-hot inner + additive halo sprite). Edges remain library-
   // managed so the per-frame focus callbacks still apply.
   return (
-    <div ref={containerRef} className="w-full h-full">
-      <ForceGraph3D
-        ref={fg3dRef}
+    <div ref={containerRef} className="w-full h-full relative">
+      {debugOverlay}
+      {!Fg3d && (
+        <div className="absolute inset-0 flex items-center justify-center text-muted text-sm">
+          Loading 3D engine…
+        </div>
+      )}
+      <GraphErrorBoundary label="ForceGraph3D">
+      {Fg3d && <Fg3d
+        ref={set3dRef}
         graphData={graph}
         showNavInfo={false}
         backgroundColor={GRAPH_BG}
+        // Same Obsidian-style live physics as 2D — see the 2D comment.
+        // See 2D comment — moderate settle + light velocity decay.
+        d3AlphaDecay={0.018}
+        d3VelocityDecay={0.35}
         nodeLabel={(n: any) => n.title}
         onNodeClick={(n: any) => { if (!n.isFolder) onSelect(String(n.id)); }}
         onNodeHover={(n: any) => setHoverId(n ? String(n.id) : null)}
         onNodeDragEnd={(n: any) => releaseNode(n, true)}
-        nodeThreeObject={(n: any) => {
-          // Same depth-scale logic as 2D (deeper nodes shrink), plus
-          // a folder-vs-page multiplier so folders read as bigger
-          // "container" nodes than the notes inside them.
-          const depth = Math.max(0, String(n.id).split('/').length - 1);
-          const depthMul = Math.pow(settings.depthScale, depth);
-          const kindMul = n.isFolder ? 1.4 : 1.0;
-          const overrideSize = resolveFolderField(n.id, 'nodeSize', settings.folderOverrides);
-          const effectiveSize = overrideSize ?? settings.nodeSize;
-          const baseSize = (4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2) * depthMul * kindMul;
-          const cat = n.category || '';
-          const overrideColor = resolveFolderField(n.id, 'color', settings.folderOverrides);
-          const color = overrideColor ?? categoryColor(cat, settings.colors);
-          const group = new THREE.Group();
-
-          const core = new THREE.Mesh(
-            new THREE.SphereGeometry(baseSize * 0.65, 24, 24),
-            new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }),
-          );
-          group.add(core);
-
-          const inner = new THREE.Mesh(
-            new THREE.SphereGeometry(baseSize * 0.42, 16, 16),
-            new THREE.MeshBasicMaterial({
-              color: 0xffffff,
-              transparent: true,
-              opacity: Math.min(1, 0.55 * settings.glow),
-            }),
-          );
-          group.add(inner);
-
-          const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: getHaloTexture(color),
-            transparent: true,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            opacity: Math.min(1, 0.95 * settings.glow),
-          }));
-          halo.scale.set(baseSize * 8, baseSize * 8, 1);
-          group.add(halo);
-
-          // The halo sprite is ~7× the core's diameter — leaving it
-          // raycastable means hover triggers far from the visible orb.
-          // Disable raycasting on every part of the node except the core.
-          const noRaycast = () => {};
-          (halo as unknown as { raycast: () => void }).raycast = noRaycast;
-          (inner as unknown as { raycast: () => void }).raycast = noRaycast;
-
-          // Apply current size via group scale — letting the slider mutate
-          // group.scale later avoids rebuilding geometries. Includes
-          // the depth scale + folder-override so the very first paint
-          // matches the post-slider-update appearance.
-          group.scale.setScalar(effectiveSize * depthMul);
-
-          meshesRef.current.set(n.id, {
-            group,
-            core: core as NodeMeshes['core'],
-            inner: inner as NodeMeshes['inner'],
-            halo,
-            category: cat,
-            depth,
-          });
-          return group;
-        }}
+        nodeThreeObject={build3dNode}
         nodeThreeObjectExtend={false}
         linkColor={(l: any) => {
           const src = typeof l.source === 'object' ? l.source.id : l.source;
           const tgt = typeof l.target === 'object' ? l.target.id : l.target;
           const focused = isFocusedLink(src, tgt);
           const kind: 'wiki' | 'folder' | 'tag' = l.kind || 'wiki';
-          const onAlpha  = kind === 'wiki' ? 0.85 : kind === 'tag' ? 0.45 : 0.28;
-          const offAlpha = kind === 'wiki' ? 0.12 : kind === 'tag' ? 0.07 : 0.05;
+          // Hierarchy compressed: wiki still wins, but tag / folder /
+          // parent edges stay visible instead of fading to invisible.
+          const onAlpha  = kind === 'wiki' ? 0.85 : kind === 'tag' ? 0.62 : 0.50;
+          const offAlpha = kind === 'wiki' ? 0.12 : kind === 'tag' ? 0.10 : 0.09;
           return hexToRgba(settings.linkColor, focused ? onAlpha : offAlpha);
         }}
         linkWidth={(l: any) => {
           const kind: 'wiki' | 'folder' | 'tag' = l.kind || 'wiki';
-          const base = kind === 'wiki' ? 0.7 : kind === 'tag' ? 0.45 : 0.32;
-          const scale = kind === 'wiki' ? 0.22 : 0.10;
+          // Bases lifted for non-wiki kinds so the visual gradient is
+          // ~1.4× wiki:other instead of ~2.2×. Folder/parent edges no
+          // longer disappear at default lineThickness.
+          const base = kind === 'wiki' ? 0.7 : kind === 'tag' ? 0.58 : 0.50;
+          const scale = kind === 'wiki' ? 0.22 : 0.15;
           return (base + Math.min(l.weight || 1, 8) * scale) * settings.lineThickness * 0.5;
         }}
         linkOpacity={0.85}
@@ -813,7 +1183,8 @@ export default function GraphView({
         // Perpetual sim — see 2D comment above.
         cooldownTicks={Infinity}
         cooldownTime={Infinity}
-      />
+      />}
+      </GraphErrorBoundary>
     </div>
   );
 }
