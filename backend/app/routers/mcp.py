@@ -25,9 +25,15 @@ from app.core.config import settings
 from app.core.db import get_session
 from app.core.permissions import can_propose
 from app.models import (
-    ApiToken, AuditLog, Page, RawSource, Revision, RevisionProvenance,
-    RevisionStatus, Role, User,
+    ALLOWED_MIME_TYPES, ApiToken, Artifact, ArtifactVersion, AuditLog, Page,
+    RawSource, Revision, RevisionProvenance, RevisionStatus, Role, User,
+    VALID_VISIBILITIES, VISIBILITY_COMPANY, VISIBILITY_PUBLIC,
 )
+from app.routers.artifacts import (
+    _build_url, _resolve_artifact, _validate_mime, _validate_visibility,
+    persist_new_artifact, slugify,
+)
+from app.services.artifact_storage import get_storage
 from app.services.rag import retrieve
 from app.services.workflow import create_draft, submit_for_review
 
@@ -146,6 +152,79 @@ TOOLS: list[dict[str, Any]] = [
                 "rationale": {"type": "string"},
             },
             "required": ["title", "body"],
+        },
+    },
+    {
+        "name": "publish_artifact",
+        "description": (
+            "Publish a gated artifact and return its permanent URL. "
+            "Use when the human asks you to share an HTML report, dashboard, "
+            "or Markdown document with their team behind company auth. "
+            "Returns {short_id, url, version}. The URL lives at /a/<short_id> "
+            "and is auth-gated by default (visibility=company). HTML is "
+            "rendered inside a sandboxed iframe so the artifact's JS cannot "
+            "see the wiki session cookie. visibility=public only works if "
+            "the admin has set ARTIFACTS_ALLOW_PUBLIC=true on the instance — "
+            "otherwise the call fails and you should retry with company."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Human label for the share link."},
+                "body": {"type": "string", "description": "The full artifact body (HTML or Markdown source)."},
+                "mime_type": {
+                    "type": "string",
+                    "enum": sorted(ALLOWED_MIME_TYPES),
+                    "default": "text/html",
+                },
+                "visibility": {
+                    "type": "string",
+                    "enum": ["company", "public"],
+                    "default": "company",
+                },
+                "expires_in_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional. Omit for never-expires.",
+                },
+            },
+            "required": ["name", "body"],
+        },
+    },
+    {
+        "name": "update_artifact",
+        "description": (
+            "Publish a new version of an existing artifact. The URL stays "
+            "the same; clients fetching /a/<short_id> get the new body. "
+            "Old versions remain accessible via ?v=<n>. Owner-only — the "
+            "MCP token's user must be the original publisher (or an admin)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "short_id": {"type": "string"},
+                "body": {"type": "string", "description": "New body content."},
+                "mime_type": {
+                    "type": "string",
+                    "enum": sorted(ALLOWED_MIME_TYPES),
+                    "description": "Optional; defaults to the artifact's current MIME.",
+                },
+            },
+            "required": ["short_id", "body"],
+        },
+    },
+    {
+        "name": "list_my_artifacts",
+        "description": (
+            "List artifacts owned by the MCP token's user, most-recent first. "
+            "Returns metadata (short_id, name, url, mime_type, visibility, "
+            "version, created_at, expires_at). Body bytes are not included."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+            },
         },
     },
 ]
@@ -325,6 +404,120 @@ async def _tool_create_draft(user: User, args: dict, session: AsyncSession) -> d
     })
 
 
+# ── Artifact tools ─────────────────────────────────────────────────────────
+
+
+async def _tool_publish_artifact(user: User, args: dict, session: AsyncSession) -> dict:
+    """Publish a brand-new artifact. Shares the persist_new_artifact() code
+    path with `POST /api/artifacts` so MIME/size/visibility validation and
+    storage layout stay single-sourced."""
+    name = (args.get("name") or "").strip()
+    body_str = args.get("body")
+    if not name or body_str is None:
+        raise ValueError("name and body are required")
+    mime_type = args.get("mime_type") or "text/html"
+    visibility = args.get("visibility") or VISIBILITY_COMPANY
+    expires_in_days = args.get("expires_in_days")
+
+    expires_at = None
+    if expires_in_days is not None:
+        try:
+            days = int(expires_in_days)
+        except (TypeError, ValueError):
+            raise ValueError("expires_in_days must be an integer")
+        if days < 1:
+            raise ValueError("expires_in_days must be >= 1")
+        from datetime import datetime, timedelta, timezone
+        expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+
+    art = await persist_new_artifact(
+        session, owner=user, name=name,
+        body=body_str.encode("utf-8"),
+        mime_type=mime_type, visibility=visibility,
+        expires_at=expires_at,
+    )
+    return _text_block({
+        "short_id": art.short_id,
+        "url": _build_url(art.short_id, art.slug),
+        "version": art.current_version,
+    })
+
+
+async def _tool_update_artifact(user: User, args: dict, session: AsyncSession) -> dict:
+    """Publish a new version of an existing artifact. Owner or admin only —
+    matches the HTTP `POST /api/artifacts/{sid}/versions` permission."""
+    import hashlib
+
+    short_id = (args.get("short_id") or "").strip()
+    body_str = args.get("body")
+    if not short_id or body_str is None:
+        raise ValueError("short_id and body are required")
+
+    art = await _resolve_artifact(session, short_id)
+    if art is None:
+        raise ValueError(f"Artifact not found: {short_id}")
+    if art.owner_id != user.id and user.role != Role.admin:
+        raise PermissionError("Only the artifact owner or an admin can update it.")
+
+    body_bytes = body_str.encode("utf-8")
+    if len(body_bytes) > settings.artifacts_max_body_bytes:
+        raise ValueError("body exceeds ARTIFACTS_MAX_BODY_BYTES")
+
+    mime = args.get("mime_type") or art.mime_type
+    _validate_mime(mime)
+
+    new_version = art.current_version + 1
+    storage_path = await get_storage().save(art.short_id, new_version, body_bytes)
+    version = ArtifactVersion(
+        artifact_id=art.id,
+        version=new_version,
+        content_hash=hashlib.sha256(body_bytes).hexdigest(),
+        body_size=len(body_bytes),
+        storage_path=storage_path,
+        created_by_id=user.id,
+    )
+    session.add(version)
+    art.current_version = new_version
+    art.mime_type = mime
+    await session.commit()
+    await session.refresh(art)
+    return _text_block({
+        "short_id": art.short_id,
+        "url": _build_url(art.short_id, art.slug),
+        "version": art.current_version,
+    })
+
+
+async def _tool_list_my_artifacts(user: User, args: dict, session: AsyncSession) -> dict:
+    """Recent artifacts owned by the calling token's user, most-recent first.
+    Mirrors the HTTP `GET /api/artifacts` endpoint but flattens to a list
+    of dicts so it fits the MCP text-block return shape neatly."""
+    try:
+        limit = int(args.get("limit") or 20)
+    except (TypeError, ValueError):
+        limit = 20
+    limit = max(1, min(limit, 100))
+
+    rows = (await session.execute(
+        select(Artifact).where(
+            Artifact.owner_id == user.id,
+            Artifact.deleted_at.is_(None),
+        ).order_by(Artifact.created_at.desc()).limit(limit)
+    )).scalars().all()
+
+    out = [{
+        "short_id": a.short_id,
+        "name": a.name,
+        "url": _build_url(a.short_id, a.slug),
+        "mime_type": a.mime_type,
+        "visibility": a.visibility,
+        "version": a.current_version,
+        "created_at": a.created_at.isoformat(),
+        "expires_at": a.expires_at.isoformat() if a.expires_at else None,
+    } for a in rows]
+    return _text_block(out)
+
+
 TOOL_DISPATCH = {
     "search_wiki": _tool_search,
     "list_pages": _tool_list_pages,
@@ -333,6 +526,9 @@ TOOL_DISPATCH = {
     "list_my_drafts": _tool_list_my_drafts,
     "list_review_queue": _tool_list_review_queue,
     "create_draft": _tool_create_draft,
+    "publish_artifact": _tool_publish_artifact,
+    "update_artifact": _tool_update_artifact,
+    "list_my_artifacts": _tool_list_my_artifacts,
 }
 
 
