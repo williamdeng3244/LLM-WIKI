@@ -1,6 +1,6 @@
 """Settings loaded from env."""
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -97,6 +97,23 @@ class Settings(BaseSettings):
     # pulls multi-GB of ML model weights and CPU parsing is slow.
     mineru_enabled: bool = False
     mineru_url: str = "http://mineru:8080"
+
+    # ── Gated artifact publishing (display.dev / Flowershow style) ─────
+    # Self-contained HTML / Markdown / plain-text payloads published
+    # behind the wiki's auth boundary, addressable at /a/<short_id>.
+    # See backend/app/models/artifact.py.
+    artifacts_storage_dir: Path = Path("/data/artifacts")
+    # 10 MB per artifact body. The viewer's outer shell adds ~2 KB on
+    # top; the iframe sandbox isolates large client-side JS payloads so
+    # users can publish D3 dashboards, Observable embeds, etc.
+    artifacts_max_body_bytes: int = 10 * 1024 * 1024
+    # Public visibility (no auth at all) is OFF by default. An admin
+    # flips this to allow visibility=public; until they do, the publish
+    # endpoint returns 403 when that visibility is requested.
+    artifacts_allow_public: bool = False
+    # Blank = artifacts never auto-expire. Set to an int to apply a
+    # default expiry to artifacts whose creator didn't pick one.
+    artifacts_default_expiry_days: Optional[int] = None
 
 
 settings = Settings()

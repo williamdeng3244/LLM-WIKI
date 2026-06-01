@@ -71,6 +71,10 @@ services:
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:3000/auth/callback}
       OIDC_SCOPES: ${OIDC_SCOPES:-openid email profile}
       DEFAULT_OIDC_ROLE: ${DEFAULT_OIDC_ROLE:-reader}
+      ARTIFACTS_STORAGE_DIR: ${ARTIFACTS_STORAGE_DIR:-/data/artifacts}
+      ARTIFACTS_MAX_BODY_BYTES: ${ARTIFACTS_MAX_BODY_BYTES:-10485760}
+      ARTIFACTS_ALLOW_PUBLIC: ${ARTIFACTS_ALLOW_PUBLIC:-false}
+      ARTIFACTS_DEFAULT_EXPIRY_DAYS: ${ARTIFACTS_DEFAULT_EXPIRY_DAYS:-}
     volumes:
       - ./vault:/vault
       - ./raw:/raw
@@ -79,6 +83,9 @@ services:
       # Bundled demo pages, read-only. Only imported when
       # SEED_EXAMPLES=true (see config.py).
       - ./examples/vault:/examples/vault:ro
+      # Gated artifact bodies (display.dev / Flowershow style share links).
+      # Named volume so blobs survive container rebuilds.
+      - artifacts_data:/data/artifacts
     ports:
       - "8000:8000"
     # Python is in the slim image (curl is not). start_period gives the
@@ -200,3 +207,4 @@ volumes:
   db_data:
   redis_data:
   mineru_models:
+  artifacts_data:

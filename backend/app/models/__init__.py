@@ -15,6 +15,11 @@ from app.models.lint import (
     LintIssueSeverity, LintIssueStatus,
 )
 from app.models.bookmark import Bookmark
+from app.models.artifact import (
+    Artifact, ArtifactVersion, ArtifactAccessLog,
+    VISIBILITY_COMPANY, VISIBILITY_SPECIFIC, VISIBILITY_PUBLIC,
+    VALID_VISIBILITIES, ALLOWED_MIME_TYPES,
+)
 
 __all__ = [
     "User", "ApiToken", "Role", "ROLE_RANK",
@@ -27,4 +32,7 @@ __all__ = [
     "LintReport", "LintReportStatus", "LintIssue", "LintIssueKind",
     "LintIssueSeverity", "LintIssueStatus",
     "Bookmark",
+    "Artifact", "ArtifactVersion", "ArtifactAccessLog",
+    "VISIBILITY_COMPANY", "VISIBILITY_SPECIFIC", "VISIBILITY_PUBLIC",
+    "VALID_VISIBILITIES", "ALLOWED_MIME_TYPES",
 ]
