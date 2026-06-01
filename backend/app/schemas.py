@@ -384,5 +384,70 @@ class IngestApply(BaseModel):
     approved_indices: Optional[list[int]] = None  # None = approve all
 
 
+# ── Gated artifact publishing ──────────────────────────────────────────
+
+
+class ArtifactCreateResponse(BaseModel):
+    """Returned by both POST /api/artifacts and the MCP publish_artifact
+    tool. `url` is the full public link (includes PUBLIC_BASE_URL); the
+    frontend can also build it client-side from `short_id` if it prefers."""
+    short_id: str
+    url: str
+    version: int
+
+
+class ArtifactMeta(BaseModel):
+    """Metadata projection of an Artifact row, plus a `views_7d` aggregate.
+    Body bytes are never included here — fetch them from the viewer route."""
+    model_config = ConfigDict(from_attributes=True)
+    short_id: str
+    name: str
+    slug: str
+    owner_id: int
+    mime_type: str
+    visibility: str
+    current_version: int
+    expires_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    views_7d: int = 0
+
+
+class ArtifactListResponse(BaseModel):
+    """Simple offset-paginated list. Spec § 6 names cursors but the
+    existing routers all use offset-style; matching that convention."""
+    items: list[ArtifactMeta]
+    total: int
+    limit: int
+    offset: int
+
+
+class ArtifactPatchRequest(BaseModel):
+    """All fields optional — only provided ones are updated. Visibility
+    is validated server-side against VALID_VISIBILITIES; ARTIFACTS_ALLOW_PUBLIC
+    further gates whether `public` is accepted."""
+    name: Optional[str] = Field(default=None, max_length=200)
+    visibility: Optional[str] = Field(default=None, max_length=20)
+    expires_at: Optional[datetime] = None
+
+
+class ArtifactAccessLogEntry(BaseModel):
+    """One row of the artifact's view history. user_email may be None
+    if the viewer was anonymous (visibility=public) or the user has
+    since been deleted (ON DELETE SET NULL on user_id)."""
+    user_id: Optional[int] = None
+    user_email: Optional[str] = None
+    version: int
+    accessed_at: datetime
+    ip: Optional[str] = None
+    user_agent: Optional[str] = None
+
+
+class ArtifactAccessLogResponse(BaseModel):
+    items: list[ArtifactAccessLogEntry]
+    total: int
+    limit: int
+
+
 # Resolve forward reference
 DraftCreate.model_rebuild()

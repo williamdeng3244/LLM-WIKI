@@ -10,8 +10,9 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.db import Base, SessionLocal, engine
 from app.routers import (
-    admin, auth, bookmarks, chat, comments, graph, ingest_runs, mcp, mcp_tokens,
-    notifications, pages, raw_sources, revisions, search, users,
+    admin, artifacts, auth, bookmarks, chat, comments, graph, ingest_runs,
+    mcp, mcp_tokens, notifications, pages, raw_sources, revisions, search,
+    users,
 )
 from app.services.bootstrap import (
     ensure_default_admin, ensure_categories,
@@ -220,6 +221,7 @@ app.include_router(raw_sources.router, prefix="/api/raw", tags=["raw"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(ingest_runs.router, prefix="/api/ingest-runs", tags=["ingest-runs"])
 app.include_router(bookmarks.router, prefix="/api/bookmarks", tags=["bookmarks"])
+app.include_router(artifacts.router, prefix="/api/artifacts", tags=["artifacts"])
 
 
 @app.get("/api/health")

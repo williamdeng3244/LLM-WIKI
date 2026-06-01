@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     mineru_enabled: bool = False
     mineru_url: str = "http://mineru:8080"
 
+    # Public-facing base URL used for share links returned by the API
+    # and MCP tools (e.g. https://wiki.enflame.internal). Defaults to the
+    # dev frontend origin. Behind a reverse proxy this is whatever the
+    # user types into their browser — `/a/<short_id>` lives at this host.
+    public_base_url: str = "http://localhost:3000"
+
     # ── Gated artifact publishing (display.dev / Flowershow style) ─────
     # Self-contained HTML / Markdown / plain-text payloads published
     # behind the wiki's auth boundary, addressable at /a/<short_id>.

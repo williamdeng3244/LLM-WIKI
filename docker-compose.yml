@@ -71,6 +71,7 @@ services:
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:3000/auth/callback}
       OIDC_SCOPES: ${OIDC_SCOPES:-openid email profile}
       DEFAULT_OIDC_ROLE: ${DEFAULT_OIDC_ROLE:-reader}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       ARTIFACTS_STORAGE_DIR: ${ARTIFACTS_STORAGE_DIR:-/data/artifacts}
       ARTIFACTS_MAX_BODY_BYTES: ${ARTIFACTS_MAX_BODY_BYTES:-10485760}
       ARTIFACTS_ALLOW_PUBLIC: ${ARTIFACTS_ALLOW_PUBLIC:-false}
