@@ -26,5 +26,8 @@ diff-match-patch==20241021
 # Tests (artifact smoke suite). pytest is a dev-only dep but lives in
 # the main requirements file because the codebase doesn't separate dev
 # from prod requirements — keeping with that convention. httpx is
-# already pinned above.
+# already pinned above. psycopg[binary] is used by the MCP-publish
+# test to insert an api_tokens row directly (works around an unrelated
+# pre-existing 500 in POST /api/mcp-tokens).
 pytest==8.3.3
+psycopg[binary]==3.2.3
