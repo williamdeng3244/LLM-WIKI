@@ -32,6 +32,14 @@ user whose token they hold — no separate "agent users".
   stability levels (open / stable / locked) gate auto-publish vs. queue.
 - **Personal MCP tokens** — connect Claude Desktop / Cursor / etc. to the wiki
   as yourself. Drafts created via MCP route through the existing review queue.
+- **Gated artifacts** — `display.dev` / Flowershow-style share links. Right-click
+  a page → *Publish as gated link* (or upload a stand-alone HTML / Markdown /
+  text file) → get a permanent `/a/<short_id>` URL. The viewer renders HTML in
+  a `sandbox`ed iframe (no `allow-same-origin`) so artifact JS can't read the
+  wiki session cookie, and the same auth gate that protects pages protects the
+  link. MCP tools `publish_artifact` / `update_artifact` / `list_my_artifacts`
+  let LLM clients hand the user a working link directly. See
+  [docs/ARTIFACTS.md](docs/ARTIFACTS.md).
 - **Raw → agent → wiki ingest** — drop a PDF or markdown source into the
   Sources panel, click Ingest. Two-phase pipeline:
   1. **Plan** — the agent reads the source, the playbook, and a retrieval

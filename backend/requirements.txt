@@ -22,3 +22,9 @@ PyJWT==2.9.0
 python-multipart==0.0.12
 sentence-transformers==3.2.1
 diff-match-patch==20241021
+
+# Tests (artifact smoke suite). pytest is a dev-only dep but lives in
+# the main requirements file because the codebase doesn't separate dev
+# from prod requirements — keeping with that convention. httpx is
+# already pinned above.
+pytest==8.3.3

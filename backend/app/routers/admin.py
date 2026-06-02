@@ -20,9 +20,10 @@ from app.core.auth import current_user
 from app.core.config import settings
 from app.core.db import get_session
 from app.models import (
-    AuditLog, LintIssue, LintIssueStatus, LintReport, LintReportStatus,
-    Role, User,
+    Artifact, ArtifactVersion, AuditLog, LintIssue, LintIssueStatus,
+    LintReport, LintReportStatus, Role, User,
 )
+from app.services.artifact_storage import get_storage
 from app.schemas import LintIssueDismiss, LintIssueOut, LintReportOut
 
 router = APIRouter()
@@ -222,3 +223,86 @@ async def mark_issue_acted(
         await session.commit()
         await session.refresh(issue)
     return issue
+
+
+# ── Admin artifact controls (spec § 10) ────────────────────────────────
+
+
+@router.get("/artifacts")
+async def admin_list_artifacts(
+    include_deleted: bool = True,
+    limit: int = 100,
+    offset: int = 0,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """List every artifact in the instance, regardless of owner.
+
+    Spec § 10: "Admin can list and revoke any user's artifacts via
+    /api/admin/artifacts." Includes soft-deleted rows by default so an
+    admin can see what's been removed and (via the hard-delete endpoint
+    below) reclaim disk space."""
+    if user.role != Role.admin:
+        raise HTTPException(403, "Admins only")
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    stmt = select(Artifact)
+    if not include_deleted:
+        stmt = stmt.where(Artifact.deleted_at.is_(None))
+    rows = (await session.execute(
+        stmt.order_by(Artifact.created_at.desc()).limit(limit).offset(offset)
+    )).scalars().all()
+    return {
+        "items": [
+            {
+                "short_id": a.short_id, "name": a.name, "owner_id": a.owner_id,
+                "mime_type": a.mime_type, "visibility": a.visibility,
+                "current_version": a.current_version,
+                "created_at": a.created_at.isoformat(),
+                "expires_at": a.expires_at.isoformat() if a.expires_at else None,
+                "deleted_at": a.deleted_at.isoformat() if a.deleted_at else None,
+            }
+            for a in rows
+        ],
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.delete("/artifacts/{short_id}", status_code=204)
+async def admin_hard_delete_artifact(
+    short_id: str,
+    user: User = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Hard-delete an artifact — removes the row AND every version's
+    blob from storage. The CRUD router's `DELETE /api/artifacts/{sid}`
+    is a soft delete (sets `deleted_at`); this is the irreversible
+    follow-up an admin uses to reclaim disk space or revoke a misused
+    share link."""
+    if user.role != Role.admin:
+        raise HTTPException(403, "Admins only")
+    art = (await session.execute(
+        select(Artifact).where(Artifact.short_id == short_id)
+    )).scalar_one_or_none()
+    if art is None:
+        return  # idempotent 204
+
+    versions = (await session.execute(
+        select(ArtifactVersion).where(ArtifactVersion.artifact_id == art.id)
+    )).scalars().all()
+    storage = get_storage()
+    for v in versions:
+        try:
+            await storage.delete(v.storage_path)
+        except Exception:  # noqa: BLE001
+            # Best-effort blob cleanup — the row delete still wins.
+            log.exception("admin: failed to delete blob %s", v.storage_path)
+
+    session.add(AuditLog(
+        actor_id=user.id, action="artifact.hard_delete",
+        target_type="artifact", target_id=art.id,
+        payload={"short_id": short_id, "name": art.name, "owner_id": art.owner_id},
+    ))
+    await session.delete(art)  # cascades to versions + access_log
+    await session.commit()
