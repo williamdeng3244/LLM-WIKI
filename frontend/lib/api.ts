@@ -205,6 +205,53 @@ export type AuthConfigDTO = {
 };
 export type LoginResponseDTO = { token: string; user: User };
 
+// ── Gated artifacts (display.dev / Flowershow style share links) ─────
+export type ArtifactVisibility = 'company' | 'specific' | 'public';
+export type ArtifactMime = 'text/html' | 'text/markdown' | 'text/plain';
+export type ArtifactMeta = {
+  short_id: string;
+  name: string;
+  slug: string;
+  owner_id: number;
+  mime_type: string;
+  visibility: ArtifactVisibility;
+  current_version: number;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  views_7d: number;
+};
+export type ArtifactCreateResponse = {
+  short_id: string;
+  url: string;
+  version: number;
+};
+export type ArtifactListResponse = {
+  items: ArtifactMeta[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+export type ArtifactAccessLogEntry = {
+  user_id: number | null;
+  user_email: string | null;
+  version: number;
+  accessed_at: string;
+  ip: string | null;
+  user_agent: string | null;
+};
+export type ArtifactAccessLogResponse = {
+  items: ArtifactAccessLogEntry[];
+  total: number;
+  limit: number;
+};
+export type PublishArtifactOptions = {
+  name?: string;
+  visibility?: ArtifactVisibility;
+  // ISO string; pass null to keep `null` (never expires).
+  expires_at?: string | null;
+};
+
 // ── API ──────────────────────────────────────────────────────────────
 export const api = {
   // Auth
@@ -405,4 +452,64 @@ export const api = {
   deleteRawSource: (id: number) =>
     call<void>(`/raw/${id}`, { method: 'DELETE' }),
   rawSourceDownloadURL: (id: number) => `${API_BASE}/raw/${id}/download`,
+
+  // ── Gated artifacts ─────────────────────────────────────────────────
+  createArtifactFromFile: async (
+    file: File, opts: PublishArtifactOptions = {},
+  ): Promise<ArtifactCreateResponse> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (opts.name) fd.append('name', opts.name);
+    if (opts.visibility) fd.append('visibility', opts.visibility);
+    if (opts.expires_at) fd.append('expires_at', opts.expires_at);
+    const res = await fetch(`${API_BASE}/artifacts`, {
+      method: 'POST', body: fd, headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  },
+  createArtifactFromPage: (
+    pagePath: string, opts: PublishArtifactOptions = {},
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts.name) qs.set('name', opts.name);
+    if (opts.visibility) qs.set('visibility', opts.visibility);
+    if (opts.expires_at) qs.set('expires_at', opts.expires_at);
+    const tail = qs.toString() ? `?${qs.toString()}` : '';
+    // page_path is `:path`-style on the backend, so slashes are fine.
+    return call<ArtifactCreateResponse>(
+      `/artifacts/from-page/${encodeURI(pagePath)}${tail}`,
+      { method: 'POST' },
+    );
+  },
+  uploadArtifactVersion: async (
+    shortId: string, file: File,
+  ): Promise<ArtifactCreateResponse> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${API_BASE}/artifacts/${shortId}/versions`, {
+      method: 'POST', body: fd, headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  },
+  listMyArtifacts: (limit = 20, offset = 0) =>
+    call<ArtifactListResponse>(
+      `/artifacts?limit=${limit}&offset=${offset}`,
+    ),
+  getArtifact: (shortId: string) =>
+    call<ArtifactMeta>(`/artifacts/${shortId}`),
+  patchArtifact: (
+    shortId: string,
+    body: { name?: string; visibility?: ArtifactVisibility; expires_at?: string | null },
+  ) =>
+    call<ArtifactMeta>(`/artifacts/${shortId}`, {
+      method: 'PATCH', body: JSON.stringify(body),
+    }),
+  deleteArtifact: (shortId: string) =>
+    call<void>(`/artifacts/${shortId}`, { method: 'DELETE' }),
+  getArtifactAccessLog: (shortId: string, limit = 50) =>
+    call<ArtifactAccessLogResponse>(
+      `/artifacts/${shortId}/access-log?limit=${limit}`,
+    ),
 };

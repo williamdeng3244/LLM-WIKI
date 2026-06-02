@@ -10,8 +10,9 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.db import Base, SessionLocal, engine
 from app.routers import (
-    admin, auth, bookmarks, chat, comments, graph, ingest_runs, mcp, mcp_tokens,
-    notifications, pages, raw_sources, revisions, search, users,
+    admin, artifact_viewer, artifacts, auth, bookmarks, chat, comments,
+    graph, ingest_runs, mcp, mcp_tokens, notifications, pages, raw_sources,
+    revisions, search, users,
 )
 from app.services.bootstrap import (
     ensure_default_admin, ensure_categories,
@@ -220,6 +221,10 @@ app.include_router(raw_sources.router, prefix="/api/raw", tags=["raw"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(ingest_runs.router, prefix="/api/ingest-runs", tags=["ingest-runs"])
 app.include_router(bookmarks.router, prefix="/api/bookmarks", tags=["bookmarks"])
+app.include_router(artifacts.router, prefix="/api/artifacts", tags=["artifacts"])
+# The viewer mounts at the app root (NOT under /api) — `/a/<short_id>`
+# is the public, user-facing share-link surface. See spec § 7.
+app.include_router(artifact_viewer.router, prefix="/a", tags=["artifacts"])
 
 
 @app.get("/api/health")

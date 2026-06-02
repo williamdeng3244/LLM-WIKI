@@ -1,0 +1,369 @@
+"""Gated artifact viewer — the security boundary.
+
+Mounted at the app root (`/a/<short_id>`), NOT under `/api`. Spec § 7.
+
+Two routes:
+
+  GET /a/{token}/raw  → the raw body bytes with strict CSP, used as the
+                        iframe `src` for HTML artifacts. Auth-gated
+                        identically to the shell.
+  GET /a/{token}      → the outer shell (top bar + "Back to wiki" +
+                        iframe for HTML or inline rendered Markdown).
+
+`{token}` is `<short_id>` or `<short_id>-<kebab-slug>`; we keep only the
+characters up to the first hyphen.
+
+Auth flow:
+  1. Resolve the artifact.
+  2. If missing / soft-deleted / expired → **generic 404** (spec § 10:
+     no existence leak — a probe can't tell deleted from never-existed).
+  3. If visibility=public AND ARTIFACTS_ALLOW_PUBLIC=true → skip auth.
+  4. Otherwise require an authenticated user (cookie session OR `wt_*`
+     token). Missing → **302 to {public_base_url}/login?next=/a/<token>**.
+  5. Log the view with the *viewer's* user_id (NOT the owner's — spec § 10).
+  6. Return shell (HTML) or inline rendered markdown.
+
+Sandboxing (the load-bearing part — see spec § 10 checklist):
+  - The iframe's sandbox attribute is exactly
+      sandbox="allow-scripts allow-popups allow-forms"
+    with no `allow-same-origin`. That's what isolates artifact JS from
+    the wiki session cookie, even though both are on the same origin —
+    a sandboxed iframe without `allow-same-origin` is treated as a
+    unique origin and can't see document.cookie / localStorage / etc.
+  - The shell page carries `X-Frame-Options: SAMEORIGIN` so a third
+    party can't embed it.
+  - The `/raw` response carries a strict CSP that allows the inline
+    scripting/styling artifacts actually need (D3, Tailwind via CDN, …)
+    but blocks form submissions to third-party origins.
+"""
+from __future__ import annotations
+
+import html
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.auth import optional_user
+from app.core.config import settings
+from app.core.db import get_session
+from app.models import (
+    Artifact, ArtifactAccessLog, ArtifactVersion, User, VISIBILITY_PUBLIC,
+)
+from app.services.artifact_storage import get_storage
+from app.services.markdown_render import render_markdown_to_html
+
+router = APIRouter()
+
+
+# ── Token / artifact resolution ────────────────────────────────────────
+
+
+def _short_id_of(token: str) -> str:
+    """`token` is `<short_id>` or `<short_id>-<slug>`. short_id never
+    contains a hyphen (see generate_short_id), so split-on-first-hyphen
+    is unambiguous."""
+    return token.split("-", 1)[0]
+
+
+async def _load_viewable(
+    session: AsyncSession, token: str, *, requested_version: Optional[int],
+) -> Optional[tuple[Artifact, ArtifactVersion]]:
+    """Resolve `token` to (artifact, version) for viewing. Returns None
+    on ANY failure condition — missing, soft-deleted, expired, version
+    missing — so the caller renders a generic 404 (no existence leak)."""
+    short_id = _short_id_of(token)
+    if not short_id:
+        return None
+    art = (await session.execute(
+        select(Artifact).where(Artifact.short_id == short_id)
+    )).scalar_one_or_none()
+    if art is None or art.deleted_at is not None:
+        return None
+    if art.expires_at is not None and art.expires_at < datetime.now(timezone.utc):
+        return None
+    ver_num = requested_version if requested_version is not None else art.current_version
+    version = (await session.execute(
+        select(ArtifactVersion).where(
+            ArtifactVersion.artifact_id == art.id,
+            ArtifactVersion.version == ver_num,
+        )
+    )).scalar_one_or_none()
+    if version is None:
+        return None
+    return art, version
+
+
+def _login_redirect(token: str) -> RedirectResponse:
+    """Send the unauthenticated viewer to the wiki login screen with a
+    `next=` bounce-back. Uses PUBLIC_BASE_URL so the redirect works even
+    when the backend is hit directly during dev (the frontend hosts the
+    login page)."""
+    next_path = f"/a/{token}"
+    target = f"{settings.public_base_url.rstrip('/')}/login?next={next_path}"
+    return RedirectResponse(target, status_code=302)
+
+
+def _generic_404() -> HTMLResponse:
+    """One response shape for missing / deleted / expired. Plain text so
+    we don't leak any artifact metadata."""
+    return HTMLResponse(
+        "<!doctype html><meta charset=utf-8><title>Not found</title>"
+        "<p>This artifact is not available.</p>",
+        status_code=404,
+    )
+
+
+def _client_ip(request: Request) -> Optional[str]:
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        # First entry is the originating client; the rest are proxies.
+        return xff.split(",")[0].strip()[:64] or None
+    return (request.client.host[:64] if request.client else None)
+
+
+async def _record_access(
+    session: AsyncSession,
+    *,
+    artifact: Artifact,
+    version: int,
+    user: Optional[User],
+    request: Request,
+) -> None:
+    """Append an ArtifactAccessLog row. user_id can be None for public
+    anonymous views; it's the *viewer's* id when authenticated, not the
+    artifact owner's — that distinction is the security-relevant one."""
+    log = ArtifactAccessLog(
+        artifact_id=artifact.id,
+        user_id=(user.id if user is not None else None),
+        version=version,
+        ip=_client_ip(request),
+        user_agent=(request.headers.get("User-Agent") or "")[:500] or None,
+    )
+    session.add(log)
+    await session.commit()
+
+
+# ── Shell rendering ────────────────────────────────────────────────────
+
+
+_SHELL_CSS = """
+:root {
+  color-scheme: light dark;
+  --bg: #0b0f1a;
+  --panel: rgba(255,255,255,0.04);
+  --border: rgba(255,255,255,0.08);
+  --ink: #e6e9f2;
+  --muted: #9aa1b8;
+  --accent: #82a4ff;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f8fb;
+    --panel: rgba(0,0,0,0.03);
+    --border: rgba(0,0,0,0.10);
+    --ink: #1a1f2e;
+    --muted: #5a6273;
+    --accent: #3a63d9;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex; flex-direction: column;
+}
+header.shell {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px; border-bottom: 1px solid var(--border);
+  background: var(--panel); backdrop-filter: blur(6px);
+  font-size: 13px;
+}
+header.shell .title { font-weight: 600; }
+header.shell .meta { color: var(--muted); }
+header.shell .spacer { flex: 1; }
+header.shell a, header.shell button {
+  color: var(--accent); background: transparent; border: 0;
+  font: inherit; cursor: pointer; text-decoration: none;
+  padding: 4px 8px; border-radius: 4px;
+}
+header.shell a:hover, header.shell button:hover { background: var(--border); }
+main.shell { flex: 1; display: flex; min-height: 0; }
+main.shell iframe { flex: 1; width: 100%; border: 0; background: white; }
+article.shell {
+  flex: 1; padding: 32px 48px; overflow: auto; max-width: 860px;
+  margin: 0 auto; line-height: 1.55;
+}
+article.shell pre {
+  background: var(--panel); padding: 12px; border-radius: 6px; overflow: auto;
+}
+article.shell code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+article.shell a { color: var(--accent); }
+""".strip()
+
+
+# The sandbox attribute is load-bearing — keep this exact string and
+# never add `allow-same-origin` (see spec § 10 + the header docstring).
+_IFRAME_SANDBOX = "allow-scripts allow-popups allow-forms"
+
+
+def _shell_html(
+    *, artifact: Artifact, version: int, owner_email: str,
+    inner: str, is_iframe: bool,
+) -> str:
+    name = html.escape(artifact.name)
+    owner = html.escape(owner_email or "(unknown)")
+    back = html.escape(settings.public_base_url.rstrip("/") or "/")
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{name}</title>
+  <style>{_SHELL_CSS}</style>
+</head>
+<body>
+  <header class="shell">
+    <span class="title">{name}</span>
+    <span class="meta">v{version}</span>
+    <span class="meta">·</span>
+    <span class="meta">Shared by {owner}</span>
+    <span class="spacer"></span>
+    <a href="{back}">← Back to wiki</a>
+    <button onclick="navigator.clipboard.writeText(window.location.href)">Copy link</button>
+  </header>
+  {inner if is_iframe else f'<article class="shell">{inner}</article>'}
+</body>
+</html>"""
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────
+
+
+_SHELL_HEADERS = {
+    # Spec § 7. SAMEORIGIN means third-party sites can't embed the shell.
+    "X-Frame-Options": "SAMEORIGIN",
+    # Hide the referring URL when the user clicks a link inside the
+    # artifact — don't tell third-party sites the wiki host.
+    "Referrer-Policy": "same-origin",
+    # Don't let intermediaries cache an artifact body; the auth gate
+    # decides visibility on every request.
+    "Cache-Control": "private, no-store",
+}
+
+# Strict CSP for the raw body. Allows the inline JS/CSS real artifacts
+# need (D3 charts, Observable embeds, Tailwind via CDN) while blocking
+# form submissions to third-party origins — see spec § 10.
+_RAW_CSP = (
+    "default-src 'self'; "
+    "script-src 'unsafe-inline' 'unsafe-eval' https: data:; "
+    "style-src 'unsafe-inline' https: data:; "
+    "img-src * data: blob:; "
+    "font-src * data:; "
+    "connect-src * data:; "
+    "form-action 'self';"
+)
+
+
+@router.get("/{token}/raw")
+async def view_raw(
+    token: str,
+    request: Request,
+    v: Optional[int] = None,
+    session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(optional_user),
+):
+    """Body bytes for the iframe `src`. Auth-gated identically to the
+    shell — otherwise a sandboxed iframe is meaningless."""
+    pair = await _load_viewable(session, token, requested_version=v)
+    if pair is None:
+        return _generic_404()
+    art, version = pair
+
+    if art.visibility != VISIBILITY_PUBLIC or not settings.artifacts_allow_public:
+        if user is None:
+            return _login_redirect(token)
+
+    body = await get_storage().load(version.storage_path)
+    # NOTE: we deliberately don't log access from /raw — only the shell
+    # logs once. /raw fires whenever the iframe re-renders / the user
+    # refreshes, and double-counting would skew "views_7d".
+
+    media = art.mime_type if art.mime_type.startswith("text/") else "text/plain"
+    return Response(
+        content=body,
+        media_type=f"{media}; charset=utf-8",
+        headers={
+            "Content-Security-Policy": _RAW_CSP,
+            **_SHELL_HEADERS,
+        },
+    )
+
+
+@router.get("/{token}")
+async def view_shell(
+    token: str,
+    request: Request,
+    v: Optional[int] = None,
+    session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(optional_user),
+):
+    pair = await _load_viewable(session, token, requested_version=v)
+    if pair is None:
+        return _generic_404()
+    art, version = pair
+
+    is_public_view = (
+        art.visibility == VISIBILITY_PUBLIC and settings.artifacts_allow_public
+    )
+    if not is_public_view and user is None:
+        return _login_redirect(token)
+
+    await _record_access(
+        session, artifact=art, version=version.version,
+        user=user, request=request,
+    )
+
+    owner_email = ""
+    if art.owner_id is not None:
+        owner = await session.get(User, art.owner_id)
+        if owner is not None:
+            owner_email = owner.email
+
+    if art.mime_type == "text/html":
+        # The iframe URL preserves the version pin if one was requested
+        # so refreshing the inner frame doesn't silently jump to current.
+        raw_path = f"/a/{art.short_id}/raw"
+        if v is not None:
+            raw_path += f"?v={v}"
+        inner = (
+            f'<main class="shell">'
+            f'  <iframe src="{html.escape(raw_path)}" '
+            f'          sandbox="{_IFRAME_SANDBOX}" '
+            f'          referrerpolicy="same-origin" '
+            f'          allow="clipboard-read; clipboard-write"></iframe>'
+            f'</main>'
+        )
+        shell = _shell_html(
+            artifact=art, version=version.version, owner_email=owner_email,
+            inner=inner, is_iframe=True,
+        )
+    elif art.mime_type == "text/markdown":
+        body = (await get_storage().load(version.storage_path)).decode("utf-8", "replace")
+        rendered = render_markdown_to_html(body)
+        shell = _shell_html(
+            artifact=art, version=version.version, owner_email=owner_email,
+            inner=rendered, is_iframe=False,
+        )
+    else:  # text/plain (or any other text/*)
+        body = (await get_storage().load(version.storage_path)).decode("utf-8", "replace")
+        shell = _shell_html(
+            artifact=art, version=version.version, owner_email=owner_email,
+            inner=f"<pre>{html.escape(body)}</pre>", is_iframe=False,
+        )
+
+    return HTMLResponse(shell, headers=_SHELL_HEADERS)

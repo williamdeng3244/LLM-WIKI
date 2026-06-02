@@ -5,7 +5,13 @@ const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
     const target = process.env.BACKEND_URL || 'http://backend:8000';
-    return [{ source: '/api/:path*', destination: `${target}/api/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${target}/api/:path*` },
+      // Gated artifact viewer — backend serves the auth-gated shell and
+      // the raw body (with strict CSP) at /a/<short_id>[/raw]. Proxying
+      // keeps one canonical implementation; no Next.js shell duplicates.
+      { source: '/a/:path*', destination: `${target}/a/:path*` },
+    ];
   },
   // Dedupe `three`. We pin 0.160 in package.json but `3d-force-graph`
   // pulls a nested 0.184 — webpack bundles BOTH, which breaks class

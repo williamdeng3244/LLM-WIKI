@@ -7,7 +7,10 @@ import {
   ChevronsDownUp, ChevronsUpDown,
   Copy, Clipboard, History, Bookmark, BookmarkCheck, FolderInput, Trash2,
   ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon, HelpCircle,
+  Share2,
 } from 'lucide-react';
+import PublishArtifactModal from '@/components/artifacts/PublishArtifactModal';
+import ArtifactsPanel from '@/components/artifacts/ArtifactsPanel';
 import FileTree, {
   type FileTreeHandle, type SortMode, type ContextMenuInfo,
 } from '@/components/FileTree';
@@ -66,6 +69,18 @@ export default function Home() {
   const [showSearch, setShowSearch] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showGraphSettings, setShowGraphSettings] = useState(false);
+  // Gated artifacts. `publishTarget` drives PublishArtifactModal:
+  //   { kind: 'page', pagePath, initialName }  — file-tree right-click + page-tab kebab
+  //   { kind: 'file' }                          — Upload button on ArtifactsPanel
+  // null means modal closed. `artifactsTick` is bumped after a publish
+  // so an open ArtifactsPanel auto-refreshes.
+  const [showArtifactsPanel, setShowArtifactsPanel] = useState(false);
+  const [publishTarget, setPublishTarget] = useState<
+    | { kind: 'page'; pagePath: string; initialName?: string }
+    | { kind: 'file' }
+    | null
+  >(null);
+  const [artifactsTick, setArtifactsTick] = useState(0);
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -514,6 +529,23 @@ export default function Home() {
         onClick: () => { copyToClipboard(info.pagePath); },
       },
       {
+        // "Publish as gated link" — snapshots the page's published
+        // markdown into a fresh artifact under /a/<short_id>. The
+        // wiki page itself is untouched; the artifact body is a
+        // point-in-time copy that survives later edits/deletes of
+        // the source page.
+        kind: 'item',
+        label: 'Publish as gated link',
+        icon: <Share2 size={13} />,
+        disabled: !user,
+        hint: !user ? t('menu.page.bookmark.hint') : undefined,
+        onClick: () => setPublishTarget({
+          kind: 'page',
+          pagePath: info.pagePath,
+          initialName: getTabTitle(info.pagePath),
+        }),
+      },
+      {
         kind: 'item',
         label: t('menu.file.history'),
         icon: <History size={13} />,
@@ -841,6 +873,15 @@ export default function Home() {
             title={t('topbar.mcp.title')}
           >
             <Plug size={14} />
+          </button>
+
+          <button
+            className="btn btn-icon"
+            onClick={() => setShowArtifactsPanel(true)}
+            title="Artifacts"
+            aria-label="Open artifacts panel"
+          >
+            <Share2 size={14} />
           </button>
 
           <div className="relative">
@@ -1223,6 +1264,29 @@ export default function Home() {
           path={historyForPath}
           users={usersById}
           onClose={() => setHistoryForPath(null)}
+        />
+      )}
+
+      {/* Gated artifacts UI. The panel and modal are decoupled so the
+          modal can also open from the file-tree right-click without
+          the panel being mounted. */}
+      {showArtifactsPanel && (
+        <ArtifactsPanel
+          onClose={() => setShowArtifactsPanel(false)}
+          onUploadClick={() => setPublishTarget({ kind: 'file' })}
+          refreshTick={artifactsTick}
+        />
+      )}
+      {publishTarget && (
+        <PublishArtifactModal
+          mode={publishTarget}
+          // ARTIFACTS_ALLOW_PUBLIC is a server-side flag; we don't have
+          // a probe for it yet, so default to false (Public radio stays
+          // disabled). A trivial /api/health extension can light it up
+          // later — flagged in the PR description.
+          allowPublic={false}
+          onClose={() => setPublishTarget(null)}
+          onPublished={() => setArtifactsTick((t) => t + 1)}
         />
       )}
     </div>

@@ -14,11 +14,15 @@ services:
     build: !reset null
     image: ghcr.io/williamdeng3244/llm-wiki-backend:${TAG:-latest}
     command: !reset null
+    # `!override` fully replaces the base file's volume list (it does
+    # NOT merge), so the artifact storage mount has to be re-listed here
+    # too — otherwise prod loses persistence for /a/<short_id> bodies.
     volumes: !override
       - ./vault:/vault
       - ./raw:/raw
       - ./config:/config
       - ./examples/vault:/examples/vault:ro
+      - artifacts_data:/data/artifacts
 
   worker:
     build: !reset null
