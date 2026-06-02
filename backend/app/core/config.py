@@ -1,6 +1,7 @@
 """Settings loaded from env."""
 from pathlib import Path
 from typing import Literal, Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -120,6 +121,18 @@ class Settings(BaseSettings):
     # Blank = artifacts never auto-expire. Set to an int to apply a
     # default expiry to artifacts whose creator didn't pick one.
     artifacts_default_expiry_days: Optional[int] = None
+
+    # The docker-compose default for ARTIFACTS_DEFAULT_EXPIRY_DAYS is
+    # `${VAR:-}` → empty string when the operator hasn't set it. Pydantic
+    # can't coerce "" into Optional[int]; coerce the empty case to None
+    # explicitly here so the container boots cleanly with the default
+    # config.
+    @field_validator("artifacts_default_expiry_days", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, v: object) -> object:
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
 
 settings = Settings()
