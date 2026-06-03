@@ -370,6 +370,9 @@ async def view_raw(
     if pair is None:
         return _generic_404()
     art, version = pair
+    # A bundle has no single "raw" body — its files come from /{path}.
+    if art.is_bundle:
+        return _generic_404()
 
     if art.visibility != VISIBILITY_PUBLIC or not settings.artifacts_allow_public:
         if user is None:
@@ -428,7 +431,12 @@ async def view_shell(
     if art.mime_type == "text/html":
         # The iframe URL preserves the version pin if one was requested
         # so refreshing the inner frame doesn't silently jump to current.
-        raw_path = f"/a/{art.short_id}/raw"
+        # Bundles are served from the zip at /a/<sid>/index.html (relative
+        # assets resolve against it); single files come from /raw.
+        raw_path = (
+            f"/a/{art.short_id}/index.html" if art.is_bundle
+            else f"/a/{art.short_id}/raw"
+        )
         if v is not None:
             raw_path += f"?v={v}"
         inner = (
@@ -458,3 +466,60 @@ async def view_shell(
         )
 
     return HTMLResponse(shell, headers=_SHELL_HEADERS)
+
+
+@router.get("/{token}/{asset_path:path}")
+async def view_bundle_asset(
+    token: str,
+    asset_path: str,
+    request: Request,
+    v: Optional[int] = None,
+    session: AsyncSession = Depends(get_session),
+    user: Optional[User] = Depends(_viewer_user),
+):
+    """Serve one file out of a directory-bundle artifact's zip.
+
+    Declared last so the literal `/{token}/raw` and the exact `/{token}`
+    shell match first. Same auth gate as the shell; path-traversal-safe —
+    only exact zip members are served, never arbitrary filesystem paths."""
+    import io
+    import mimetypes
+    import zipfile
+
+    pair = await _load_viewable(session, token, requested_version=v)
+    if pair is None:
+        return _generic_404()
+    art, version = pair
+    if not art.is_bundle:
+        return _generic_404()
+
+    # Auth gate — identical to the shell / raw body.
+    if art.visibility != VISIBILITY_PUBLIC or not settings.artifacts_allow_public:
+        if user is None:
+            return _login_redirect(token)
+    if art.visibility == VISIBILITY_PRIVATE and not _can_view_private(art, user):
+        return _generic_404()
+
+    # Resolve the requested member; a bare path or a directory → index.html.
+    member = (asset_path or "").replace("\\", "/").lstrip("/")
+    if member == "" or member.endswith("/"):
+        member = member + "index.html"
+    if ".." in member.split("/"):
+        return _generic_404()
+
+    zip_bytes = await get_storage().load(version.storage_path)
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        data = zf.read(member)
+    except (zipfile.BadZipFile, KeyError):
+        return _generic_404()
+
+    media, _ = mimetypes.guess_type(member)
+    media = media or "application/octet-stream"
+    if media.startswith("text/") or media in ("application/javascript", "application/json"):
+        media += "; charset=utf-8"
+    return Response(
+        content=data,
+        media_type=media,
+        headers={"Content-Security-Policy": _RAW_CSP, **_SHELL_HEADERS},
+    )

@@ -346,3 +346,59 @@ def test_access_log_recorded():
         assert logs["total"] >= 1
         viewer_ids = {row["user_id"] for row in logs["items"]}
         assert viewer_id in viewer_ids
+
+
+# ── 11: directory bundle publish + asset serving ───────────────────────
+
+
+def test_bundle_publish_and_serve():
+    """A zipped directory publishes as one artifact and serves its files at
+    /a/<sid>/<path>. Missing index.html is rejected; /raw and missing
+    members 404."""
+    import io
+    import zipfile
+
+    email = _email()
+
+    # Bundle without index.html → 400.
+    bad = io.BytesIO()
+    with zipfile.ZipFile(bad, "w") as zf:
+        zf.writestr("style.css", "h1{color:red}")
+    with _client(email) as c:
+        r = c.post(
+            "/api/artifacts/bundle",
+            files={"file": ("site.zip", bad.getvalue(), "application/zip")},
+            data={"name": "No index", "visibility": "wiki"},
+        )
+        assert r.status_code == 400, r.text
+
+    # Valid bundle: index.html + a relative asset.
+    good = io.BytesIO()
+    with zipfile.ZipFile(good, "w") as zf:
+        zf.writestr("index.html", '<link rel="stylesheet" href="style.css"><h1>hi</h1>')
+        zf.writestr("style.css", "h1{color:rebeccapurple}")
+    with _client(email) as c:
+        r = c.post(
+            "/api/artifacts/bundle",
+            files={"file": ("site.zip", good.getvalue(), "application/zip")},
+            data={"name": "Bundle", "visibility": "wiki"},
+        )
+        assert r.status_code == 201, r.text
+        sid = r.json()["short_id"]
+
+        # Shell renders as an iframe pointing at the bundle's index.html.
+        shell = c.get(f"/a/{sid}")
+        assert shell.status_code == 200
+        assert f"/a/{sid}/index.html" in shell.text
+
+        # Assets serve from the zip with correct content types.
+        idx = c.get(f"/a/{sid}/index.html")
+        assert idx.status_code == 200
+        assert "text/html" in idx.headers.get("content-type", "")
+        css = c.get(f"/a/{sid}/style.css")
+        assert css.status_code == 200
+        assert "text/css" in css.headers.get("content-type", "")
+
+        # /raw is meaningless for a bundle; a missing member is a generic 404.
+        assert c.get(f"/a/{sid}/raw").status_code == 404
+        assert c.get(f"/a/{sid}/nope.js").status_code == 404

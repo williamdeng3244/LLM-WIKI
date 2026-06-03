@@ -175,12 +175,16 @@ async def persist_new_artifact(
     mime_type: str,
     visibility: str = VISIBILITY_WIKI,
     expires_at: Optional[datetime] = None,
+    is_bundle: bool = False,
 ) -> Artifact:
     """Internal: write a brand-new artifact (v1) + persist its body. Used
-    by the upload endpoint, the from-page snapshot endpoint, AND the MCP
-    `publish_artifact` tool — sharing one code path keeps validation and
-    storage layout consistent."""
-    _validate_mime(mime_type)
+    by the upload endpoint, the from-page snapshot endpoint, the directory
+    bundle endpoint, AND the MCP `publish_artifact` tool — sharing one code
+    path keeps validation and storage layout consistent."""
+    # Bundles store a .zip whose MIME isn't in the single-file allow-list;
+    # the caller has already validated the zip contents, so skip the check.
+    if not is_bundle:
+        _validate_mime(mime_type)
     _validate_visibility(visibility)
 
     if len(body) > settings.artifacts_max_body_bytes:
@@ -207,6 +211,7 @@ async def persist_new_artifact(
             visibility=visibility,
             current_version=1,
             expires_at=expires_at,
+            is_bundle=is_bundle,
         )
         session.add(artifact)
         try:
@@ -294,6 +299,54 @@ async def create_artifact_from_page(
         mime_type="text/markdown",
         visibility=visibility,
         expires_at=expires_at,
+    )
+    return ArtifactCreateResponse(
+        short_id=art.short_id,
+        url=_build_url(art.short_id, art.slug),
+        version=art.current_version,
+    )
+
+
+@router.post("/bundle", response_model=ArtifactCreateResponse, status_code=201)
+async def create_bundle(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(default=None),
+    visibility: str = Form(default=VISIBILITY_WIKI),
+    expires_at: Optional[datetime] = Form(default=None),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),
+):
+    """Publish a whole directory as one artifact. The client uploads a .zip
+    of the directory (entry point: index.html at the zip root). It's served
+    at /a/<short_id>/<path>, so relative assets (css/js/images) resolve to
+    the same origin and a multi-file site works without inlining."""
+    import io
+    import zipfile
+
+    body = await file.read()
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(body))
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "Bundle must be a .zip archive.")
+    names = zf.namelist()
+    if "index.html" not in names:
+        raise HTTPException(400, "Bundle must contain index.html at its root.")
+    # Reject path traversal / absolute members up front so the viewer can
+    # trust every archive member name it later serves.
+    for n in names:
+        norm = n.replace("\\", "/")
+        if norm.startswith("/") or ".." in norm.split("/"):
+            raise HTTPException(400, f"Unsafe path in bundle: {n}")
+
+    art = await persist_new_artifact(
+        session,
+        owner=user,
+        name=(name or file.filename or "Untitled bundle"),
+        body=body,
+        mime_type="text/html",  # entry point renders inside the sandboxed iframe
+        visibility=visibility,
+        expires_at=expires_at,
+        is_bundle=True,
     )
     return ArtifactCreateResponse(
         short_id=art.short_id,

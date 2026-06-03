@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    DateTime, ForeignKey, Integer, String, UniqueConstraint, func,
+    Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -59,9 +59,15 @@ class Artifact(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True,
     )
 
-    # text/html | text/markdown | text/plain
+    # text/html | text/markdown | text/plain. For a directory bundle this
+    # is "text/html" (the entry point) and `is_bundle` is True.
     mime_type: Mapped[str] = mapped_column(String(50))
     visibility: Mapped[str] = mapped_column(String(20), default=VISIBILITY_WIKI)
+    # True when the stored body is a .zip of a whole directory (served at
+    # /a/<short_id>/<path>, entry point index.html) rather than a single file.
+    is_bundle: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False,
+    )
 
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     expires_at: Mapped[Optional[datetime]] = mapped_column(

@@ -186,6 +186,11 @@ async def lifespan(app: FastAPI):
         await conn.execute(text(
             "UPDATE artifacts SET visibility = 'private' WHERE visibility = 'specific'"
         ))
+        # Directory-bundle artifacts (a zip served at /a/<sid>/<path>).
+        await conn.execute(text(
+            "ALTER TABLE IF EXISTS artifacts "
+            "ADD COLUMN IF NOT EXISTS is_bundle BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
     # Bootstrap admin + categories + import vault
     async with SessionLocal() as session:
         admin = await ensure_default_admin(session)

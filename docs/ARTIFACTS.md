@@ -62,21 +62,33 @@ scripts/dsp login --server http://localhost:8000 --token wt_xxxxxxxx
 scripts/dsp login --server http://localhost:8000 --email admin@example.com
 
 # Then publish — defaults to wiki visibility; --private / --public to change.
-scripts/dsp publish report.html --name "Q2 report"          # → prints the URL
-scripts/dsp publish notes.md --private --open               # private + open in browser
+dsp publish report.html --name "Q2 report"          # → prints the URL
+dsp publish notes.md --private --open               # private + open in browser
+dsp publish ./site/                                 # a whole DIRECTORY (assets + index.html)
 
-scripts/dsp list                  # your artifacts (table)
-scripts/dsp list --public         # public artifacts (no login needed)
-scripts/dsp version <short_id> report-v2.html   # republish a new version
-scripts/dsp open <short_id>       # open in the browser
-scripts/dsp rm <short_id>         # delete
-scripts/dsp whoami                # who am I / which server
+dsp list                  # your artifacts (table)
+dsp list --public         # public artifacts (no login needed)
+dsp version <short_id> report-v2.html   # republish a new version
+dsp open <short_id>       # open in the browser
+dsp rm <short_id>         # delete
+dsp whoami                # who am I / which server
 ```
 
+Run it as `dsp` by putting `scripts/` on your `PATH` (or symlink it):
+
+```bash
+ln -s "$PWD/scripts/dsp" /usr/local/bin/dsp   # then just: dsp publish ...
+```
+
+**Directory publishing.** `dsp publish ./site/` zips the directory (entry
+point: `index.html` at its root) and uploads it to `POST /api/artifacts/bundle`.
+It's served at `/a/<short_id>/<path>`, so relative assets (`./style.css`,
+`./js/app.js`, images) resolve to the same origin — a multi-file site works
+without inlining everything. Bundles obey the same private/wiki/public gate
+and are path-traversal-safe (only exact archive members are served).
+
 Auth resolves as: `--token`/`--server` flags → env (`WIKI_TOKEN` /
-`WIKI_API_BASE`) → the saved config file. Directory publishing (`dsp
-publish ./out/`) isn't supported yet — publish a single self-contained
-HTML/Markdown/text file.
+`WIKI_API_BASE`) → the saved config file.
 
 > A minimal Bash alternative, `scripts/artifact.sh` (`publish` + `list`,
 > reads `WIKI_TOKEN` from the env), is also available for environments

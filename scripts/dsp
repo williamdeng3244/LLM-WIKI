@@ -14,7 +14,8 @@ Commands:
   dsp login [--server URL] [--token TOK | --email E [--password P]]
   dsp logout
   dsp whoami
-  dsp publish <file> [--private|--wiki|--public] [--name N] [--expires YYYY-MM-DD] [--open]
+  dsp publish <file|dir> [--private|--wiki|--public] [--name N] [--expires YYYY-MM-DD] [--open]
+       (a directory is zipped and served at /a/<id>/<path>; needs index.html at its root)
   dsp list [--public] [--limit N]
   dsp open <short_id>
   dsp version <short_id> <file>     # republish: upload a new version
@@ -123,8 +124,9 @@ def api_json(method, api_base, path, token, *, body=None):
         return status, raw.decode(errors="replace")
 
 
-def _multipart(fields, file_field, filepath, mime):
-    """Build a multipart/form-data body. Returns (body, content_type)."""
+def _multipart_raw(fields, file_field, filename, mime, data):
+    """Build a multipart/form-data body from raw bytes. Returns
+    (body, content_type)."""
     boundary = "----dsp" + uuid.uuid4().hex
     out = bytearray()
 
@@ -140,13 +142,30 @@ def _multipart(fields, file_field, filepath, mime):
         add()
         add(str(v))
     add(f"--{boundary}")
-    add(f'Content-Disposition: form-data; name="{file_field}"; filename="{filepath.name}"')
+    add(f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"')
     add(f"Content-Type: {mime}")
     add()
-    out.extend(filepath.read_bytes())
+    out.extend(data)
     out.extend(b"\r\n")
     add(f"--{boundary}--")
     return bytes(out), f"multipart/form-data; boundary={boundary}"
+
+
+def _multipart(fields, file_field, filepath, mime):
+    return _multipart_raw(fields, file_field, filepath.name, mime, filepath.read_bytes())
+
+
+def _zip_dir(dir_path: Path) -> bytes:
+    """Zip a directory into bytes, with paths relative to its root (so
+    index.html lands at the zip root)."""
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in sorted(dir_path.rglob("*")):
+            if p.is_file():
+                zf.write(p, p.relative_to(dir_path).as_posix())
+    return buf.getvalue()
 
 
 def _api_error(status, payload):
@@ -166,7 +185,12 @@ def _mime_for(path: Path) -> str:
 
 
 def _upload(api_base, path, token, filepath, fields):
-    body, content_type = _multipart(fields, "file", filepath, _mime_for(filepath))
+    return _upload_raw(api_base, path, token,
+                       filepath.read_bytes(), filepath.name, _mime_for(filepath), fields)
+
+
+def _upload_raw(api_base, path, token, data, filename, mime, fields):
+    body, content_type = _multipart_raw(fields, "file", filename, mime, data)
     status, raw = _request("POST", api_base + path, token,
                            data=body, headers={"Content-Type": content_type})
     try:
@@ -235,15 +259,27 @@ def cmd_publish(args):
     if not token:
         die("not logged in — run `dsp login` (or set WIKI_TOKEN)")
     path = Path(args.file)
-    if path.is_dir():
-        die("directory publishing isn't supported yet — publish a single "
-            "self-contained HTML/Markdown/text file. (Tracked as a follow-up.)")
-    if not path.is_file():
-        die(f"no such file: {path}")
-
     expires_at = f"{args.expires}T23:59:59Z" if args.expires else None
     fields = {"name": args.name, "visibility": args.visibility, "expires_at": expires_at}
-    status, payload = _upload(api_base, "/artifacts", token, path, fields)
+
+    if path.is_dir():
+        # Directory bundle: zip it and upload to /artifacts/bundle. Served
+        # at /a/<id>/<path>, so relative assets work (à la `dsp publish ./out/`).
+        if not (path / "index.html").is_file():
+            die(f"{path}/index.html not found — a directory bundle needs an "
+                "index.html at its root")
+        if not fields["name"]:
+            fields["name"] = path.resolve().name
+        zip_bytes = _zip_dir(path)
+        status, payload = _upload_raw(
+            api_base, "/artifacts/bundle", token,
+            zip_bytes, f"{path.resolve().name}.zip", "application/zip", fields,
+        )
+    elif path.is_file():
+        status, payload = _upload(api_base, "/artifacts", token, path, fields)
+    else:
+        die(f"no such file or directory: {path}")
+
     if status not in (200, 201):
         die(_api_error(status, payload))
     print(payload["url"])
@@ -317,6 +353,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("login", help="Save server + credentials")
+    # Also accept --server/--token AFTER `login` (the natural place to type
+    # them). SUPPRESS so an absent value here doesn't clobber a top-level one.
+    sp.add_argument("--server", default=argparse.SUPPRESS, help="Wiki server URL")
+    sp.add_argument("--token", default=argparse.SUPPRESS, help="API token")
     sp.add_argument("--email", help="Admin email (password login)")
     sp.add_argument("--password", help="Admin password (prompted if omitted)")
     sp.set_defaults(func=cmd_login)
@@ -324,8 +364,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("logout", help="Forget saved token").set_defaults(func=cmd_logout)
     sub.add_parser("whoami", help="Show the signed-in user").set_defaults(func=cmd_whoami)
 
-    sp = sub.add_parser("publish", help="Publish a file → prints the share URL")
-    sp.add_argument("file")
+    sp = sub.add_parser("publish", help="Publish a file or directory → prints the share URL")
+    sp.add_argument("file", metavar="file|dir")
     sp.add_argument("--name", help="Display name (defaults to the filename)")
     sp.add_argument("--expires", metavar="YYYY-MM-DD", help="Expiry date")
     sp.add_argument("--open", action="store_true", help="Open the URL in a browser")
