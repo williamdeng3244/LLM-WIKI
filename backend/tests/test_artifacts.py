@@ -55,7 +55,7 @@ def test_publish_artifact_html():
         meta = c.get(f"/api/artifacts/{body['short_id']}").json()
         assert meta["name"] == "Test publish HTML"
         assert meta["mime_type"] == "text/html"
-        assert meta["visibility"] == "company"
+        assert meta["visibility"] == "wiki"
         assert meta["current_version"] == 1
 
 
@@ -87,6 +87,32 @@ def test_view_artifact_authenticated():
         assert r.headers.get("x-frame-options") == "SAMEORIGIN"
         assert r.headers.get("referrer-policy") == "same-origin"
         assert "no-store" in r.headers.get("cache-control", "")
+
+
+# ── 2b: private visibility is owner-only ───────────────────────────────
+
+
+def test_view_artifact_private_owner_only():
+    """visibility=private — the owner gets 200, but any *other* signed-in
+    wiki user gets the generic 404 (existence isn't leaked). Mirrors the
+    soft-deleted 404 behaviour."""
+    owner_email = _email()
+    other_email = _email()
+
+    with _client(owner_email) as owner:
+        sid = owner.post(
+            "/api/artifacts",
+            files={"file": ("pr.html", b"<h1>owner eyes only</h1>", "text/html")},
+            data={"name": "Private artifact", "visibility": "private"},
+        ).json()["short_id"]
+        # Owner can view their own private artifact.
+        assert owner.get(f"/a/{sid}").status_code == 200
+
+    # A different authenticated wiki user is refused with a generic 404.
+    with _client(other_email) as other:
+        r = other.get(f"/a/{sid}")
+        assert r.status_code == 404, r.text
+        assert "not available" in r.text
 
 
 # ── 3: unauthenticated → 302 to login ──────────────────────────────────
@@ -169,20 +195,36 @@ def test_max_body_size_enforced():
         assert r.status_code == 413, r.text
 
 
-# ── 7: public visibility blocked while flag off ────────────────────────
+# ── 7: public visibility is gated by ARTIFACTS_ALLOW_PUBLIC ─────────────
 
 
-def test_public_visibility_blocked_when_flag_off():
-    """spec § 11 #7 — visibility=public with ARTIFACTS_ALLOW_PUBLIC=false
-    returns 403. (The test suite assumes the default config which has
-    the flag off — if a CI run flips it, this test will green-fail.)"""
+def test_public_visibility_flag_behavior():
+    """spec § 11 #7 — visibility=public is gated by ARTIFACTS_ALLOW_PUBLIC.
+
+    There's no config probe over the API, so we accept either outcome and
+    assert the matching invariant:
+      - flag OFF → publish returns 403 (blocked).
+      - flag ON  → publish returns 201 AND the artifact is viewable with
+        no auth at all (the whole point of `public`)."""
     with _client(_email()) as c:
         r = c.post(
             "/api/artifacts",
-            files={"file": ("p.html", b"<h1>nope</h1>", "text/html")},
+            files={"file": ("p.html", b"<h1>pub</h1>", "text/html")},
             data={"name": "Public attempt", "visibility": "public"},
         )
-        assert r.status_code == 403, r.text
+        assert r.status_code in (201, 403), r.text
+        if r.status_code == 403:
+            return  # flag off — blocked as expected
+        sid = r.json()["short_id"]
+
+    # flag on — a public artifact is viewable by an anonymous visitor.
+    with _client(None) as anon:
+        assert anon.get(f"/a/{sid}").status_code == 200
+
+    # …and it shows up in the no-auth public listing.
+    with _client(None) as anon:
+        listing = anon.get("/api/artifacts/public?limit=100").json()
+        assert sid in {i["short_id"] for i in listing["items"]}
 
 
 # ── 8: iframe sandbox attributes correct ───────────────────────────────

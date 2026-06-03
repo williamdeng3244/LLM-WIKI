@@ -30,7 +30,7 @@ from typing import Optional
 from fastapi import (
     APIRouter, Depends, File, Form, HTTPException, Request, UploadFile,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import current_user
@@ -38,7 +38,7 @@ from app.core.config import settings
 from app.core.db import get_session
 from app.models import (
     ALLOWED_MIME_TYPES, Artifact, ArtifactAccessLog, ArtifactVersion,
-    Page, Revision, Role, User, VALID_VISIBILITIES, VISIBILITY_COMPANY,
+    Page, Revision, Role, User, VALID_VISIBILITIES, VISIBILITY_WIKI,
     VISIBILITY_PUBLIC,
 )
 from app.schemas import (
@@ -173,7 +173,7 @@ async def persist_new_artifact(
     name: str,
     body: bytes,
     mime_type: str,
-    visibility: str = VISIBILITY_COMPANY,
+    visibility: str = VISIBILITY_WIKI,
     expires_at: Optional[datetime] = None,
 ) -> Artifact:
     """Internal: write a brand-new artifact (v1) + persist its body. Used
@@ -240,7 +240,7 @@ async def persist_new_artifact(
 async def create_artifact(
     file: UploadFile = File(...),
     name: Optional[str] = Form(default=None),
-    visibility: str = Form(default=VISIBILITY_COMPANY),
+    visibility: str = Form(default=VISIBILITY_WIKI),
     expires_at: Optional[datetime] = Form(default=None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(current_user),
@@ -265,7 +265,7 @@ async def create_artifact(
 @router.post("/from-page/{page_path:path}", response_model=ArtifactCreateResponse, status_code=201)
 async def create_artifact_from_page(
     page_path: str,
-    visibility: str = VISIBILITY_COMPANY,
+    visibility: str = VISIBILITY_WIKI,
     expires_at: Optional[datetime] = None,
     name: Optional[str] = None,
     session: AsyncSession = Depends(get_session),
@@ -365,6 +365,39 @@ async def list_my_artifacts(
     return ArtifactListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
+@router.get("/public", response_model=ArtifactListResponse)
+async def list_public_artifacts(
+    limit: int = 20,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+):
+    """Public artifacts — **no auth required**. The signed-out /artifacts
+    page calls this so a logged-out visitor still sees public shares on
+    this server. Only `visibility=public` rows that aren't soft-deleted
+    or past their expiry are returned. Declared before `/{short_id}` so
+    the literal path wins over the wildcard.
+
+    Note: this lists every public artifact on the instance, not just one
+    owner's — a logged-out caller can't be tied to an owner, and public
+    artifacts are viewable by anyone anyway."""
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    now = datetime.now(timezone.utc)
+    base = select(Artifact).where(
+        Artifact.visibility == VISIBILITY_PUBLIC,
+        Artifact.deleted_at.is_(None),
+        or_(Artifact.expires_at.is_(None), Artifact.expires_at > now),
+    )
+    total = (await session.execute(
+        select(func.count()).select_from(base.subquery())
+    )).scalar() or 0
+    rows = (await session.execute(
+        base.order_by(Artifact.created_at.desc()).limit(limit).offset(offset)
+    )).scalars().all()
+    items = [await _to_meta(session, a) for a in rows]
+    return ArtifactListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
 @router.get("/{short_id}", response_model=ArtifactMeta)
 async def get_artifact(
     short_id: str,
@@ -375,7 +408,7 @@ async def get_artifact(
     if art is None:
         raise HTTPException(404, "Artifact not found.")
     # Metadata is visible to any authenticated user in the same instance
-    # (matches `visibility=company` semantics for the viewer route).
+    # (matches `visibility=wiki` semantics for the viewer route).
     return await _to_meta(session, art)
 
 

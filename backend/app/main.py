@@ -176,6 +176,16 @@ async def lifespan(app: FastAPI):
             "WHERE revoked_at IS NULL "
             "  AND user_id IN (SELECT id FROM users WHERE is_agent = TRUE)"
         ))
+        # Artifact visibility model v1 → v2: "company" became "wiki" (any
+        # signed-in user) and the never-wired "specific" collapses to the
+        # most-restrictive "private" (owner-only). Idempotent: once renamed,
+        # subsequent boots match 0 rows.
+        await conn.execute(text(
+            "UPDATE artifacts SET visibility = 'wiki' WHERE visibility = 'company'"
+        ))
+        await conn.execute(text(
+            "UPDATE artifacts SET visibility = 'private' WHERE visibility = 'specific'"
+        ))
     # Bootstrap admin + categories + import vault
     async with SessionLocal() as session:
         admin = await ensure_default_admin(session)

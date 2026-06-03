@@ -156,8 +156,43 @@ export type RawSource = {
 };
 
 // ── Auth helpers ─────────────────────────────────────────────────────
+
+// Mirror the localStorage identity into cookies. The fetch client adds
+// auth as *headers*, but a top-level browser navigation (e.g. opening a
+// gated artifact link at /a/<id>) runs no JS and carries only cookies —
+// so without this, the server-rendered artifact viewer always sees an
+// unauthenticated request and bounces to /login. We keep the cookie in
+// lock-step with what authHeaders() would send. Cookies are read by the
+// backend ONLY on the read-only viewer GET routes (never on mutating
+// endpoints), so this doesn't open a CSRF hole.
+function syncAuthCookies(): void {
+  if (typeof document === 'undefined') return;
+  const set = (k: string, v: string) =>
+    { document.cookie = `${k}=${encodeURIComponent(v)}; path=/; SameSite=Lax`; };
+  const del = (k: string) =>
+    { document.cookie = `${k}=; path=/; Max-Age=0; SameSite=Lax`; };
+
+  const jwt = localStorage.getItem('wiki:jwt');
+  if (jwt) {
+    set('wiki_jwt', jwt);
+    del('wiki_email'); del('wiki_role');
+    return;
+  }
+  if (localStorage.getItem('wiki:signed-out') === '1') {
+    del('wiki_jwt'); del('wiki_email'); del('wiki_role');
+    return;
+  }
+  // Stub fallback — mirror the same email/role authHeaders() sends.
+  set('wiki_email', localStorage.getItem('wiki:email') || 'admin@example.com');
+  set('wiki_role', localStorage.getItem('wiki:role') || 'admin');
+  del('wiki_jwt');
+}
+
 function authHeaders(): HeadersInit {
   if (typeof window === 'undefined') return {};
+  // Keep the navigation cookie fresh on every request — by the time the
+  // user copies an artifact link, the cookie already matches their session.
+  syncAuthCookies();
   const jwt = localStorage.getItem('wiki:jwt');
   if (jwt) return { Authorization: `Bearer ${jwt}` };
   // User explicitly clicked Sign out — don't send any stub headers,
@@ -206,7 +241,7 @@ export type AuthConfigDTO = {
 export type LoginResponseDTO = { token: string; user: User };
 
 // ── Gated artifacts (display.dev / Flowershow style share links) ─────
-export type ArtifactVisibility = 'company' | 'specific' | 'public';
+export type ArtifactVisibility = 'private' | 'wiki' | 'public';
 export type ArtifactMime = 'text/html' | 'text/markdown' | 'text/plain';
 export type ArtifactMeta = {
   short_id: string;
@@ -496,6 +531,12 @@ export const api = {
   listMyArtifacts: (limit = 20, offset = 0) =>
     call<ArtifactListResponse>(
       `/artifacts?limit=${limit}&offset=${offset}`,
+    ),
+  // No-auth listing of public artifacts — used by the signed-out
+  // /artifacts page so visitors still see public shares.
+  listPublicArtifacts: (limit = 100, offset = 0) =>
+    call<ArtifactListResponse>(
+      `/artifacts/public?limit=${limit}&offset=${offset}`,
     ),
   getArtifact: (shortId: string) =>
     call<ArtifactMeta>(`/artifacts/${shortId}`),

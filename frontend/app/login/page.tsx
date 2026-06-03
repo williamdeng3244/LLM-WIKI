@@ -6,28 +6,55 @@
 // (rendered globally by RootLayout).
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogIn, Loader2 } from 'lucide-react';
+import { LogIn, Loader2, Sun, Moon } from 'lucide-react';
 import { api, type AuthConfigDTO } from '@/lib/api';
+import { useTheme } from '@/lib/theme';
 import { APP_VERSION } from '@/lib/version';
 
 export default function LoginPage() {
   const router = useRouter();
+  // Hydrates `data-theme` from localStorage on mount (a fresh full-page
+  // load of /login would otherwise have no theme set → always dark).
+  const { theme, toggle: toggleTheme } = useTheme();
   const [cfg, setCfg] = useState<AuthConfigDTO | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `?next=` — where to go after sign-in. Set by the artifact viewer when
+  // it bounces an unauthenticated visitor (next=/a/<token>) and by the
+  // /artifacts sign-in links (next=/artifacts).
+  const [nextPath, setNextPath] = useState('/');
+  const cameFromArtifact = nextPath.startsWith('/a/');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const n = new URLSearchParams(window.location.search).get('next');
+    // Only honor same-origin path redirects, never absolute URLs.
+    if (n && n.startsWith('/') && !n.startsWith('//')) setNextPath(n);
+  }, []);
+
+  // After auth, go where the user was headed. /a/<token> is served by the
+  // backend (via rewrite), so use a full navigation for those.
+  function goNext() {
+    if (typeof window !== 'undefined' && (cameFromArtifact || nextPath !== '/')) {
+      window.location.href = nextPath;
+    } else {
+      router.replace('/');
+    }
+  }
 
   useEffect(() => {
     api.authConfig().then(setCfg).catch((e) => setError((e as Error).message));
   }, []);
 
   // If the user lands here already authenticated (e.g. browser back
-  // after sign-in), just bounce home. Skips when explicitly signed-out.
+  // after sign-in), just bounce onward. Skips when explicitly signed-out.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (localStorage.getItem('wiki:signed-out') === '1') return;
-    api.whoami().then(() => router.replace('/')).catch(() => { /* stay */ });
+    api.whoami().then(() => goNext()).catch(() => { /* stay */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   async function submitLocal(e: React.FormEvent) {
@@ -42,7 +69,7 @@ export default function LoginPage() {
       localStorage.removeItem('wiki:signed-out');
       localStorage.removeItem('wiki:email');
       localStorage.removeItem('wiki:role');
-      router.replace('/');
+      goNext();
     } catch (e: unknown) {
       setError((e as Error).message);
     } finally {
@@ -52,6 +79,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
+      <button
+        className="btn btn-icon absolute top-4 right-4 z-10"
+        onClick={toggleTheme}
+        title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+        aria-label="Toggle theme"
+      >
+        {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+      </button>
       <div className="w-[440px] max-w-full">
         <div className="text-center mb-6">
           <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted">
@@ -61,6 +96,16 @@ export default function LoginPage() {
             {APP_VERSION}
           </div>
         </div>
+
+        {/* Why-are-you-here note when bounced from a gated artifact link. */}
+        {cameFromArtifact && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3">
+            <LogIn size={15} className="text-accent shrink-0 mt-0.5" />
+            <div className="text-[0.84rem] text-ink">
+              This is a private artifact. <span className="text-muted">Sign in to view it — you’ll be taken straight there.</span>
+            </div>
+          </div>
+        )}
 
         <div className="bg-panel border border-line rounded-lg shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7),0_0_60px_-20px_rgba(124,156,255,0.20)] backdrop-blur">
           <div className="px-5 py-3 border-b border-black/10 flex items-center gap-2">

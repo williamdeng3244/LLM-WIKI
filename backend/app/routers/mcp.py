@@ -27,7 +27,7 @@ from app.core.permissions import can_propose
 from app.models import (
     ALLOWED_MIME_TYPES, ApiToken, Artifact, ArtifactVersion, AuditLog, Page,
     RawSource, Revision, RevisionProvenance, RevisionStatus, Role, User,
-    VALID_VISIBILITIES, VISIBILITY_COMPANY, VISIBILITY_PUBLIC,
+    VALID_VISIBILITIES, VISIBILITY_WIKI, VISIBILITY_PUBLIC,
 )
 from app.routers.artifacts import (
     _build_url, _resolve_artifact, _validate_mime, _validate_visibility,
@@ -159,13 +159,15 @@ TOOLS: list[dict[str, Any]] = [
         "description": (
             "Publish a gated artifact and return its permanent URL. "
             "Use when the human asks you to share an HTML report, dashboard, "
-            "or Markdown document with their team behind company auth. "
+            "or Markdown document with their team behind wiki auth. "
             "Returns {short_id, url, version}. The URL lives at /a/<short_id> "
-            "and is auth-gated by default (visibility=company). HTML is "
-            "rendered inside a sandboxed iframe so the artifact's JS cannot "
-            "see the wiki session cookie. visibility=public only works if "
-            "the admin has set ARTIFACTS_ALLOW_PUBLIC=true on the instance — "
-            "otherwise the call fails and you should retry with company."
+            "and is auth-gated by default (visibility=wiki — any signed-in "
+            "wiki user can view). Use visibility=private to restrict it to "
+            "yourself. HTML is rendered inside a sandboxed iframe so the "
+            "artifact's JS cannot see the wiki session cookie. "
+            "visibility=public only works if the admin has set "
+            "ARTIFACTS_ALLOW_PUBLIC=true on the instance — otherwise the call "
+            "fails and you should retry with wiki."
         ),
         "inputSchema": {
             "type": "object",
@@ -179,8 +181,8 @@ TOOLS: list[dict[str, Any]] = [
                 },
                 "visibility": {
                     "type": "string",
-                    "enum": ["company", "public"],
-                    "default": "company",
+                    "enum": ["private", "wiki", "public"],
+                    "default": "wiki",
                 },
                 "expires_in_days": {
                     "type": "integer",
@@ -416,7 +418,7 @@ async def _tool_publish_artifact(user: User, args: dict, session: AsyncSession) 
     if not name or body_str is None:
         raise ValueError("name and body are required")
     mime_type = args.get("mime_type") or "text/html"
-    visibility = args.get("visibility") or VISIBILITY_COMPANY
+    visibility = args.get("visibility") or VISIBILITY_WIKI
     expires_in_days = args.get("expires_in_days")
 
     expires_at = None

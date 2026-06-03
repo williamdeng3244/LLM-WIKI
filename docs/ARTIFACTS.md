@@ -34,8 +34,28 @@ inside a sandboxed iframe for HTML, or server-rendered for Markdown.
   The modal pre-fills the page title. Submit with defaults → the URL
   appears with **Copy link** and **Open** buttons.
 - **Upload a stand-alone file** (HTML / Markdown / plain text): hit the
-  `Share2` icon in the top bar to open the **Artifacts** panel, then
-  click **Upload**.
+  `Share2` icon in the top bar to open the **/artifacts** page, then
+  click the **New artifact** tile.
+
+### Managing artifacts — the `/artifacts` page
+
+The `Share2` icon in the top bar opens **`/artifacts`**: a NotebookLM-style
+grid of every artifact you own. Each card carries its visibility, current
+version, and 7-day view count, with inline actions to **copy** the link,
+**open** it, upload a **new version**, view the **access log**, change
+**visibility** (click the chip to cycle private → wiki → public), rename
+(click the title), or delete. This page replaces the old slide-in
+Artifacts drawer.
+
+### From the command line
+
+`scripts/artifact.sh` wraps the REST API for scripts and agents. Set
+`WIKI_TOKEN` to a personal API token, then:
+
+```bash
+scripts/artifact.sh publish report.html --name "Q2 report" --visibility wiki
+scripts/artifact.sh list
+```
 
 ### From Claude Code / Cursor (MCP)
 
@@ -143,9 +163,19 @@ anyone who can reach the wiki host, with no auth check at all.
 - **Per-user rate limit** is a follow-up commit. A small `redis.asyncio`
   INCR + EXPIRE module will land separately; until then, publish
   endpoints are unthrottled. See `routers/artifacts.py` docstring.
-- **`visibility=specific`** (only listed users) is in the schema but
-  the UI / enforcement is not wired. The column accepts the value;
-  the viewer treats it as `company` today.
+## Visibility model
+
+Visibility is a plain string column with three values:
+
+| Value | Who can view | Notes |
+|---|---|---|
+| `private` | The owner (or an admin) only | Everyone else gets the generic 404 — existence isn't leaked. |
+| `wiki` | Any signed-in wiki user | The default. "Everything in the wiki is visible to those signed in." |
+| `public` | Anyone with the link, no login | Gated behind `ARTIFACTS_ALLOW_PUBLIC`; publish returns 403 when the flag is off. |
+
+The legacy `company` / `specific` values (from the first cut) are migrated
+at boot: `company → wiki`, `specific → private` (see the inline migration in
+`app/main.py`).
 
 ## Verifying the security checklist
 
@@ -155,14 +185,15 @@ Run the test suite:
 docker exec wiki-backend-1 pytest tests/test_artifacts.py -v
 ```
 
-The ten tests in `backend/tests/test_artifacts.py` map 1-to-1 onto
-spec § 11; each docstring cites the spec test name. Key behaviors
-asserted:
+The tests in `backend/tests/test_artifacts.py` map onto spec § 11 (plus
+a `private`-visibility case); each docstring cites the spec test name.
+Key behaviors asserted:
 
 - The exact sandbox attribute string (no `allow-same-origin`)
 - Generic 404 for missing / deleted / expired
 - 302 to `/login?next=…` for unauthenticated
 - 413 on body > limit
 - 403 on `visibility=public` when the flag is off
+- `visibility=private` is owner-only — a different signed-in user gets 404
 - Access log row written with the **viewer's** `user_id`
 - MCP publish creates an artifact whose `owner_id` matches the token's user

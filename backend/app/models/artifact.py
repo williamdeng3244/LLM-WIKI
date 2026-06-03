@@ -24,14 +24,18 @@ from app.core.db import Base
 
 
 # Visibility kept as plain String (not PG enum) so adding values later is a
-# zero-downtime change. v1 set:
-#   "company"  — any authenticated wiki user can view
-#   "specific" — only listed user_ids (schema-only for v1; UI not wired)
-#   "public"   — no auth required; gated behind ARTIFACTS_ALLOW_PUBLIC
-VISIBILITY_COMPANY = "company"
-VISIBILITY_SPECIFIC = "specific"
+# zero-downtime change. v2 set — everything in the wiki is "public to those
+# signed in"; an artifact can additionally be shared fully-public or kept
+# owner-only:
+#   "private" — only the owner (or an admin) can view
+#   "wiki"    — any authenticated wiki user can view (the default)
+#   "public"  — no auth required; gated behind ARTIFACTS_ALLOW_PUBLIC
+# Legacy values "company"/"specific" are migrated to "wiki"/"private" at boot
+# (see app/main.py inline migrations).
+VISIBILITY_PRIVATE = "private"
+VISIBILITY_WIKI = "wiki"
 VISIBILITY_PUBLIC = "public"
-VALID_VISIBILITIES = frozenset({VISIBILITY_COMPANY, VISIBILITY_SPECIFIC, VISIBILITY_PUBLIC})
+VALID_VISIBILITIES = frozenset({VISIBILITY_PRIVATE, VISIBILITY_WIKI, VISIBILITY_PUBLIC})
 
 
 # MIME types accepted by the publish endpoint. HTML is rendered inside a
@@ -57,7 +61,7 @@ class Artifact(Base):
 
     # text/html | text/markdown | text/plain
     mime_type: Mapped[str] = mapped_column(String(50))
-    visibility: Mapped[str] = mapped_column(String(20), default=VISIBILITY_COMPANY)
+    visibility: Mapped[str] = mapped_column(String(20), default=VISIBILITY_WIKI)
 
     current_version: Mapped[int] = mapped_column(Integer, default=1)
     expires_at: Mapped[Optional[datetime]] = mapped_column(

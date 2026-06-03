@@ -365,6 +365,15 @@ select option { background: var(--bg-panel); color: var(--text); }
 [data-theme="light"] .bg-elev\/40     { background-color: rgba(255, 255, 255, 0.55); }
 [data-theme="light"] .bg-elev\/80     { background-color: rgba(255, 255, 255, 0.80); }
 
+/* `paper` is the opaque page background that the /help and /artifacts
+   routes paint over the video. Its Tailwind token is a hardcoded dark
+   hex, so light mode needs an explicit override or the page stays dark. */
+[data-theme="light"] .bg-paper        { background-color: #f5f1e8; }
+/* Card hover. `bg-panel` is overridden above, but the hover variant is a
+   separate class and was missing — without this, hovering a card flips it
+   back to the dark token. */
+[data-theme="light"] .hover\:bg-panel:hover { background-color: rgba(255, 255, 255, 0.98); }
+
 /* Borders flip from white-on-dark to black-on-light. */
 [data-theme="light"] .border-line     { border-color: rgba(0, 0, 0, 0.10); }
 [data-theme="light"] .border-white\/\[0\.04\] { border-color: rgba(0, 0, 0, 0.05); }

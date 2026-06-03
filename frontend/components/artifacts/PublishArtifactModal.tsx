@@ -8,7 +8,7 @@ import {
 
 /** "Publish as gated link" — modal dialog shared by the FileTree
  * right-click action (mode='page'), the Page-tab kebab (mode='page'),
- * and the ArtifactsPanel "Upload new artifact" button (mode='file').
+ * and the /artifacts page "New artifact" tile (mode='file').
  *
  * State machine: `idle` → `submitting` → `done` (shows the URL) or
  * `idle` → `submitting` → `error`. The same component re-renders;
@@ -51,10 +51,16 @@ export default function PublishArtifactModal({
     mode.kind === 'page' ? mode.initialName ?? '' : '';
 
   const [name, setName] = useState(initialName);
-  const [visibility, setVisibility] = useState<ArtifactVisibility>('company');
+  const [visibility, setVisibility] = useState<ArtifactVisibility>('wiki');
   const [expiry, setExpiry] = useState<ExpiryPreset>('never');
   const [customDate, setCustomDate] = useState<string>('');
   const [file, setFile] = useState<File | null>(null);
+  // mode='file' can either upload a file OR let the user write content
+  // directly (paste an HTML/Markdown body). `source` toggles between them.
+  const [source, setSource] = useState<'upload' | 'write'>('upload');
+  const [contentFmt, setContentFmt] =
+    useState<'text/markdown' | 'text/html' | 'text/plain'>('text/markdown');
+  const [content, setContent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ArtifactCreateResponse | null>(null);
@@ -86,8 +92,18 @@ export default function PublishArtifactModal({
       };
       let resp: ArtifactCreateResponse;
       if (mode.kind === 'file') {
-        if (!file) throw new Error('Pick a file to publish.');
-        resp = await api.createArtifactFromFile(file, opts);
+        let toPublish: File | null = file;
+        if (source === 'write') {
+          if (!content.trim()) throw new Error('Write some content to publish.');
+          // Build a File from the typed body so it flows through the same
+          // multipart upload path (and the same MIME/size validation).
+          const ext = contentFmt === 'text/html' ? 'html'
+            : contentFmt === 'text/markdown' ? 'md' : 'txt';
+          const base = (name.trim() || 'artifact').replace(/[^\w.-]+/g, '-');
+          toPublish = new File([content], `${base}.${ext}`, { type: contentFmt });
+        }
+        if (!toPublish) throw new Error('Pick a file or write some content to publish.');
+        resp = await api.createArtifactFromFile(toPublish, opts);
       } else {
         resp = await api.createArtifactFromPage(mode.pagePath, opts);
       }
@@ -115,10 +131,10 @@ export default function PublishArtifactModal({
       onClick={onClose}
     >
       <div
-        className="bg-panel border border-line rounded-lg w-[480px] max-w-[92vw] shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7)]"
+        className="bg-panel border border-line rounded-lg w-[480px] max-w-[92vw] max-h-[90vh] flex flex-col shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-3 border-b border-line flex items-center justify-between">
+        <div className="px-5 py-3 border-b border-line flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Share2 size={14} className="text-accent" />
             <h3 className="font-medium text-[1rem]">
@@ -132,7 +148,7 @@ export default function PublishArtifactModal({
 
         {result ? (
           // ── Success state ────────────────────────────────────────────
-          <div className="px-5 py-4 space-y-3">
+          <div className="px-5 py-4 space-y-3 overflow-y-auto">
             <p className="text-[0.86rem] text-muted">
               Anyone in your wiki who clicks this link will see the artifact.
               Out-of-wiki visitors will be bounced through login first.
@@ -140,7 +156,7 @@ export default function PublishArtifactModal({
             <div className="flex items-stretch gap-2">
               <input
                 readOnly value={result.url}
-                className="flex-1 bg-bg border border-line rounded px-2.5 py-1.5 text-[0.82rem] font-mono"
+                className="flex-1 bg-elev text-ink border border-line focus:border-accent focus:outline-none rounded px-2.5 py-1.5 text-[0.82rem] font-mono"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
               <button
@@ -172,24 +188,76 @@ export default function PublishArtifactModal({
           </div>
         ) : (
           // ── Form state ──────────────────────────────────────────────
-          <div className="px-5 py-4 space-y-3.5">
+          // Header stays pinned; the fields scroll; the footer (Cancel /
+          // Publish) is pinned so it's always reachable even when the
+          // "Write content" textarea makes the form tall.
+          <>
+          <div className="px-5 py-4 space-y-3.5 overflow-y-auto flex-1 min-h-0">
             {mode.kind === 'file' && (
-              <label className="block">
-                <span className="block text-[0.78rem] text-muted mb-1">File</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    accept=".html,.htm,.md,.txt,text/html,text/markdown,text/plain"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    className="text-[0.82rem]"
-                  />
+              <div className="space-y-2">
+                {/* Upload-a-file vs write-content-directly toggle. */}
+                <div className="inline-flex rounded border border-line overflow-hidden text-[0.82rem]">
+                  <button
+                    type="button"
+                    onClick={() => setSource('upload')}
+                    className={`px-3 py-1 ${source === 'upload' ? 'bg-accent text-paper' : 'bg-panel text-muted hover:text-ink'}`}
+                  >
+                    Upload file
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSource('write')}
+                    className={`px-3 py-1 border-l border-line ${source === 'write' ? 'bg-accent text-paper' : 'bg-panel text-muted hover:text-ink'}`}
+                  >
+                    Write content
+                  </button>
                 </div>
-                {file && (
-                  <div className="text-[0.78rem] text-muted mt-1">
-                    {file.name} · {(file.size / 1024).toFixed(1)} KB · {file.type || 'unknown type'}
+
+                {source === 'upload' ? (
+                  <label className="block">
+                    <span className="block text-[0.78rem] text-muted mb-1">
+                      File <span className="text-muted/70">(HTML, Markdown, or text)</span>
+                    </span>
+                    <input
+                      type="file"
+                      accept=".html,.htm,.md,.txt,text/html,text/markdown,text/plain"
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                      className="text-[0.82rem]"
+                    />
+                    {file && (
+                      <div className="text-[0.78rem] text-muted mt-1">
+                        {file.name} · {(file.size / 1024).toFixed(1)} KB · {file.type || 'unknown type'}
+                      </div>
+                    )}
+                  </label>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[0.78rem] text-muted">Format</span>
+                      <select
+                        value={contentFmt}
+                        onChange={(e) => setContentFmt(e.target.value as typeof contentFmt)}
+                        className="bg-elev text-ink border border-line focus:border-accent focus:outline-none rounded px-2 py-1 text-[0.82rem]"
+                      >
+                        <option value="text/markdown">Markdown</option>
+                        <option value="text/html">HTML</option>
+                        <option value="text/plain">Plain text</option>
+                      </select>
+                    </div>
+                    <textarea
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder={contentFmt === 'text/html'
+                        ? '<h1>Hello</h1>\n<p>Paste or write your HTML…</p>'
+                        : contentFmt === 'text/markdown'
+                          ? '# Title\n\nWrite or paste Markdown…'
+                          : 'Write or paste text…'}
+                      rows={6}
+                      className="w-full bg-elev text-ink border border-line focus:border-accent focus:outline-none rounded px-2.5 py-2 text-[0.82rem] font-mono resize-y"
+                    />
                   </div>
                 )}
-              </label>
+              </div>
             )}
 
             <label className="block">
@@ -199,7 +267,7 @@ export default function PublishArtifactModal({
                 type="text" value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={mode.kind === 'page' ? 'Defaults to the page title' : 'Optional'}
-                className="w-full bg-bg border border-line rounded px-2.5 py-1.5 text-[0.86rem]"
+                className="w-full bg-elev text-ink border border-line focus:border-accent focus:outline-none rounded px-2.5 py-1.5 text-[0.86rem]"
               />
             </label>
 
@@ -207,11 +275,19 @@ export default function PublishArtifactModal({
               <legend className="text-[0.78rem] text-muted px-1">Visibility</legend>
               <label className="flex items-center gap-2 text-[0.86rem] py-1 cursor-pointer">
                 <input
-                  type="radio" name="vis" value="company"
-                  checked={visibility === 'company'}
-                  onChange={() => setVisibility('company')}
+                  type="radio" name="vis" value="private"
+                  checked={visibility === 'private'}
+                  onChange={() => setVisibility('private')}
                 />
-                <span>Company — anyone in this wiki can view</span>
+                <span>Private — only you can view</span>
+              </label>
+              <label className="flex items-center gap-2 text-[0.86rem] py-1 cursor-pointer">
+                <input
+                  type="radio" name="vis" value="wiki"
+                  checked={visibility === 'wiki'}
+                  onChange={() => setVisibility('wiki')}
+                />
+                <span>Wiki — anyone signed in to this wiki can view</span>
               </label>
               <label
                 className={`flex items-center gap-2 text-[0.86rem] py-1 ${allowPublic ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}
@@ -249,7 +325,7 @@ export default function PublishArtifactModal({
                 <input
                   type="date" value={customDate}
                   onChange={(e) => setCustomDate(e.target.value)}
-                  className="mt-1.5 bg-bg border border-line rounded px-2 py-1 text-[0.82rem]"
+                  className="mt-1.5 bg-elev text-ink border border-line focus:border-accent focus:outline-none rounded px-2 py-1 text-[0.82rem]"
                 />
               )}
             </fieldset>
@@ -260,23 +336,26 @@ export default function PublishArtifactModal({
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                className="px-3 py-1.5 rounded border border-line bg-panel hover:bg-line/40 text-[0.86rem]"
-                onClick={onClose} disabled={busy}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-3 py-1.5 rounded bg-accent text-paper hover:opacity-90 text-[0.86rem] flex items-center gap-1.5 disabled:opacity-50"
-                onClick={submit}
-                disabled={busy || (mode.kind === 'file' && !file)}
-              >
-                {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                Publish
-              </button>
-            </div>
           </div>
+          <div className="px-5 py-3 border-t border-line flex justify-end gap-2 shrink-0">
+            <button
+              className="px-3 py-1.5 rounded border border-line bg-panel hover:bg-line/40 text-[0.86rem]"
+              onClick={onClose} disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              className="px-3 py-1.5 rounded bg-accent text-paper hover:opacity-90 text-[0.86rem] flex items-center gap-1.5 disabled:opacity-50"
+              onClick={submit}
+              disabled={busy || (mode.kind === 'file' && (
+                source === 'upload' ? !file : !content.trim()
+              ))}
+            >
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+              Publish
+            </button>
+          </div>
+          </>
         )}
       </div>
     </div>

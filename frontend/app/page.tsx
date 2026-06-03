@@ -9,8 +9,8 @@ import {
   ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon, HelpCircle,
   Share2,
 } from 'lucide-react';
+import Link from 'next/link';
 import PublishArtifactModal from '@/components/artifacts/PublishArtifactModal';
-import ArtifactsPanel from '@/components/artifacts/ArtifactsPanel';
 import FileTree, {
   type FileTreeHandle, type SortMode, type ContextMenuInfo,
 } from '@/components/FileTree';
@@ -69,18 +69,15 @@ export default function Home() {
   const [showSearch, setShowSearch] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
   const [showGraphSettings, setShowGraphSettings] = useState(false);
-  // Gated artifacts. `publishTarget` drives PublishArtifactModal:
-  //   { kind: 'page', pagePath, initialName }  — file-tree right-click + page-tab kebab
-  //   { kind: 'file' }                          — Upload button on ArtifactsPanel
-  // null means modal closed. `artifactsTick` is bumped after a publish
-  // so an open ArtifactsPanel auto-refreshes.
-  const [showArtifactsPanel, setShowArtifactsPanel] = useState(false);
+  // Gated artifacts. `publishTarget` drives PublishArtifactModal from the
+  // file-tree right-click + page-tab kebab ({ kind: 'page', … }). null
+  // means the modal is closed. The full management UI now lives on the
+  // dedicated /artifacts page (replaces the old ArtifactsPanel drawer).
   const [publishTarget, setPublishTarget] = useState<
     | { kind: 'page'; pagePath: string; initialName?: string }
     | { kind: 'file' }
     | null
   >(null);
-  const [artifactsTick, setArtifactsTick] = useState(0);
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -875,14 +872,14 @@ export default function Home() {
             <Plug size={14} />
           </button>
 
-          <button
+          <Link
+            href="/artifacts"
             className="btn btn-icon"
-            onClick={() => setShowArtifactsPanel(true)}
             title="Artifacts"
-            aria-label="Open artifacts panel"
+            aria-label="Open artifacts page"
           >
             <Share2 size={14} />
-          </button>
+          </Link>
 
           <div className="relative">
             <button
@@ -1267,16 +1264,9 @@ export default function Home() {
         />
       )}
 
-      {/* Gated artifacts UI. The panel and modal are decoupled so the
-          modal can also open from the file-tree right-click without
-          the panel being mounted. */}
-      {showArtifactsPanel && (
-        <ArtifactsPanel
-          onClose={() => setShowArtifactsPanel(false)}
-          onUploadClick={() => setPublishTarget({ kind: 'file' })}
-          refreshTick={artifactsTick}
-        />
-      )}
+      {/* Gated artifacts. The publish modal opens from the file-tree
+          right-click / page-tab kebab. The management surface (list,
+          rename, visibility, versions, access log) lives at /artifacts. */}
       {publishTarget && (
         <PublishArtifactModal
           mode={publishTarget}
@@ -1286,7 +1276,6 @@ export default function Home() {
           // later — flagged in the PR description.
           allowPublic={false}
           onClose={() => setPublishTarget(null)}
-          onPublished={() => setArtifactsTick((t) => t + 1)}
         />
       )}
     </div>

@@ -1,0 +1,24 @@
+# Keep the Docker build context small + fast. Everything here is either
+# regenerated inside the image (deps, build output) or irrelevant to the
+# build. NOTE: public/ (incl. the background videos) is intentionally NOT
+# excluded — those assets are served by the app.
+node_modules
+.next
+out
+coverage
+
+# VCS + editor
+.git
+.gitignore
+.vscode
+.idea
+*.log
+npm-debug.log*
+
+# Env / secrets — never needed at build time
+.env
+.env.*
+
+# Docker meta
+Dockerfile
+.dockerignore

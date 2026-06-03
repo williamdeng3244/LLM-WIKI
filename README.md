@@ -112,6 +112,48 @@ Images:
 
 Release history and changelogs live at <https://github.com/williamdeng3244/LLM-WIKI/releases>.
 
+### Faster setup on slow networks (网络慢 / 镜像 pull 太久)
+
+If `git clone` or `docker pull` crawls (common outside the US/EU), these
+all help and none change how the app runs:
+
+**1. Shallow clone** — skip the full git history. The repo carries a few MB
+of background-video assets; a depth-1 clone avoids dragging their history:
+
+```bash
+git clone --depth 1 https://github.com/williamdeng3244/LLM-WIKI.git
+```
+
+**2. Docker registry mirror** — so base-image (`node`, `python`, `postgres`)
+pulls don't hit Docker Hub directly. Add to `/etc/docker/daemon.json`
+(Linux) or Docker Desktop → Settings → Docker Engine, then restart Docker:
+
+```json
+{ "registry-mirrors": ["https://docker.m.daocloud.io", "https://dockerproxy.com"] }
+```
+
+**3. ghcr.io slow or blocked?** GitHub Container Registry (the pre-built
+images above) is slow from some regions. Either build locally
+(`docker compose up --build`) or pull via a proxy, e.g.:
+
+```bash
+# one-off: pull through a ghcr proxy, then retag to the name compose expects
+docker pull ghcr.nju.edu.cn/williamdeng3244/llm-wiki-backend:latest
+docker tag  ghcr.nju.edu.cn/williamdeng3244/llm-wiki-backend:latest \
+            ghcr.io/williamdeng3244/llm-wiki-backend:latest
+```
+
+**4. Local build behind a slow link** — point npm/pip at nearer mirrors:
+
+```bash
+npm config set registry https://registry.npmmirror.com           # frontend deps
+export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple     # backend deps
+```
+
+> A `.dockerignore` ships in `frontend/` and `backend/` so `docker build`
+> doesn't upload `node_modules`, `.git`, or caches into the build context —
+> builds are noticeably faster as a result.
+
 ### Cutting a new release (maintainers)
 
 Releases are tag-driven. Push an annotated tag matching `v*.*.*`:

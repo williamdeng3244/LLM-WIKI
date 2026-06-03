@@ -42,21 +42,53 @@ import html
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import optional_user
+from app.core.auth import current_user
 from app.core.config import settings
 from app.core.db import get_session
 from app.models import (
-    Artifact, ArtifactAccessLog, ArtifactVersion, User, VISIBILITY_PUBLIC,
+    Artifact, ArtifactAccessLog, ArtifactVersion, Role, User,
+    VISIBILITY_PRIVATE, VISIBILITY_PUBLIC,
 )
 from app.services.artifact_storage import get_storage
 from app.services.markdown_render import render_markdown_to_html
 
 router = APIRouter()
+
+
+async def _viewer_user(
+    authorization: Optional[str] = Header(default=None),
+    x_user_email: Optional[str] = Header(default=None),
+    x_user_role: Optional[str] = Header(default=None),
+    wiki_jwt: Optional[str] = Cookie(default=None),
+    wiki_email: Optional[str] = Cookie(default=None),
+    wiki_role: Optional[str] = Cookie(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Optional[User]:
+    """Like `optional_user`, but also accepts identity from cookies.
+
+    The wiki frontend authenticates with a JWT / stub identity it keeps in
+    localStorage and attaches as *request headers* on its fetch calls. A
+    top-level browser navigation to /a/<short_id> (someone pasting a gated
+    link) runs no JS and sends only cookies — so the header path is empty
+    and the viewer would always bounce to /login. The frontend mirrors its
+    identity into cookies (see `syncAuthCookies` in lib/api.ts); here we
+    fall back to them when the headers are absent.
+
+    This is wired ONLY into the read-only viewer GET routes. Mutating
+    endpoints keep header-only auth so a cross-site request can't ride the
+    cookie (CSRF)."""
+    auth = authorization or (f"Bearer {wiki_jwt}" if wiki_jwt else None)
+    email = x_user_email or wiki_email
+    role = x_user_role or wiki_role
+    try:
+        return await current_user(auth, email, role, session)
+    except HTTPException:
+        return None
 
 
 # ── Token / artifact resolution ────────────────────────────────────────
@@ -115,6 +147,15 @@ def _generic_404() -> HTMLResponse:
         "<p>This artifact is not available.</p>",
         status_code=404,
     )
+
+
+def _can_view_private(art: Artifact, user: Optional[User]) -> bool:
+    """A `private` artifact is viewable only by its owner or an admin.
+    Anyone else (including other signed-in wiki users) gets the generic
+    404 — same response as a non-existent token, so privacy isn't leaked."""
+    if user is None:
+        return False
+    return art.owner_id == user.id or user.role == Role.admin
 
 
 def _client_ip(request: Request) -> Optional[str]:
@@ -275,7 +316,7 @@ async def view_raw(
     request: Request,
     v: Optional[int] = None,
     session: AsyncSession = Depends(get_session),
-    user: Optional[User] = Depends(optional_user),
+    user: Optional[User] = Depends(_viewer_user),
 ):
     """Body bytes for the iframe `src`. Auth-gated identically to the
     shell — otherwise a sandboxed iframe is meaningless."""
@@ -287,6 +328,8 @@ async def view_raw(
     if art.visibility != VISIBILITY_PUBLIC or not settings.artifacts_allow_public:
         if user is None:
             return _login_redirect(token)
+    if art.visibility == VISIBILITY_PRIVATE and not _can_view_private(art, user):
+        return _generic_404()
 
     body = await get_storage().load(version.storage_path)
     # NOTE: we deliberately don't log access from /raw — only the shell
@@ -310,7 +353,7 @@ async def view_shell(
     request: Request,
     v: Optional[int] = None,
     session: AsyncSession = Depends(get_session),
-    user: Optional[User] = Depends(optional_user),
+    user: Optional[User] = Depends(_viewer_user),
 ):
     pair = await _load_viewable(session, token, requested_version=v)
     if pair is None:
@@ -322,6 +365,8 @@ async def view_shell(
     )
     if not is_public_view and user is None:
         return _login_redirect(token)
+    if art.visibility == VISIBILITY_PRIVATE and not _can_view_private(art, user):
+        return _generic_404()
 
     await _record_access(
         session, artifact=art, version=version.version,

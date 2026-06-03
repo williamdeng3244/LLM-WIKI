@@ -1,0 +1,31 @@
+# Keep the Docker build context small + fast. Dependencies are installed
+# from requirements.txt inside the image, so none of this belongs in the
+# context.
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.so
+
+# Virtualenvs + tool caches
+.venv
+venv
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# VCS + editor
+.git
+.gitignore
+.vscode
+.idea
+*.log
+
+# Env / secrets — never needed at build time
+.env
+.env.*
+
+# Local data + Docker meta
+/data
+Dockerfile
+.dockerignore
