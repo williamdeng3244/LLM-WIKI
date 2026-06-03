@@ -47,15 +47,40 @@ version, and 7-day view count, with inline actions to **copy** the link,
 (click the title), or delete. This page replaces the old slide-in
 Artifacts drawer.
 
-### From the command line
+### From the command line (`dsp`)
 
-`scripts/artifact.sh` wraps the REST API for scripts and agents. Set
-`WIKI_TOKEN` to a personal API token, then:
+`scripts/dsp` is a zero-dependency CLI modeled on
+[display.dev](https://display.dev)'s `dsp` tool — **log in once, then
+`dsp publish <file>` returns an authenticated share URL.** Pure Python
+stdlib (no `pip install`).
 
 ```bash
-scripts/artifact.sh publish report.html --name "Q2 report" --visibility wiki
-scripts/artifact.sh list
+# Log in once (saves server + token to ~/.config/wiki-dsp/config.json).
+# Either with an API token (mint one in the UI → Settings → API tokens):
+scripts/dsp login --server http://localhost:8000 --token wt_xxxxxxxx
+# …or with admin email/password:
+scripts/dsp login --server http://localhost:8000 --email admin@example.com
+
+# Then publish — defaults to wiki visibility; --private / --public to change.
+scripts/dsp publish report.html --name "Q2 report"          # → prints the URL
+scripts/dsp publish notes.md --private --open               # private + open in browser
+
+scripts/dsp list                  # your artifacts (table)
+scripts/dsp list --public         # public artifacts (no login needed)
+scripts/dsp version <short_id> report-v2.html   # republish a new version
+scripts/dsp open <short_id>       # open in the browser
+scripts/dsp rm <short_id>         # delete
+scripts/dsp whoami                # who am I / which server
 ```
+
+Auth resolves as: `--token`/`--server` flags → env (`WIKI_TOKEN` /
+`WIKI_API_BASE`) → the saved config file. Directory publishing (`dsp
+publish ./out/`) isn't supported yet — publish a single self-contained
+HTML/Markdown/text file.
+
+> A minimal Bash alternative, `scripts/artifact.sh` (`publish` + `list`,
+> reads `WIKI_TOKEN` from the env), is also available for environments
+> without Python.
 
 ### From Claude Code / Cursor (MCP)
 

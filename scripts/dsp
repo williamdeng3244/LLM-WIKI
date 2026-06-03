@@ -1,0 +1,366 @@
+#!/usr/bin/env python3
+"""dsp — publish gated artifacts from the terminal.
+
+Modeled on display.dev's `dsp` CLI: log in once, then `dsp publish <file>`
+returns an authenticated share URL. Talks to this wiki's artifact API
+(`/api/artifacts`). Pure standard library — no pip install needed.
+
+Auth resolves in this order (first hit wins):
+  1. --token / --server flags
+  2. env  WIKI_TOKEN / WIKI_API_BASE
+  3. config file  ~/.config/wiki-dsp/config.json  (written by `dsp login`)
+
+Commands:
+  dsp login [--server URL] [--token TOK | --email E [--password P]]
+  dsp logout
+  dsp whoami
+  dsp publish <file> [--private|--wiki|--public] [--name N] [--expires YYYY-MM-DD] [--open]
+  dsp list [--public] [--limit N]
+  dsp open <short_id>
+  dsp version <short_id> <file>     # republish: upload a new version
+  dsp rm <short_id>
+
+Visibility (default: wiki):
+  private  only you can view
+  wiki     anyone signed in to this wiki can view
+  public   anyone with the link (requires ARTIFACTS_ALLOW_PUBLIC on the server)
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import mimetypes
+import os
+import sys
+import uuid
+import webbrowser
+from pathlib import Path
+from urllib import request as urlrequest
+from urllib.error import HTTPError, URLError
+
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "wiki-dsp"
+CONFIG_PATH = CONFIG_DIR / "config.json"
+DEFAULT_SERVER = "http://localhost:8000"
+
+# Extension → MIME. The API only accepts these three; uploads that send
+# application/octet-stream are rejected, so we set it explicitly.
+_MIME_BY_EXT = {
+    ".html": "text/html", ".htm": "text/html",
+    ".md": "text/markdown", ".markdown": "text/markdown",
+    ".txt": "text/plain",
+}
+
+
+def die(msg: str, code: int = 1):
+    print(f"dsp: {msg}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+# ── Config ────────────────────────────────────────────────────────────────
+
+def load_config() -> dict:
+    try:
+        return json.loads(CONFIG_PATH.read_text())
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def save_config(cfg: dict):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2) + "\n")
+    try:
+        CONFIG_PATH.chmod(0o600)  # token is a secret
+    except OSError:
+        pass
+
+
+def resolve_auth(args) -> tuple[str, str | None]:
+    """Return (api_base, token). api_base has no trailing slash and already
+    includes `/api`."""
+    cfg = load_config()
+    api_base = (
+        os.environ.get("WIKI_API_BASE")
+        or getattr(args, "server", None)
+        or cfg.get("server")
+        or DEFAULT_SERVER
+    )
+    api_base = api_base.rstrip("/")
+    if not api_base.endswith("/api"):
+        api_base += "/api"
+    token = (
+        os.environ.get("WIKI_TOKEN")
+        or getattr(args, "token", None)
+        or cfg.get("token")
+    )
+    return api_base, token
+
+
+# ── HTTP ──────────────────────────────────────────────────────────────────
+
+def _request(method, url, token, *, data=None, headers=None):
+    hdrs = dict(headers or {})
+    if token:
+        hdrs["Authorization"] = f"Bearer {token}"
+    req = urlrequest.Request(url, data=data, method=method, headers=hdrs)
+    try:
+        with urlrequest.urlopen(req) as resp:
+            return resp.status, resp.read()
+    except HTTPError as e:
+        return e.code, e.read()
+    except URLError as e:
+        die(f"cannot reach {url}: {e.reason}")
+
+
+def api_json(method, api_base, path, token, *, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Content-Type": "application/json"} if data else {}
+    status, raw = _request(method, api_base + path, token, data=data, headers=headers)
+    if status == 204:
+        return status, None
+    try:
+        return status, json.loads(raw or b"null")
+    except ValueError:
+        return status, raw.decode(errors="replace")
+
+
+def _multipart(fields, file_field, filepath, mime):
+    """Build a multipart/form-data body. Returns (body, content_type)."""
+    boundary = "----dsp" + uuid.uuid4().hex
+    out = bytearray()
+
+    def add(line=""):
+        out.extend(line.encode())
+        out.extend(b"\r\n")
+
+    for k, v in fields.items():
+        if v is None:
+            continue
+        add(f"--{boundary}")
+        add(f'Content-Disposition: form-data; name="{k}"')
+        add()
+        add(str(v))
+    add(f"--{boundary}")
+    add(f'Content-Disposition: form-data; name="{file_field}"; filename="{filepath.name}"')
+    add(f"Content-Type: {mime}")
+    add()
+    out.extend(filepath.read_bytes())
+    out.extend(b"\r\n")
+    add(f"--{boundary}--")
+    return bytes(out), f"multipart/form-data; boundary={boundary}"
+
+
+def _api_error(status, payload):
+    if isinstance(payload, dict) and "detail" in payload:
+        return f"{status}: {payload['detail']}"
+    return f"{status}: {payload}"
+
+
+def _mime_for(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext in _MIME_BY_EXT:
+        return _MIME_BY_EXT[ext]
+    guessed, _ = mimetypes.guess_type(str(path))
+    if guessed in ("text/html", "text/markdown", "text/plain"):
+        return guessed
+    return "text/plain"  # safe default the API accepts
+
+
+def _upload(api_base, path, token, filepath, fields):
+    body, content_type = _multipart(fields, "file", filepath, _mime_for(filepath))
+    status, raw = _request("POST", api_base + path, token,
+                           data=body, headers={"Content-Type": content_type})
+    try:
+        payload = json.loads(raw or b"null")
+    except ValueError:
+        payload = raw.decode(errors="replace")
+    return status, payload
+
+
+# ── Commands ──────────────────────────────────────────────────────────────
+
+def cmd_login(args):
+    cfg = load_config()
+    server = (args.server or cfg.get("server") or DEFAULT_SERVER).rstrip("/")
+    cfg["server"] = server
+    api_base = server + ("" if server.endswith("/api") else "/api")
+
+    if args.token:
+        cfg["token"] = args.token
+    elif args.email:
+        import getpass
+        password = args.password or getpass.getpass("Password: ")
+        status, payload = api_json(
+            "POST", api_base, "/auth/login", None,
+            body={"email": args.email, "password": password},
+        )
+        if status != 200:
+            die(_api_error(status, payload))
+        cfg["token"] = payload["token"]
+    else:
+        try:
+            tok = input(f"API token for {server} (wt_…): ").strip()
+        except EOFError:
+            die("no token provided")
+        if not tok:
+            die("no token provided")
+        cfg["token"] = tok
+
+    save_config(cfg)
+    status, payload = api_json("GET", api_base, "/auth/whoami", cfg["token"])
+    if status == 200 and isinstance(payload, dict):
+        print(f"Logged in to {server} as {payload.get('email')} ({payload.get('role')}).")
+    else:
+        die(_api_error(status, payload) + "  (token saved but whoami failed)")
+
+
+def cmd_logout(args):
+    cfg = load_config()
+    cfg.pop("token", None)
+    save_config(cfg)
+    print("Logged out (token removed).")
+
+
+def cmd_whoami(args):
+    api_base, token = resolve_auth(args)
+    if not token:
+        die("not logged in — run `dsp login`")
+    status, payload = api_json("GET", api_base, "/auth/whoami", token)
+    if status != 200:
+        die(_api_error(status, payload))
+    print(f"{payload.get('email')}  ·  {payload.get('role')}  ·  {api_base}")
+
+
+def cmd_publish(args):
+    api_base, token = resolve_auth(args)
+    if not token:
+        die("not logged in — run `dsp login` (or set WIKI_TOKEN)")
+    path = Path(args.file)
+    if path.is_dir():
+        die("directory publishing isn't supported yet — publish a single "
+            "self-contained HTML/Markdown/text file. (Tracked as a follow-up.)")
+    if not path.is_file():
+        die(f"no such file: {path}")
+
+    expires_at = f"{args.expires}T23:59:59Z" if args.expires else None
+    fields = {"name": args.name, "visibility": args.visibility, "expires_at": expires_at}
+    status, payload = _upload(api_base, "/artifacts", token, path, fields)
+    if status not in (200, 201):
+        die(_api_error(status, payload))
+    print(payload["url"])
+    if args.open:
+        webbrowser.open(payload["url"])
+
+
+def cmd_version(args):
+    api_base, token = resolve_auth(args)
+    if not token:
+        die("not logged in — run `dsp login`")
+    path = Path(args.file)
+    if not path.is_file():
+        die(f"no such file: {path}")
+    status, payload = _upload(api_base, f"/artifacts/{args.short_id}/versions", token, path, {})
+    if status not in (200, 201):
+        die(_api_error(status, payload))
+    print(f"{payload['url']}  (v{payload['version']})")
+
+
+def cmd_list(args):
+    api_base, token = resolve_auth(args)
+    path = "/artifacts/public" if args.public else "/artifacts"
+    if not args.public and not token:
+        die("not logged in — run `dsp login` (or use `dsp list --public`)")
+    status, payload = api_json("GET", api_base, f"{path}?limit={args.limit}&offset=0", token)
+    if status != 200:
+        die(_api_error(status, payload))
+    items = payload.get("items", [])
+    if not items:
+        print("(no artifacts)")
+        return
+    print(f"{'SHORT_ID':<12}  {'VIS':<8}  {'VER':<4}  {'VIEWS/7d':<8}  NAME")
+    for it in items:
+        print(f"{it['short_id']:<12}  {it['visibility']:<8}  "
+              f"{'v'+str(it['current_version']):<4}  {it.get('views_7d', 0):<8}  {it['name']}")
+    print(f"({payload.get('total', len(items))} total)")
+
+
+def cmd_open(args):
+    api_base, token = resolve_auth(args)
+    status, payload = api_json("GET", api_base, f"/artifacts/{args.short_id}", token)
+    origin = api_base[:-4] if api_base.endswith("/api") else api_base
+    if status == 200 and isinstance(payload, dict):
+        url = f"{origin}/a/{payload['short_id']}-{payload['slug']}"
+    else:
+        url = f"{origin}/a/{args.short_id}"  # best effort
+    print(url)
+    webbrowser.open(url)
+
+
+def cmd_rm(args):
+    api_base, token = resolve_auth(args)
+    if not token:
+        die("not logged in — run `dsp login`")
+    status, payload = api_json("DELETE", api_base, f"/artifacts/{args.short_id}", token)
+    if status not in (200, 204):
+        die(_api_error(status, payload))
+    print(f"deleted {args.short_id}")
+
+
+# ── Argument parsing ──────────────────────────────────────────────────────
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="dsp",
+        description="Publish gated artifacts from the terminal (à la display.dev).",
+    )
+    p.add_argument("--server", help="Wiki server URL (default: saved config or http://localhost:8000)")
+    p.add_argument("--token", help="API token (overrides saved login)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sp = sub.add_parser("login", help="Save server + credentials")
+    sp.add_argument("--email", help="Admin email (password login)")
+    sp.add_argument("--password", help="Admin password (prompted if omitted)")
+    sp.set_defaults(func=cmd_login)
+
+    sub.add_parser("logout", help="Forget saved token").set_defaults(func=cmd_logout)
+    sub.add_parser("whoami", help="Show the signed-in user").set_defaults(func=cmd_whoami)
+
+    sp = sub.add_parser("publish", help="Publish a file → prints the share URL")
+    sp.add_argument("file")
+    sp.add_argument("--name", help="Display name (defaults to the filename)")
+    sp.add_argument("--expires", metavar="YYYY-MM-DD", help="Expiry date")
+    sp.add_argument("--open", action="store_true", help="Open the URL in a browser")
+    vis = sp.add_mutually_exclusive_group()
+    vis.add_argument("--private", dest="visibility", action="store_const", const="private")
+    vis.add_argument("--wiki", dest="visibility", action="store_const", const="wiki")
+    vis.add_argument("--public", dest="visibility", action="store_const", const="public")
+    vis.add_argument("--visibility", choices=["private", "wiki", "public"])
+    sp.set_defaults(func=cmd_publish, visibility=None)
+
+    sp = sub.add_parser("version", help="Upload a new version of an artifact")
+    sp.add_argument("short_id")
+    sp.add_argument("file")
+    sp.set_defaults(func=cmd_version)
+
+    sp = sub.add_parser("list", help="List artifacts")
+    sp.add_argument("--public", action="store_true", help="List public artifacts (no auth)")
+    sp.add_argument("--limit", type=int, default=50)
+    sp.set_defaults(func=cmd_list)
+
+    sp = sub.add_parser("open", help="Open an artifact in your browser")
+    sp.add_argument("short_id")
+    sp.set_defaults(func=cmd_open)
+
+    sp = sub.add_parser("rm", help="Delete an artifact")
+    sp.add_argument("short_id")
+    sp.set_defaults(func=cmd_rm)
+
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
