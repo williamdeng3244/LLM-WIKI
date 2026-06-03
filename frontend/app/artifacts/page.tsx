@@ -4,45 +4,90 @@ import Link from 'next/link';
 import {
   Share2, Search, Plus, Copy, ExternalLink, Trash2, Upload, Eye,
   Loader2, Check, RefreshCw, Lock, Users, Globe, FileText, FileCode,
-  Sun, Moon, LogIn, LogOut,
+  Sun, Moon, LogIn, LogOut, ChevronDown,
 } from 'lucide-react';
 
 import PublishArtifactModal from '@/components/artifacts/PublishArtifactModal';
 import { useTheme } from '@/lib/theme';
+import { useLanguage } from '@/lib/i18n';
 import {
   api, type ArtifactMeta, type ArtifactVisibility,
   type ArtifactAccessLogEntry, type User,
 } from '@/lib/api';
 
-// Visibility cycles private → wiki → public → private when the chip is
-// clicked. `public` may be rejected with 403 when ARTIFACTS_ALLOW_PUBLIC
-// is off on the instance; we surface that error inline rather than
-// pre-disabling it (we have no client probe for the flag).
+// The three visibility groups, rendered top-to-bottom with a divider
+// between each. Labels/blurbs are looked up per-language from STR below;
+// VIS_META carries the icon + chip colour only.
 const VIS_ORDER: ArtifactVisibility[] = ['private', 'wiki', 'public'];
-const VIS_META: Record<ArtifactVisibility, { label: string; icon: typeof Lock; cls: string }> = {
-  private: { label: 'Private', icon: Lock, cls: 'border-amber-500/40 text-amber-300' },
-  wiki: { label: 'Wiki', icon: Users, cls: 'border-line text-muted hover:text-ink' },
-  public: { label: 'Public', icon: Globe, cls: 'border-rose-500/40 text-rose-300' },
+const VIS_META: Record<ArtifactVisibility, { icon: typeof Lock; cls: string }> = {
+  private: { icon: Lock, cls: 'border-amber-500/40 text-amber-300' },
+  wiki: { icon: Users, cls: 'border-line text-muted hover:text-ink' },
+  public: { icon: Globe, cls: 'border-rose-500/40 text-rose-300' },
 };
-
-function nextVisibility(v: ArtifactVisibility): ArtifactVisibility {
-  return VIS_ORDER[(VIS_ORDER.indexOf(v) + 1) % VIS_ORDER.length];
-}
 
 function mimeIcon(mime: string) {
   return mime === 'text/html' ? FileCode : FileText;
 }
 
-// Section copy for the three visibility groups, rendered top-to-bottom
-// with a divider between each.
-const VIS_SECTIONS: { key: ArtifactVisibility; blurb: string }[] = [
-  { key: 'private', blurb: 'Only you can open these.' },
-  { key: 'wiki', blurb: 'Anyone signed in to this wiki can open these.' },
-  { key: 'public', blurb: 'Anyone with the link can open these — no login.' },
-];
+// Local translation table (中文 / English). Kept here rather than in the
+// shared i18n bundle since these strings are artifacts-page-specific.
+type SectionCopy = { label: string; blurb: string };
+type Strings = {
+  title: string; tagline: string; search: string;
+  newArtifact: string; newHint: string;
+  yours: string; publicOnly: string;
+  bannerPre: string; bannerPublic: string; bannerPost: string;
+  signIn: string; lock: (label: string) => string;
+  noneYet: string; noMatch: (label: string) => string;
+  copy: string; copied: string; open: string; version: string; log: string;
+  confirm: string; del: string; changeVis: string; rename: string;
+  views: string; exp: string; loading: string;
+  accessLog: string; noViews: string; anonymous: string;
+  sections: Record<ArtifactVisibility, SectionCopy>;
+};
+const STR: Record<'en' | 'zh', Strings> = {
+  en: {
+    title: 'Artifacts', tagline: 'Gated share links', search: 'Search artifacts…',
+    newArtifact: 'New artifact', newHint: 'Upload a file, or write HTML / Markdown',
+    yours: 'Your artifacts', publicOnly: 'Public artifacts',
+    bannerPre: 'You’re signed out — only ', bannerPublic: 'public',
+    bannerPost: ' artifacts are shown. Sign in to see your wiki and private artifacts.',
+    signIn: 'Sign in', lock: (l) => `Sign in to view your ${l.toLowerCase()} artifacts.`,
+    noneYet: 'None yet.', noMatch: (l) => `No matches in ${l}.`,
+    copy: 'Copy', copied: 'Copied', open: 'Open', version: 'Version', log: 'Log',
+    confirm: 'Confirm?', del: 'Delete artifact', changeVis: 'Change visibility',
+    rename: 'Click to rename', views: 'views/7d', exp: 'exp', loading: 'Loading…',
+    accessLog: 'Access log', noViews: 'No views yet.', anonymous: '(anonymous)',
+    sections: {
+      private: { label: 'Private', blurb: 'Only you can open these.' },
+      wiki: { label: 'Wiki', blurb: 'Anyone signed in to this wiki can open these.' },
+      public: { label: 'Public', blurb: 'Anyone with the link can open these — no login.' },
+    },
+  },
+  zh: {
+    title: '制品', tagline: '受控分享链接', search: '搜索制品…',
+    newArtifact: '新建制品', newHint: '上传文件，或编写 HTML / Markdown',
+    yours: '我的制品', publicOnly: '公开制品',
+    bannerPre: '你已退出登录 —— 仅显示', bannerPublic: '公开',
+    bannerPost: '制品。登录后可查看你的 Wiki 与私有制品。',
+    signIn: '登录', lock: (l) => `登录后可查看你的${l}制品。`,
+    noneYet: '暂无。', noMatch: (l) => `${l}中无匹配项。`,
+    copy: '复制', copied: '已复制', open: '打开', version: '新版本', log: '记录',
+    confirm: '确认？', del: '删除制品', changeVis: '更改可见性',
+    rename: '点击重命名', views: '次/7天', exp: '到期', loading: '加载中…',
+    accessLog: '访问记录', noViews: '暂无访问。', anonymous: '(匿名)',
+    sections: {
+      private: { label: '私有', blurb: '仅你本人可打开。' },
+      wiki: { label: 'Wiki', blurb: '任何登录本 Wiki 的用户都可打开。' },
+      public: { label: '公开', blurb: '任何拿到链接的人都可打开 —— 无需登录。' },
+    },
+  },
+};
 
 export default function ArtifactsPage() {
   const { theme, toggle: toggleTheme } = useTheme();
+  const { lang, toggle: toggleLang } = useLanguage();
+  const s = STR[lang];
   const [items, setItems] = useState<ArtifactMeta[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -60,6 +105,7 @@ export default function ArtifactsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [accessLogFor, setAccessLogFor] = useState<string | null>(null);
   const [accessLog, setAccessLog] = useState<ArtifactAccessLogEntry[] | null>(null);
+  const [visMenuFor, setVisMenuFor] = useState<string | null>(null);
 
   // Upload modal (reuses the same PublishArtifactModal as the file-tree
   // right-click path). `tick` bumps after a publish so the grid refetches.
@@ -127,13 +173,14 @@ export default function ArtifactsPage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        if (visMenuFor) { setVisMenuFor(null); return; }
         if (accessLogFor) { setAccessLogFor(null); return; }
         if (renaming) { setRenaming(null); return; }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [renaming, accessLogFor]);
+  }, [renaming, accessLogFor, visMenuFor]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -168,13 +215,14 @@ export default function ArtifactsPage() {
     }
   }
 
-  async function cycleVisibility(item: ArtifactMeta) {
-    const next = nextVisibility(item.visibility);
+  async function changeVisibility(item: ArtifactMeta, next: ArtifactVisibility) {
+    setVisMenuFor(null);
+    if (next === item.visibility) return;
     try {
       await api.patchArtifact(item.short_id, { visibility: next });
       refresh();
     } catch (e: unknown) {
-      // Most likely a 403 when stepping to `public` on an instance with
+      // Most likely a 403 when switching to `public` on an instance with
       // ARTIFACTS_ALLOW_PUBLIC=false. Surface it; the artifact keeps its
       // previous visibility server-side.
       setError((e as Error).message);
@@ -244,7 +292,7 @@ export default function ArtifactsPage() {
               <button
                 className="text-left font-medium text-[0.9643rem] hover:text-accent block w-full truncate"
                 onClick={() => { setRenaming(item.short_id); setRenameValue(item.name); }}
-                title="Click to rename"
+                title={s.rename}
               >
                 {item.name}
               </button>
@@ -257,17 +305,41 @@ export default function ArtifactsPage() {
 
         {/* Meta row */}
         <div className="flex items-center flex-wrap gap-2 mt-3 text-[0.75rem] text-muted">
-          <button
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${vis.cls}`}
-            onClick={() => cycleVisibility(item)}
-            title="Click to change visibility"
-          >
-            <VisIcon size={11} /> {vis.label}
-          </button>
-          <span>{item.views_7d} views/7d</span>
+          <div className="relative">
+            <button
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${vis.cls}`}
+              onClick={() => setVisMenuFor(visMenuFor === item.short_id ? null : item.short_id)}
+              title={s.changeVis}
+            >
+              <VisIcon size={11} /> {s.sections[item.visibility].label}
+              <ChevronDown size={10} className="opacity-60" />
+            </button>
+            {visMenuFor === item.short_id && (
+              <div
+                className="absolute z-30 mt-1 left-0 min-w-[150px] rounded-md border border-line bg-panel shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)] py-1"
+                onMouseLeave={() => setVisMenuFor(null)}
+              >
+                {VIS_ORDER.map((key) => {
+                  const MIcon = VIS_META[key].icon;
+                  const active = item.visibility === key;
+                  return (
+                    <button
+                      key={key}
+                      className={`flex items-center gap-2 w-full px-3 py-1.5 text-left text-[0.8rem] hover:bg-line/40 ${active ? 'text-accent' : 'text-ink'}`}
+                      onClick={() => changeVisibility(item, key)}
+                    >
+                      <MIcon size={12} /> {s.sections[key].label}
+                      {active && <Check size={12} className="ml-auto" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <span>{item.views_7d} {s.views}</span>
           {item.expires_at && (
             <span title="Expiration">
-              exp {new Date(item.expires_at).toLocaleDateString()}
+              {s.exp} {new Date(item.expires_at).toLocaleDateString()}
             </span>
           )}
         </div>
@@ -281,27 +353,27 @@ export default function ArtifactsPage() {
             onClick={() => copyURL(item)}
           >
             {copiedSid === item.short_id
-              ? <><Check size={11} className="text-accent" /> Copied</>
-              : <><Copy size={11} /> Copy</>}
+              ? <><Check size={11} className="text-accent" /> {s.copied}</>
+              : <><Copy size={11} /> {s.copy}</>}
           </button>
           <button
             className="px-2 py-1 rounded border border-line hover:bg-line/40 flex items-center gap-1"
             onClick={() => openInNewTab(item)}
           >
-            <ExternalLink size={11} /> Open
+            <ExternalLink size={11} /> {s.open}
           </button>
           <button
             className="px-2 py-1 rounded border border-line hover:bg-line/40 flex items-center gap-1"
             onClick={() => { versionFor.current = item.short_id; versionFileInput.current?.click(); }}
-            title="Upload a new version"
+            title={s.version}
           >
-            <Upload size={11} /> Version
+            <Upload size={11} /> {s.version}
           </button>
           <button
             className="px-2 py-1 rounded border border-line hover:bg-line/40 flex items-center gap-1"
             onClick={() => showAccessLog(item.short_id)}
           >
-            <Eye size={11} /> Log
+            <Eye size={11} /> {s.log}
           </button>
           <div className="flex-1" />
           {confirmDelete === item.short_id ? (
@@ -311,13 +383,13 @@ export default function ArtifactsPage() {
               onBlur={() => setConfirmDelete(null)}
               autoFocus
             >
-              Confirm?
+              {s.confirm}
             </button>
           ) : (
             <button
               className="px-2 py-1 rounded border border-line hover:bg-rose-500/10 hover:text-rose-300 flex items-center gap-1"
               onClick={() => setConfirmDelete(item.short_id)}
-              title="Delete artifact"
+              title={s.del}
             >
               <Trash2 size={11} />
             </button>
@@ -337,17 +409,17 @@ export default function ArtifactsPage() {
           <Link href="/" className="flex items-center gap-2 text-ink hover:text-accent transition-colors">
             <Share2 size={18} className="text-accent" />
             <span className="font-display font-medium tracking-[0.02em] text-[1.0714rem]">
-              Artifacts
+              {s.title}
             </span>
           </Link>
           <span className="text-[0.8214rem] text-muted hidden md:inline">
-            Gated share links · {total}
+            {s.tagline} · {total}
           </span>
           <div className="flex-1" />
           <div className="relative w-[260px] hidden sm:block">
             <input
               className="form-input h-8 pl-3 pr-9 text-[0.9286rem] w-full"
-              placeholder="Search artifacts…"
+              placeholder={s.search}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -356,7 +428,6 @@ export default function ArtifactsPage() {
           <button
             className="btn btn-icon"
             onClick={refresh}
-            title="Refresh"
             aria-label="Refresh"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -371,11 +442,20 @@ export default function ArtifactsPage() {
           >
             {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
           </button>
+          {/* Language toggle (中文 / English) — shares the app-wide hook. */}
+          <button
+            className="btn btn-icon font-mono text-[0.7857rem] tracking-tight px-1.5"
+            onClick={toggleLang}
+            title="切换语言 · Switch language"
+            aria-label="Toggle language"
+          >
+            {lang === 'en' ? '中' : 'EN'}
+          </button>
           <button
             onClick={() => setShowUpload(true)}
             className="inline-flex items-center gap-1.5 px-3 h-8 rounded-md bg-accent text-paper text-[0.86rem] font-medium hover:opacity-90 transition-opacity"
           >
-            <Plus size={15} /> New artifact
+            <Plus size={15} /> {s.newArtifact}
           </button>
           {/* Sign-in / out. Wiki & private artifacts require auth to view,
               so a signed-out visitor needs an obvious way in. */}
@@ -393,7 +473,7 @@ export default function ArtifactsPage() {
               href="/login?next=/artifacts"
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-accent/50 text-accent hover:bg-accent/10 text-[0.82rem] font-medium"
             >
-              <LogIn size={13} /> Sign in
+              <LogIn size={13} /> {s.signIn}
             </Link>
           ))}
           <Link
@@ -416,7 +496,7 @@ export default function ArtifactsPage() {
       {/* Body */}
       <div className="max-w-[1200px] mx-auto px-4 py-8">
         <h2 className="text-[0.7143rem] uppercase tracking-[0.10em] text-muted font-medium mb-3">
-          {user ? 'Your artifacts' : 'Public artifacts'}{!loading && items.length > 0 ? ` · ${items.length}` : ''}
+          {user ? s.yours : s.publicOnly}{!loading && items.length > 0 ? ` · ${items.length}` : ''}
         </h2>
 
         {/* Signed-out banner — the page stays usable; gated sections lock. */}
@@ -424,14 +504,13 @@ export default function ArtifactsPage() {
           <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
             <Lock size={16} className="text-amber-300 shrink-0" />
             <div className="flex-1 text-[0.84rem] text-ink">
-              You’re signed out — only <span className="font-medium">public</span> artifacts are shown.
-              Sign in to see your wiki and private artifacts.
+              {s.bannerPre}<span className="font-medium">{s.bannerPublic}</span>{s.bannerPost}
             </div>
             <Link
               href="/login?next=/artifacts"
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-accent text-paper text-[0.82rem] font-medium hover:opacity-90 shrink-0"
             >
-              <LogIn size={13} /> Sign in
+              <LogIn size={13} /> {s.signIn}
             </Link>
           </div>
         )}
@@ -446,51 +525,49 @@ export default function ArtifactsPage() {
               <span className="flex items-center justify-center w-11 h-11 rounded-full border border-line group-hover:border-accent/60 group-hover:text-accent transition-colors">
                 <Plus size={20} />
               </span>
-              <span className="text-[0.9286rem] font-medium">New artifact</span>
-              <span className="text-[0.78rem] text-center px-3">Upload a file, or write HTML / Markdown</span>
+              <span className="text-[0.9286rem] font-medium">{s.newArtifact}</span>
+              <span className="text-[0.78rem] text-center px-3">{s.newHint}</span>
             </button>
           </div>
         )}
 
         {loading && items.length === 0 ? (
           <div className="px-4 py-16 text-center text-muted text-[0.9rem]">
-            <Loader2 size={16} className="animate-spin inline mr-1.5" /> Loading…
+            <Loader2 size={16} className="animate-spin inline mr-1.5" /> {s.loading}
           </div>
         ) : (
           // One labeled section per visibility, with a divider between each.
           // When signed out, the non-public sections lock instead of listing.
-          VIS_SECTIONS.map((section) => {
-            const meta = VIS_META[section.key];
-            const SIcon = meta.icon;
-            const locked = !user && section.key !== 'public';
-            const group = filtered.filter((a) => a.visibility === section.key);
+          VIS_ORDER.map((key) => {
+            const sec = s.sections[key];
+            const SIcon = VIS_META[key].icon;
+            const locked = !user && key !== 'public';
+            const group = filtered.filter((a) => a.visibility === key);
             return (
-              <section key={section.key} className="mb-10">
+              <section key={key} className="mb-10">
                 <div className="flex items-center gap-2">
                   <SIcon size={14} className="text-muted" />
                   <h3 className="font-display text-[1.0714rem] font-medium text-ink tracking-[-0.005em]">
-                    {meta.label}
+                    {sec.label}
                   </h3>
                   {!locked && <span className="text-[0.78rem] text-muted">{group.length}</span>}
                   <div className="flex-1 h-px bg-line ml-2" />
                 </div>
-                <p className="text-[0.78rem] text-muted mt-1 mb-3">{section.blurb}</p>
+                <p className="text-[0.78rem] text-muted mt-1 mb-3">{sec.blurb}</p>
                 {locked ? (
                   <div className="flex items-center gap-3 rounded-xl border border-dashed border-line px-4 py-6 text-muted">
                     <Lock size={15} className="shrink-0" />
-                    <span className="text-[0.84rem]">
-                      Sign in to view your {meta.label.toLowerCase()} artifacts.
-                    </span>
+                    <span className="text-[0.84rem]">{s.lock(sec.label)}</span>
                     <Link
                       href="/login?next=/artifacts"
                       className="ml-auto text-[0.82rem] text-accent hover:underline"
                     >
-                      Sign in
+                      {s.signIn}
                     </Link>
                   </div>
                 ) : group.length === 0 ? (
                   <p className="text-[0.82rem] text-muted/70 italic py-1">
-                    {query ? `No matches in ${meta.label}.` : 'None yet.'}
+                    {query ? s.noMatch(sec.label) : s.noneYet}
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -539,7 +616,7 @@ export default function ArtifactsPage() {
             <div className="px-4 py-3 border-b border-line flex items-center gap-2">
               <Eye size={14} className="text-accent" />
               <h4 className="font-medium text-[0.95rem] flex-1">
-                Access log · <code>{accessLogFor}</code>
+                {s.accessLog} · <code>{accessLogFor}</code>
               </h4>
               <button className="text-muted hover:text-ink" onClick={() => setAccessLogFor(null)}>
                 ✕
@@ -548,16 +625,16 @@ export default function ArtifactsPage() {
             <div className="flex-1 overflow-auto px-4 py-3">
               {accessLog === null ? (
                 <div className="text-muted text-[0.86rem]">
-                  <Loader2 size={13} className="animate-spin inline mr-1" /> Loading…
+                  <Loader2 size={13} className="animate-spin inline mr-1" /> {s.loading}
                 </div>
               ) : accessLog.length === 0 ? (
-                <div className="text-muted text-[0.86rem]">No views yet.</div>
+                <div className="text-muted text-[0.86rem]">{s.noViews}</div>
               ) : (
                 <ul className="text-[0.82rem] divide-y divide-line">
                   {accessLog.map((row, idx) => (
                     <li key={idx} className="py-1.5">
                       <div>
-                        <span className="text-ink">{row.user_email || '(anonymous)'}</span>
+                        <span className="text-ink">{row.user_email || s.anonymous}</span>
                         <span className="text-muted"> · v{row.version}</span>
                         <span className="text-muted"> · {new Date(row.accessed_at).toLocaleString()}</span>
                       </div>

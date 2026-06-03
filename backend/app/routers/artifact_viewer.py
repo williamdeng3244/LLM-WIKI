@@ -201,8 +201,19 @@ _SHELL_CSS = """
   --muted: #9aa1b8;
   --accent: #82a4ff;
 }
+/* Light values: applied when the user explicitly picks light, OR (no
+   explicit choice) when the OS prefers light. An explicit data-theme
+   always wins over the media query. */
+[data-theme="light"] {
+  --bg: #f7f8fb;
+  --panel: rgba(0,0,0,0.03);
+  --border: rgba(0,0,0,0.10);
+  --ink: #1a1f2e;
+  --muted: #5a6273;
+  --accent: #3a63d9;
+}
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #f7f8fb;
     --panel: rgba(0,0,0,0.03);
     --border: rgba(0,0,0,0.10);
@@ -212,17 +223,21 @@ _SHELL_CSS = """
   }
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body { margin: 0; padding: 0; }
+/* Hide scrollbars everywhere but keep scrolling — the page scrolls
+   without a visible bar. */
+html { scrollbar-width: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; display: none; }
 body {
   background: var(--bg); color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  display: flex; flex-direction: column;
 }
 header.shell {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 16px; border-bottom: 1px solid var(--border);
   background: var(--panel); backdrop-filter: blur(6px);
   font-size: 13px;
+  position: sticky; top: 0; z-index: 5;
 }
 header.shell .title { font-weight: 600; }
 header.shell .meta { color: var(--muted); }
@@ -230,26 +245,51 @@ header.shell .spacer { flex: 1; }
 header.shell a, header.shell button {
   color: var(--accent); background: transparent; border: 0;
   font: inherit; cursor: pointer; text-decoration: none;
-  padding: 4px 8px; border-radius: 4px;
+  padding: 4px 8px; border-radius: 4px; line-height: 1;
 }
 header.shell a:hover, header.shell button:hover { background: var(--border); }
-main.shell { flex: 1; display: flex; min-height: 0; }
-main.shell iframe { flex: 1; width: 100%; border: 0; background: white; }
-article.shell {
-  flex: 1; padding: 32px 48px; overflow: auto; max-width: 860px;
-  margin: 0 auto; line-height: 1.55;
+header.shell button.icon { font-size: 15px; }
+
+/* ── Document mode (Markdown / text): one natural, scrollbar-free page ── */
+body.mode-doc article.shell {
+  padding: 32px 24px 64px; max-width: 820px; margin: 0 auto; line-height: 1.6;
 }
 article.shell pre {
   background: var(--panel); padding: 12px; border-radius: 6px; overflow: auto;
 }
 article.shell code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 article.shell a { color: var(--accent); }
+
+/* ── Frame mode (HTML): the sandboxed iframe fills the viewport. ── */
+body.mode-frame { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+body.mode-frame main.shell { flex: 1; min-height: 0; display: flex; }
+body.mode-frame main.shell iframe { flex: 1; width: 100%; border: 0; background: #fff; }
 """.strip()
 
 
 # The sandbox attribute is load-bearing — keep this exact string and
 # never add `allow-same-origin` (see spec § 10 + the header docstring).
 _IFRAME_SANDBOX = "allow-scripts allow-popups allow-forms"
+
+# Light/dark toggle for the shell (NOT the sandboxed iframe — this runs in
+# our own top-level document). `_THEME_INIT_JS` runs in <head> to set the
+# saved theme before first paint (no flash); `_THEME_TOGGLE_JS` wires the
+# button + persists the choice in localStorage.
+_THEME_INIT_JS = (
+    "(function(){try{var s=localStorage.getItem('dsp:art:theme');"
+    "if(s==='light'||s==='dark')"
+    "document.documentElement.setAttribute('data-theme',s);}catch(e){}})();"
+)
+_THEME_TOGGLE_JS = (
+    "function dspTheme(){var r=document.documentElement;return r.getAttribute('data-theme')"
+    "||((window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');}"
+    "function dspSyncThemeBtn(){var b=document.getElementById('dspThemeBtn');"
+    "if(b)b.textContent=dspTheme()==='light'?'\\u263E':'\\u2600';}"
+    "function dspToggleTheme(){var next=dspTheme()==='light'?'dark':'light';"
+    "document.documentElement.setAttribute('data-theme',next);"
+    "try{localStorage.setItem('dsp:art:theme',next);}catch(e){}dspSyncThemeBtn();}"
+    "dspSyncThemeBtn();"
+)
 
 
 def _shell_html(
@@ -258,7 +298,10 @@ def _shell_html(
 ) -> str:
     name = html.escape(artifact.name)
     owner = html.escape(owner_email or "(unknown)")
-    back = html.escape(settings.public_base_url.rstrip("/") or "/")
+    base = settings.public_base_url.rstrip("/")
+    artifacts_url = html.escape((base or "") + "/artifacts")
+    body_class = "mode-frame" if is_iframe else "mode-doc"
+    body_inner = inner if is_iframe else f'<article class="shell">{inner}</article>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -266,18 +309,21 @@ def _shell_html(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{name}</title>
   <style>{_SHELL_CSS}</style>
+  <script>{_THEME_INIT_JS}</script>
 </head>
-<body>
+<body class="{body_class}">
   <header class="shell">
     <span class="title">{name}</span>
     <span class="meta">v{version}</span>
     <span class="meta">·</span>
     <span class="meta">Shared by {owner}</span>
     <span class="spacer"></span>
-    <a href="{back}">← Back to wiki</a>
+    <button id="dspThemeBtn" class="icon" onclick="dspToggleTheme()" title="Light / dark" aria-label="Toggle theme">☀</button>
+    <a href="{artifacts_url}">← Artifacts</a>
     <button onclick="navigator.clipboard.writeText(window.location.href)">Copy link</button>
   </header>
-  {inner if is_iframe else f'<article class="shell">{inner}</article>'}
+  {body_inner}
+  <script>{_THEME_TOGGLE_JS}</script>
 </body>
 </html>"""
 
