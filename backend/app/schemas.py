@@ -21,6 +21,7 @@ class UserOut(BaseModel):
     owner_id: Optional[int] = None
     mcp_enabled: bool = True
     is_active: bool = True
+    preferences: dict = {}
 
 
 class LoginRequest(BaseModel):

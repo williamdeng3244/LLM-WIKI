@@ -13,10 +13,16 @@ export type RevisionStatus = 'draft' | 'proposed' | 'accepted' | 'rejected' | 's
 export type FlagKind = 'incorrect' | 'outdated' | 'needs_source' | 'duplicate' | 'other';
 export type FlagStatus = 'open' | 'resolved' | 'dismissed';
 
+export type UserPreferences = {
+  // Custom hotkey bindings, keyed by hotkey id → combo string (e.g. "mod+k").
+  hotkeys?: Record<string, string>;
+  [k: string]: unknown;
+};
 export type User = {
   id: number; email: string; name: string; role: Role;
   is_agent: boolean; owner_id: number | null;
   mcp_enabled?: boolean; is_active?: boolean;
+  preferences?: UserPreferences;
 };
 export type Category = {
   id: number; slug: string; name: string; description: string | null;
@@ -291,6 +297,12 @@ export type PublishArtifactOptions = {
 export const api = {
   // Auth
   whoami: () => call<User>('/auth/whoami'),
+  // Save the signed-in user's UI preferences (account-bound). Returns the
+  // updated user. Send the full preferences object.
+  savePreferences: (prefs: UserPreferences) =>
+    call<User>('/auth/me/preferences', {
+      method: 'PUT', body: JSON.stringify(prefs),
+    }),
   authConfig: () => call<AuthConfigDTO>('/auth/config'),
   localLogin: (email: string, password: string) =>
     call<LoginResponseDTO>('/auth/login', {

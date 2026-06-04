@@ -134,6 +134,11 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE IF EXISTS users "
             "ADD COLUMN IF NOT EXISTS mcp_enabled BOOLEAN NOT NULL DEFAULT TRUE"
         ))
+        # Per-user UI preferences (custom hotkeys, etc.) as a JSON blob.
+        await conn.execute(text(
+            "ALTER TABLE IF EXISTS users "
+            "ADD COLUMN IF NOT EXISTS preferences JSON NOT NULL DEFAULT '{}'"
+        ))
         # Reviewer-feedback fields on agent draft provenance (Phase 3.6).
         await conn.execute(text(
             "ALTER TABLE IF EXISTS revision_provenance "

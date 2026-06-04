@@ -13,7 +13,7 @@ authorization just like any other user.
 import enum
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 
@@ -42,6 +42,12 @@ class User(Base):
     # 默认开启;管理员可在用户管理界面单独关闭某个用户。
     # 全局开关settings.mcp_enabled优先级更高。
     mcp_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Per-user UI preferences (custom hotkey bindings, etc.) as a JSON blob.
+    # Account-bound so a user's customizations follow them across devices
+    # once signed in. Shape is owned by the frontend; e.g.
+    #   {"hotkeys": {"search": "mod+k", "newTab": "mod+t"}}
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict)
 
     # Agent ownership: 历史遗留(已弃用)。新方案下agent通过MCP协议以
     # 真人身份接入,不再创建独立的agent user。保留这两列以兼容旧数据。

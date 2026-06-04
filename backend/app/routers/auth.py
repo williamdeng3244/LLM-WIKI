@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,27 @@ router = APIRouter()
 
 @router.get("/whoami", response_model=UserOut)
 async def whoami(user: User = Depends(current_user)):
+    return user
+
+
+@router.put("/me/preferences", response_model=UserOut)
+async def update_my_preferences(
+    body: dict = Body(...),
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),
+):
+    """Replace the signed-in user's UI preferences (custom hotkeys, etc.).
+    Account-bound, so customizations follow the user across devices. The
+    payload is the full preferences object; size-capped to keep the JSON
+    column sane."""
+    import json as _json
+    if not isinstance(body, dict):
+        raise HTTPException(400, "preferences must be a JSON object")
+    if len(_json.dumps(body)) > 64 * 1024:
+        raise HTTPException(413, "preferences too large (max 64 KB)")
+    user.preferences = body
+    await session.commit()
+    await session.refresh(user)
     return user
 
 

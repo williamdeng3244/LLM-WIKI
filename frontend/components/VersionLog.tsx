@@ -113,8 +113,10 @@ export default function VersionLog() {
   }, [open]);
 
   return (
-    // Outer wrapper so the panel positions relative to the badge.
-    <div ref={ref} className="fixed bottom-2.5 left-2.5 z-30">
+    // Outer wrapper so the dropdown positions relative to the badge. The
+    // parent (page.tsx bottom bar) handles fixed positioning so the version
+    // badge and the settings gear sit side by side.
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((s) => !s)}
@@ -130,12 +132,9 @@ export default function VersionLog() {
         }
       >
         <span>{APP_VERSION}</span>
-        {isOutdated && (
-          <span className="inline-flex items-center gap-1">
-            <Sparkles size={11} />
-            <span className="hidden md:inline">{t('version.update.available')}</span>
-          </span>
-        )}
+        {/* Update available → just a compact sparkle dot (the amber
+            highlight on the badge does the talking). No text label. */}
+        {isOutdated && <Sparkles size={11} />}
       </button>
 
       {open && (

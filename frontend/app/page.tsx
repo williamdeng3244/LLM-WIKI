@@ -7,7 +7,7 @@ import {
   ChevronsDownUp, ChevronsUpDown,
   Copy, Clipboard, History, Bookmark, BookmarkCheck, FolderInput, Trash2,
   ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon, HelpCircle,
-  Share2,
+  Share2, Settings,
 } from 'lucide-react';
 import Link from 'next/link';
 import PublishArtifactModal from '@/components/artifacts/PublishArtifactModal';
@@ -37,6 +37,8 @@ import LintPanel from '@/components/LintPanel';
 import UserManual from '@/components/UserManual';
 import ShortcutSheet from '@/components/ShortcutSheet';
 import VersionLog from '@/components/VersionLog';
+import SettingsModal from '@/components/SettingsModal';
+import { matchesCombo, resolveBindings } from '@/lib/hotkeys';
 import LoginModal from '@/components/LoginModal';
 import MovePageDialog from '@/components/MovePageDialog';
 import { useTheme } from '@/lib/theme';
@@ -81,6 +83,20 @@ export default function Home() {
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Sign out (shared by the topbar button + Settings → Account).
+  const signOut = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('wiki:jwt');
+    localStorage.removeItem('wiki:email');
+    localStorage.removeItem('wiki:role');
+    // Block the stub-mode auto-re-auth so sign-out actually sticks.
+    localStorage.setItem('wiki:signed-out', '1');
+    fetch(`${process.env.NEXT_PUBLIC_API_BASE || '/api'}/auth/logout`, {
+      method: 'POST', credentials: 'include',
+    }).finally(() => { window.location.href = '/login'; });
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Chat panel collapse: hydrate from localStorage on mount, persist on
@@ -309,39 +325,45 @@ export default function Home() {
 
   useEffect(() => { loadIdentity(); }, [loadIdentity]);
 
-  // Keyboard: ⌘K = search; ⌘O = quick switcher; ⌘E = suggest edit;
-  // ⌘T = new tab; ⌘W = close current tab; ⌘? = shortcut sheet.
+  // Effective hotkey bindings = defaults merged with this user's saved
+  // overrides (Settings → Hotkeys). Account-bound; see lib/hotkeys.
+  const hotkeyBindings = useMemo(
+    () => resolveBindings(user?.preferences),
+    [user?.preferences],
+  );
+
+  // Keyboard shortcuts. The five page-level ones are rebindable (read from
+  // `hotkeyBindings`); the ⌘? shortcut sheet keeps its special slash logic.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const cmd = e.metaKey || e.ctrlKey;
-      if (cmd && e.key === 'k') {
+      if (matchesCombo(e, hotkeyBindings.search)) {
         e.preventDefault();
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
         setShowSearch(true);
+        return;
       }
-      if (cmd && (e.key === 'o' || e.key === 'O')) {
+      if (matchesCombo(e, hotkeyBindings.switcher)) {
         e.preventDefault();
         setShowQuickSwitcher(true);
+        return;
       }
-      if (cmd && e.key === 'e' && user && user.role !== 'reader') {
+      if (matchesCombo(e, hotkeyBindings.suggest) && user && user.role !== 'reader') {
         e.preventDefault();
         setShowPropose(true);
+        return;
       }
-      if (cmd && (e.key === 't' || e.key === 'T')) {
+      if (matchesCombo(e, hotkeyBindings.newTab)) {
         e.preventDefault();
         tabs.newTab();
+        return;
       }
-      if (cmd && (e.key === 'w' || e.key === 'W')) {
+      if (matchesCombo(e, hotkeyBindings.closeTab)) {
         e.preventDefault();
         if (tabs.activeId) tabs.closeTab(tabs.activeId);
+        return;
       }
-      // Shortcut sheet opens on any of:
-      //   • plain `?` when nothing is being typed (Gmail / Linear convention)
-      //   • ⌘/ or Ctrl+/ (works without holding Shift; many users find this easier)
-      //   • ⌘? or Ctrl+? (Ctrl+Shift+/ on US layouts)
-      // Match via e.code === 'Slash' too because e.key can differ across
-      // layouts and OSes (some report '?', some report '/').
+      // Shortcut sheet (⌘? / ⌘/ / bare ?) — special-cased, not rebindable.
       {
         const target = e.target as HTMLElement | null;
         const isTyping =
@@ -349,9 +371,8 @@ export default function Home() {
           (target.tagName === 'INPUT' ||
             target.tagName === 'TEXTAREA' ||
             (target as HTMLElement).isContentEditable);
-        const isSlashKey =
-          e.key === '/' || e.key === '?' || e.code === 'Slash';
-        if (isSlashKey && (cmd || (e.key === '?' && !isTyping))) {
+        const isSlashKey = e.key === '/' || e.key === '?' || e.code === 'Slash';
+        if (isSlashKey && ((e.metaKey || e.ctrlKey) || (e.key === '?' && !isTyping))) {
           e.preventDefault();
           setShowShortcuts(true);
         }
@@ -359,7 +380,7 @@ export default function Home() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [user, tabs]);
+  }, [user, tabs, hotkeyBindings]);
 
   const canReview = user && (user.role === 'admin' || user.role === 'editor');
 
@@ -766,18 +787,7 @@ export default function Home() {
             <button
               className="h-8 px-2 text-[0.8214rem] border border-line rounded-md bg-elev text-muted hover:text-ink"
               title={`Sign out (${user.email})`}
-              onClick={() => {
-                if (typeof window === 'undefined') return;
-                localStorage.removeItem('wiki:jwt');
-                localStorage.removeItem('wiki:email');
-                localStorage.removeItem('wiki:role');
-                // Block the stub-mode auto-re-auth so sign-out actually
-                // signs the user out. Cleared on next successful login.
-                localStorage.setItem('wiki:signed-out', '1');
-                fetch(`${process.env.NEXT_PUBLIC_API_BASE || '/api'}/auth/logout`, {
-                  method: 'POST', credentials: 'include',
-                }).finally(() => { window.location.href = '/login'; });
-              }}
+              onClick={signOut}
             >
               Sign out
             </button>
@@ -1227,7 +1237,27 @@ export default function Home() {
           onConfirm={(newPath) => handleMovePage(movingPage.path, newPath)}
         />
       )}
-      <VersionLog />
+      {/* Bottom-left: version badge + settings gear, side by side. */}
+      <div className="fixed bottom-2.5 left-2.5 z-30 flex items-center gap-1.5">
+        <VersionLog />
+        <button
+          type="button"
+          onClick={() => setShowSettings(true)}
+          title="Settings"
+          aria-label="Settings"
+          className="h-7 w-7 grid place-items-center rounded-md border border-line bg-panel/70 text-muted hover:text-ink hover:bg-panel/85 backdrop-blur transition-colors"
+        >
+          <Settings size={14} />
+        </button>
+      </div>
+      {showSettings && (
+        <SettingsModal
+          user={user}
+          onUserChange={setUser}
+          onSignOut={signOut}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
       {showLint && (
         <LintPanel
           onClose={() => setShowLint(false)}
