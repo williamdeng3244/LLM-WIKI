@@ -37,11 +37,19 @@ export default function VideoBackground() {
   const l2dRef = useRef<HTMLVideoElement>(null);
   const d2lRef = useRef<HTMLVideoElement>(null);
 
-  // Hydrate initial theme from <html data-theme> (set by useTheme on mount).
+  // Keep `theme` in lockstep with <html data-theme> at ALL times — an initial
+  // read plus a MutationObserver. Without this the visible loop can desync from
+  // the CSS theme (e.g. the pre-paint script sets data-theme before hydration,
+  // and a stale mount-time read would leave the dark loop showing in light
+  // mode → a darker background). The observer makes that impossible.
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    const initial = (document.documentElement.getAttribute('data-theme') as Theme) || 'dark';
-    setTheme(initial);
+    const el = document.documentElement;
+    const sync = () => setTheme((el.getAttribute('data-theme') as Theme) || 'dark');
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(el, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
   }, []);
 
   // Apply per-clip playback rates: slow down the light loop, speed up
