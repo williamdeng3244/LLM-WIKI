@@ -63,7 +63,7 @@ export default function Home() {
   const [proposeAsNew, setProposeAsNew] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { theme, themeId, toggle: toggleTheme, setTheme, setThemeId } = useTheme();
   const { lang, toggle: toggleLang, t } = useLanguage();
   const [showSources, setShowSources] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
@@ -324,6 +324,18 @@ export default function Home() {
   }, []);
 
   useEffect(() => { loadIdentity(); }, [loadIdentity]);
+
+  // Apply the account-saved appearance (theme + mode) once the user loads.
+  // localStorage gives the instant no-flash cache; the account value then
+  // reconciles (account wins) so the choice follows the user across devices.
+  useEffect(() => {
+    const ap = user?.preferences?.appearance as
+      | { themeId?: string; mode?: 'light' | 'dark' }
+      | undefined;
+    if (!ap) return;
+    if (ap.themeId && ap.themeId !== themeId) setThemeId(ap.themeId);
+    if ((ap.mode === 'light' || ap.mode === 'dark') && ap.mode !== theme) setTheme(ap.mode);
+  }, [user, themeId, theme, setThemeId, setTheme]);
 
   // Effective hotkey bindings = defaults merged with this user's saved
   // overrides (Settings → Hotkeys). Account-bound; see lib/hotkeys.
