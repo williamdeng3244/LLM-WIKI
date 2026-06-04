@@ -24,6 +24,18 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Bake the embedding model (all-MiniLM-L6-v2, ~90 MB) into the image so the
+# container NEVER needs to reach huggingface.co at runtime. First publish /
+# search are then instant, and it works where HF is blocked/throttled.
+# Non-fatal: if the build host can't reach HF or its mirror, the image still
+# builds (the model just loads/falls-back at runtime). CI builds have good
+# network, so released images always include it. Try HF, then the China mirror.
+ENV HF_HOME=/opt/models
+RUN mkdir -p /opt/models && ( \
+        python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+     || HF_ENDPOINT=https://hf-mirror.com python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+     || echo 'WARN: embedding model not baked (no network at build time)' )
+
 
 # ── Stage 2: slim runtime ─────────────────────────────────────────────────
 FROM python:3.12-slim
@@ -35,7 +47,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
-ENV PATH=/opt/venv/bin:$PATH
+# The baked embedding model. Combined with the offline flags below, the
+# container loads it from disk with zero network calls (no HF HEAD check,
+# so no multi-minute retry when huggingface.co is unreachable).
+COPY --from=builder /opt/models /opt/models
+ENV PATH=/opt/venv/bin:$PATH \
+    HF_HOME=/opt/models \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
 
 WORKDIR /app
 COPY . .

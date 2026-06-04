@@ -88,9 +88,17 @@ Then:
 - Try suggesting an edit, reviewing it, asking the chat panel a question, or
   uploading a markdown file in the Sources panel and clicking Ingest.
 
-First boot of the backend container downloads the embedding model
-(`all-MiniLM-L6-v2`, ~90 MB) into the container's torch cache. Subsequent
-boots reuse it. If you `docker compose down -v` it'll re-download.
+The embedding model (`all-MiniLM-L6-v2`, ~90 MB) is **baked into the backend
+image at build time** and loaded **offline** at runtime (`HF_HOME=/opt/models`,
+`HF_HUB_OFFLINE=1`) — the container never calls huggingface.co, so the first
+publish/search are instant even where HuggingFace is blocked or throttled.
+
+- **Pulling pre-built images** (recommended in restricted networks): the model
+  is already inside — nothing to download.
+- **Building locally**: the build downloads the model once (tries huggingface.co,
+  then `hf-mirror.com`). The step is non-fatal; if your build host can't reach
+  either, set `HF_HUB_OFFLINE=0` on the backend so it downloads at first use, or
+  build behind a reachable `HF_ENDPOINT` mirror.
 
 ### Running pre-built images (no local build)
 
