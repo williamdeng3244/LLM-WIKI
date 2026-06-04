@@ -63,7 +63,7 @@ export default function Home() {
   const [proposeAsNew, setProposeAsNew] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
-  const { theme, themeId, toggle: toggleTheme, setTheme, setThemeId } = useTheme();
+  const { theme, themeId, setTheme, setThemeId } = useTheme();
   const { lang, toggle: toggleLang, t } = useLanguage();
   const [showSources, setShowSources] = useState(false);
   const [showSchema, setShowSchema] = useState(false);
@@ -325,17 +325,36 @@ export default function Home() {
 
   useEffect(() => { loadIdentity(); }, [loadIdentity]);
 
-  // Apply the account-saved appearance (theme + mode) once the user loads.
-  // localStorage gives the instant no-flash cache; the account value then
-  // reconciles (account wins) so the choice follows the user across devices.
+  // Apply the account-saved appearance (theme + mode) ONCE per user, when they
+  // sign in. It must NOT depend on the current theme/mode — otherwise it would
+  // re-run on every toggle and re-apply the saved value, fighting the switch.
+  // The ref guard ensures it runs once per user id (a prefs save changes the
+  // user object but not its id, so a toggle never re-triggers it).
+  const appearanceAppliedFor = useRef<number | null>(null);
   useEffect(() => {
-    const ap = user?.preferences?.appearance as
+    if (!user) return;
+    if (appearanceAppliedFor.current === user.id) return;
+    appearanceAppliedFor.current = user.id;
+    const ap = user.preferences?.appearance as
       | { themeId?: string; mode?: 'light' | 'dark' }
       | undefined;
     if (!ap) return;
-    if (ap.themeId && ap.themeId !== themeId) setThemeId(ap.themeId);
-    if ((ap.mode === 'light' || ap.mode === 'dark') && ap.mode !== theme) setTheme(ap.mode);
-  }, [user, themeId, theme, setThemeId, setTheme]);
+    if (ap.themeId) setThemeId(ap.themeId);
+    if (ap.mode === 'light' || ap.mode === 'dark') setTheme(ap.mode);
+  }, [user, setThemeId, setTheme]);
+
+  // Topbar light/dark toggle: flip the mode AND (if signed in) save it to the
+  // account, so the choice is consistent with the Settings gallery + reloads.
+  const toggleThemePersist = useCallback(() => {
+    const next: 'light' | 'dark' = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    if (user) {
+      api.savePreferences({
+        ...(user.preferences ?? {}),
+        appearance: { themeId, mode: next },
+      }).then(setUser).catch(() => { /* keep the local change */ });
+    }
+  }, [theme, themeId, user, setTheme]);
 
   // Effective hotkey bindings = defaults merged with this user's saved
   // overrides (Settings → Hotkeys). Account-bound; see lib/hotkeys.
@@ -767,7 +786,7 @@ export default function Home() {
         <div className="ml-auto flex items-center gap-1.5">
           <button
             className="btn btn-icon"
-            onClick={toggleTheme}
+            onClick={toggleThemePersist}
             title={theme === 'dark' ? t('topbar.theme.toLight') : t('topbar.theme.toDark')}
             aria-label="Toggle theme"
           >
