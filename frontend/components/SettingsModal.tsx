@@ -12,6 +12,7 @@ import {
   HOTKEYS, FIXED_HOTKEYS, resolveBindings, formatCombo, eventToCombo,
   type HotkeyId,
 } from '@/lib/hotkeys';
+import { THEMES } from '@/lib/themes';
 
 type Tab = 'general' | 'hotkeys' | 'appearance';
 
@@ -24,7 +25,8 @@ const STR = {
     language: 'Language', account: 'Account', signIn: 'Sign in', signOut: 'Sign out',
     signedOut: 'You are signed out.', signInToEdit: 'Sign in to save custom hotkeys to your account.',
     rebind: 'Rebind', reset: 'Reset', resetAll: 'Reset all', press: 'Press keys…', def: 'default',
-    theme: 'Theme', light: 'Light', dark: 'Dark', soon: 'Custom themes coming soon',
+    theme: 'Theme', mode: 'Mode', light: 'Light', dark: 'Dark',
+    soon: 'Custom themes coming soon',
     soonHint: 'You’ll be able to pick generated backgrounds here.',
   },
   zh: {
@@ -33,7 +35,8 @@ const STR = {
     language: '语言', account: '账户', signIn: '登录', signOut: '退出登录',
     signedOut: '你尚未登录。', signInToEdit: '登录后可将自定义快捷键保存到你的账户。',
     rebind: '重设', reset: '重置', resetAll: '全部重置', press: '请按下按键…', def: '默认',
-    theme: '主题', light: '浅色', dark: '深色', soon: '自定义主题即将上线',
+    theme: '主题', mode: '明暗模式', light: '浅色', dark: '深色',
+    soon: '自定义主题即将上线',
     soonHint: '届时可在此选择生成的背景主题。',
   },
 };
@@ -63,7 +66,7 @@ export default function SettingsModal({
   initialTab?: Tab;
 }) {
   const { lang, toggle: toggleLang, t } = useLanguage();
-  const { theme, setTheme } = useTheme();
+  const { theme, themeId, setTheme, setThemeId } = useTheme();
   const s = STR[lang];
   const [tab, setTab] = useState<Tab>(initialTab);
   const [recording, setRecording] = useState<HotkeyId | null>(null);
@@ -87,6 +90,26 @@ export default function SettingsModal({
     const next = { ...overrides };
     delete next[id];
     return persist(next);
+  }
+
+  // Appearance (theme + mode). useTheme handles the DOM + localStorage cache
+  // instantly; we also save to the account so the choice syncs on login.
+  async function saveAppearance(appearance: { themeId: string; mode: string }) {
+    if (!user) return;
+    try {
+      const updated = await api.savePreferences({ ...(user.preferences ?? {}), appearance });
+      onUserChange(updated);
+    } catch (e: unknown) {
+      setError((e as Error).message);
+    }
+  }
+  function applyTheme(id: string) {
+    setThemeId(id);
+    void saveAppearance({ themeId: id, mode: theme });
+  }
+  function applyMode(m: 'light' | 'dark') {
+    setTheme(m);
+    void saveAppearance({ themeId, mode: m });
   }
 
   // Esc closes the modal (or cancels a rebind first).
@@ -280,40 +303,60 @@ export default function SettingsModal({
             )}
 
             {tab === 'appearance' && (
-              <div className="max-w-[460px] space-y-6">
-                <Row icon={theme === 'dark' ? Moon : Sun} label={s.theme}>
+              <div className="max-w-[520px] space-y-6">
+                {/* Theme gallery — one card per registered theme. Each card
+                    shows a light|dark split preview. Selecting applies the
+                    theme (mode unchanged). More themes appear here as they're
+                    added to lib/themes.ts. */}
+                <div>
+                  <div className="flex items-center gap-1.5 text-[0.74rem] uppercase tracking-[0.08em] text-muted mb-2">
+                    <Palette size={13} /> {s.theme}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {THEMES.map((th) => {
+                      const active = themeId === th.id;
+                      return (
+                        <button
+                          key={th.id}
+                          onClick={() => applyTheme(th.id)}
+                          className={`rounded-lg border text-left overflow-hidden transition-colors ${
+                            active ? 'border-accent ring-1 ring-accent/40' : 'border-line hover:border-line-strong'
+                          }`}
+                        >
+                          <div className="flex h-16">
+                            <div className="flex-1 relative" style={{ background: th.preview.light.bg }}>
+                              <span className="absolute bottom-1.5 left-1.5 w-3 h-3 rounded-full" style={{ background: th.preview.light.accent }} />
+                            </div>
+                            <div className="flex-1 relative" style={{ background: th.preview.dark.bg }}>
+                              <span className="absolute bottom-1.5 left-1.5 w-3 h-3 rounded-full" style={{ background: th.preview.dark.accent }} />
+                            </div>
+                          </div>
+                          <div className="px-2.5 py-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[0.84rem] text-ink font-medium">{th.name}</span>
+                              {active && <Check size={13} className="text-accent" />}
+                            </div>
+                            <div className="text-[0.72rem] text-muted leading-snug mt-0.5">{th.description}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Light / Dark mode — applies within the selected theme. */}
+                <Row icon={theme === 'dark' ? Moon : Sun} label={s.mode}>
                   <div className="inline-flex rounded-md border border-line overflow-hidden text-[0.82rem]">
-                    <button onClick={() => setTheme('light')}
+                    <button onClick={() => applyMode('light')}
                       className={`inline-flex items-center gap-1.5 px-3 py-1 ${theme === 'light' ? 'bg-accent text-paper' : 'bg-panel text-muted hover:text-ink'}`}>
                       <Sun size={13} /> {s.light}
                     </button>
-                    <button onClick={() => setTheme('dark')}
+                    <button onClick={() => applyMode('dark')}
                       className={`inline-flex items-center gap-1.5 px-3 py-1 border-l border-line ${theme === 'dark' ? 'bg-accent text-paper' : 'bg-panel text-muted hover:text-ink'}`}>
                       <Moon size={13} /> {s.dark}
                     </button>
                   </div>
                 </Row>
-
-                <div>
-                  <div className="text-[0.78rem] text-muted mb-2 flex items-center gap-1.5">
-                    <Sparkles size={13} className="text-accent" /> {s.soon}
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    {(['light', 'dark'] as const).map((m) => (
-                      <button key={m} onClick={() => setTheme(m)}
-                        className={`rounded-lg border text-left overflow-hidden ${theme === m ? 'border-accent' : 'border-line'}`}>
-                        <div className={`h-16 ${m === 'light' ? 'bg-gradient-to-br from-amber-50 to-sky-100' : 'bg-gradient-to-br from-slate-800 to-indigo-950'}`} />
-                        <div className="px-2 py-1 text-[0.74rem] text-ink flex items-center justify-between">
-                          {m === 'light' ? s.light : s.dark}
-                          {theme === m && <Check size={12} className="text-accent" />}
-                        </div>
-                      </button>
-                    ))}
-                    <div className="rounded-lg border border-dashed border-line grid place-items-center text-muted/60 text-[0.72rem] min-h-[5.5rem] text-center px-2">
-                      {s.soonHint}
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
           </div>
