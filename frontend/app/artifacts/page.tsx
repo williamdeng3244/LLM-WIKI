@@ -597,7 +597,7 @@ export default function ArtifactsPage() {
       {showUpload && (
         <PublishArtifactModal
           mode={{ kind: 'file' }}
-          allowPublic={false}
+          allowPublic={true}
           onClose={() => setShowUpload(false)}
           onPublished={() => setTick((t) => t + 1)}
         />

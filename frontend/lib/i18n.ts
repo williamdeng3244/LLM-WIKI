@@ -113,6 +113,8 @@ export const MESSAGES = {
     'topbar.schema.title': 'Agent playbook (schema)',
     'topbar.lint.title': 'Wiki lint (admin)',
     'topbar.mcp.title': 'MCP access — connect external LLM clients',
+    'topbar.artifacts.title': 'Artifacts',
+    'topbar.settings.title': 'Settings',
     'topbar.manual.title': 'User manual — what each icon does',
     'topbar.manual.ariaLabel': 'Open user manual',
 
@@ -535,6 +537,8 @@ export const MESSAGES = {
     'topbar.schema.title': '智能体手册（Schema）',
     'topbar.lint.title': '维基检查（管理员）',
     'topbar.mcp.title': 'MCP 接入——连接外部大模型客户端',
+    'topbar.artifacts.title': '制品',
+    'topbar.settings.title': '设置',
     'topbar.manual.title': '用户手册——每个图标的功能',
     'topbar.manual.ariaLabel': '打开用户手册',
 

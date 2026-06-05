@@ -114,10 +114,11 @@ class Settings(BaseSettings):
     # top; the iframe sandbox isolates large client-side JS payloads so
     # users can publish D3 dashboards, Observable embeds, etc.
     artifacts_max_body_bytes: int = 10 * 1024 * 1024
-    # Public visibility (no auth at all) is OFF by default. An admin
-    # flips this to allow visibility=public; until they do, the publish
-    # endpoint returns 403 when that visibility is requested.
-    artifacts_allow_public: bool = False
+    # Public visibility (viewable with no auth) is ON by default so anyone can
+    # share artifacts publicly or move private/wiki ones to public. An admin
+    # can set ARTIFACTS_ALLOW_PUBLIC=false to disable it, in which case the
+    # publish endpoint returns 403 when visibility=public is requested.
+    artifacts_allow_public: bool = True
     # Blank = artifacts never auto-expire. Set to an int to apply a
     # default expiry to artifacts whose creator didn't pick one.
     artifacts_default_expiry_days: Optional[int] = None

@@ -916,7 +916,7 @@ export default function Home() {
           <Link
             href="/artifacts"
             className="btn btn-icon"
-            title="Artifacts"
+            title={t('topbar.artifacts.title')}
             aria-label="Open artifacts page"
           >
             <Share2 size={14} />
@@ -1274,7 +1274,7 @@ export default function Home() {
         <button
           type="button"
           onClick={() => setShowSettings(true)}
-          title="Settings"
+          title={t('topbar.settings.title')}
           aria-label="Settings"
           className="h-7 w-7 grid place-items-center rounded-md border border-line bg-panel/70 text-muted hover:text-ink hover:bg-panel/85 backdrop-blur transition-colors"
         >
@@ -1331,11 +1331,11 @@ export default function Home() {
       {publishTarget && (
         <PublishArtifactModal
           mode={publishTarget}
-          // ARTIFACTS_ALLOW_PUBLIC is a server-side flag; we don't have
-          // a probe for it yet, so default to false (Public radio stays
-          // disabled). A trivial /api/health extension can light it up
-          // later — flagged in the PR description.
-          allowPublic={false}
+          // Public sharing is on by default (server ARTIFACTS_ALLOW_PUBLIC
+          // defaults true), so the Public radio is enabled. If an admin
+          // disables the flag, the backend returns 403 and the modal shows
+          // the error.
+          allowPublic={true}
           onClose={() => setPublishTarget(null)}
         />
       )}
