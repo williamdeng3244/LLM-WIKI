@@ -4,7 +4,7 @@ import {
   HelpCircle, Search, BookOpen, Pencil, Inbox, Bell, Files, BookText,
   ShieldCheck, Plug, Sun, SquarePen, FolderPlus, History,
   ChevronsUpDown, ArrowDownAZ, MessageSquare, ExternalLink,
-  PanelRightClose, FileText, Languages, Tag,
+  PanelRightClose, FileText, Languages, Tag, Settings, Share2,
 } from 'lucide-react';
 import { useLanguage } from '@/lib/i18n';
 
@@ -17,7 +17,8 @@ type Item = {
     | 'manual.lint.title' | 'manual.mcp.title' | 'manual.theme.title'
     | 'manual.notif.title' | 'manual.tabs.title'
     | 'manual.chatCollapse.title' | 'manual.pageLayout.title'
-    | 'manual.versionLog.title' | 'manual.langToggle.title';
+    | 'manual.versionLog.title' | 'manual.langToggle.title'
+    | 'manual.settings.title' | 'manual.artifacts.title';
   bodyKey: 'manual.search.body' | 'manual.switcher.body' | 'manual.chat.body'
     | 'manual.suggest.body' | 'manual.newNote.body' | 'manual.newFolder.body'
     | 'manual.history.body' | 'manual.review.body' | 'manual.graph.body'
@@ -25,7 +26,8 @@ type Item = {
     | 'manual.lint.body' | 'manual.mcp.body' | 'manual.theme.body'
     | 'manual.notif.body' | 'manual.tabs.body'
     | 'manual.chatCollapse.body' | 'manual.pageLayout.body'
-    | 'manual.versionLog.body' | 'manual.langToggle.body';
+    | 'manual.versionLog.body' | 'manual.langToggle.body'
+    | 'manual.settings.body' | 'manual.artifacts.body';
   shortcut?: string;
 };
 
@@ -82,6 +84,7 @@ const SECTIONS: Section[] = [
   {
     headingKey: 'manual.section.integration',
     items: [
+      { icon: <Share2 size={13} />, titleKey: 'manual.artifacts.title', bodyKey: 'manual.artifacts.body' },
       { icon: <Plug size={13} />, titleKey: 'manual.mcp.title', bodyKey: 'manual.mcp.body' },
     ],
   },
@@ -94,6 +97,7 @@ const SECTIONS: Section[] = [
       { icon: <ChevronsUpDown size={13} />, titleKey: 'manual.tabs.title', bodyKey: 'manual.tabs.body', shortcut: '⌘T · ⌘W' },
       { icon: <PanelRightClose size={13} />, titleKey: 'manual.chatCollapse.title', bodyKey: 'manual.chatCollapse.body' },
       { icon: <Tag size={13} />, titleKey: 'manual.versionLog.title', bodyKey: 'manual.versionLog.body' },
+      { icon: <Settings size={13} />, titleKey: 'manual.settings.title', bodyKey: 'manual.settings.body' },
     ],
   },
 ];

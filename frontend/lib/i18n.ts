@@ -515,6 +515,12 @@ export const MESSAGES = {
     'manual.langToggle.title': 'Language toggle',
     'manual.langToggle.body':
       '中/EN button in the top bar. Switches the entire chrome — topbar, menus, prompts, kebabs, panels, manual, and /help docs — between Mandarin and English instantly. Choice is shared across the wiki and the help site via localStorage.',
+    'manual.settings.title': 'Settings',
+    'manual.settings.body':
+      'Gear icon at the bottom-left, beside the version badge. Opens a panel with three tabs: General (app version, interface language, and your account — sign in / out), Hotkeys (view and customize keyboard shortcuts, saved to your account), and Appearance (choose a theme such as Aurora and switch light / dark).',
+    'manual.artifacts.title': 'Artifacts',
+    'manual.artifacts.body':
+      'Publish HTML or Markdown as a standalone, shareable page. Every artifact has a visibility: Private (only you), Wiki (any signed-in teammate), or Public (anyone with the link, no login required). Open the Artifacts page from the top bar to upload, create, change visibility, or copy a share link — or publish straight from the CLI or an MCP client.',
   },
 
   zh: {
@@ -939,5 +945,11 @@ export const MESSAGES = {
     'manual.langToggle.title': '语言切换',
     'manual.langToggle.body':
       '顶栏 中/EN 按钮。可瞬间切换整个界面 chrome —— 顶栏、菜单、提示、kebab、面板、用户手册、/help 文档 —— 中英文。维基和帮助站点通过 localStorage 共享语言偏好。',
+    'manual.settings.title': '设置',
+    'manual.settings.body':
+      '左下角齿轮图标，紧邻版本徽章。打开后有三个标签页：通用（应用版本、界面语言、你的账户——登录/退出）、快捷键（查看并自定义键盘快捷键，绑定到你的账户）、外观（选择主题，如 Aurora，并切换明暗模式）。',
+    'manual.artifacts.title': '制品分享',
+    'manual.artifacts.body':
+      '将 HTML 或 Markdown 发布为独立、可分享的页面。每个制品都有可见性：私有（仅自己）、Wiki（任何已登录的同事）、公开（任何持链接者，无需登录）。从顶栏打开制品页面即可上传、创建、更改可见性或复制分享链接——也可直接通过 CLI 或 MCP 客户端发布。',
   },
 } as const;
