@@ -14,6 +14,14 @@ import type { GraphData, PageSummary } from '@/lib/api';
 import { type GraphSettingsState, DEFAULTS, categoryColor, resolveFolderField } from '@/lib/graphSettings';
 import { useLanguage } from '@/lib/i18n';
 
+// Opt-in diagnostics: set NEXT_PUBLIC_GRAPH_DEBUG=1 to show the live physics
+// overlay + verbose [graph] console logs. OFF by default so pulled users get a
+// clean graph. The default docker-compose runs `next dev`, so this is gated on
+// an explicit flag rather than NODE_ENV (which would still be "development").
+const GRAPH_DEBUG = process.env.NEXT_PUBLIC_GRAPH_DEBUG === '1';
+// eslint-disable-next-line no-console
+const glog: (...args: unknown[]) => void = GRAPH_DEBUG ? console.log.bind(console) : () => {};
+
 // next/dynamic + react-force-graph's forwardRef chain is broken in
 // Next 14 — the callback ref never fires, which left every d3Force
 // / d3ReheatSimulation call as a no-op. Bypass by lazy-loading the
@@ -67,7 +75,7 @@ function loadFg2d(): Promise<ForceGraphComp> {
     _fg2dPromise = import('react-force-graph-2d').then((m) => {
       const C = (m.default || m) as unknown as ForceGraphComp;
       // eslint-disable-next-line no-console
-      console.log('[graph] fg2d module loaded; type:', typeof C);
+      glog('[graph] fg2d module loaded; type:', typeof C);
       return C;
     });
   }
@@ -78,7 +86,7 @@ function loadFg3d(): Promise<ForceGraphComp> {
     _fg3dPromise = import('react-force-graph-3d').then((m) => {
       const C = (m.default || m) as unknown as ForceGraphComp;
       // eslint-disable-next-line no-console
-      console.log('[graph] fg3d module loaded; type:', typeof C);
+      glog('[graph] fg3d module loaded; type:', typeof C);
       return C;
     }).catch((err) => {
       // eslint-disable-next-line no-console
@@ -252,13 +260,13 @@ export default function GraphView({
     fg2dRef.current = instance;
     setRefReady(!!instance);
     // eslint-disable-next-line no-console
-    console.log('[graph] fg2d ref →', instance ? 'BOUND' : 'null');
+    glog('[graph] fg2d ref →', instance ? 'BOUND' : 'null');
   }, []);
   const set3dRef = useCallback((instance: any) => {
     fg3dRef.current = instance;
     setRefReady(!!instance);
     // eslint-disable-next-line no-console
-    console.log('[graph] fg3d ref →', instance ? 'BOUND' : 'null');
+    glog('[graph] fg3d ref →', instance ? 'BOUND' : 'null');
   }, []);
   const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -324,7 +332,7 @@ export default function GraphView({
   const applyPhysics = (reheat: boolean) => {
     const ref = mode === '2d' ? fg2dRef.current : fg3dRef.current;
     // eslint-disable-next-line no-console
-    console.log('[graph applyPhysics]', {
+    glog('[graph applyPhysics]', {
       mode, hasRef: !!ref,
       repelForce: settings.repelForce,
       linkForce: settings.linkForce,
@@ -436,14 +444,14 @@ export default function GraphView({
         }
       } else {
         // eslint-disable-next-line no-console
-        console.log('[graph] reheat skipped — sim not initialized yet');
+        glog('[graph] reheat skipped — sim not initialized yet');
       }
     }
   };
   // Expose to window so a quick console test ("window._graphApply()")
   // can prove the application works even if React isn't re-running
   // the effect.
-  if (typeof window !== 'undefined') {
+  if (GRAPH_DEBUG && typeof window !== 'undefined') {
     (window as unknown as { _graphApply: typeof applyPhysics })._graphApply = applyPhysics;
   }
   useEffect(() => {
@@ -888,7 +896,7 @@ export default function GraphView({
   if (mode === '2d') {
     return (
       <div ref={containerRef} className="w-full h-full relative">
-        {debugOverlay}
+        {GRAPH_DEBUG && debugOverlay}
         {/* Play / Stop timelapse — 2D only. */}
         <button
           className="absolute top-3 right-14 z-10 w-8 h-8 grid place-items-center rounded-md border border-line bg-panel/85 text-muted hover:text-ink backdrop-blur transition-colors"
@@ -1128,7 +1136,7 @@ export default function GraphView({
   // managed so the per-frame focus callbacks still apply.
   return (
     <div ref={containerRef} className="w-full h-full relative">
-      {debugOverlay}
+      {GRAPH_DEBUG && debugOverlay}
       {!Fg3d && (
         <div className="absolute inset-0 flex items-center justify-center text-muted text-sm">
           Loading 3D engine…
