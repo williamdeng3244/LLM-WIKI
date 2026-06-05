@@ -893,6 +893,65 @@ export default function GraphView({
     </div>
   );
 
+  // Pre-compute the 3D node-builder OUTSIDE the JSX. If a closure capture
+  // throws, having it as a named function makes the stack trace point at the
+  // real line, not somewhere inside react-force-graph-3d's internals.
+  //
+  // CRITICAL: this useCallback MUST be declared before the `mode === '2d'`
+  // early-return below. A hook placed after a conditional return runs in 3D
+  // mode but not 2D mode, so toggling 2D⇄3D changes the hook count between
+  // renders and React throws "Rendered more hooks than during the previous
+  // render". Keeping every hook above the first return fixes that.
+  const build3dNode = useCallback((n: { id: string; backlinks?: number; category?: string; isFolder?: boolean }) => {
+    try {
+      const depth = Math.max(0, String(n.id).split('/').length - 1);
+      const depthMul = Math.pow(settings.depthScale, depth);
+      const kindMul = n.isFolder ? 1.4 : 1.0;
+      const overrideSize = resolveFolderField(n.id, 'nodeSize', settings.folderOverrides);
+      const effectiveSize = overrideSize ?? settings.nodeSize;
+      const baseSize = (4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2) * kindMul;
+      const cat = n.category || '';
+      const overrideColor = resolveFolderField(n.id, 'color', settings.folderOverrides);
+      const color = overrideColor ?? categoryColor(cat, settings.colors);
+      const group = new THREE.Group();
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(baseSize * 0.65, 24, 24),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }),
+      );
+      group.add(core);
+      const inner = new THREE.Mesh(
+        new THREE.SphereGeometry(baseSize * 0.42, 16, 16),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff, transparent: true,
+          opacity: Math.min(1, 0.55 * settings.glow),
+        }),
+      );
+      group.add(inner);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: getHaloTexture(color), transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+        opacity: Math.min(1, 0.95 * settings.glow),
+      }));
+      halo.scale.set(baseSize * 8, baseSize * 8, 1);
+      group.add(halo);
+      const noRaycast = () => {};
+      (halo as unknown as { raycast: () => void }).raycast = noRaycast;
+      (inner as unknown as { raycast: () => void }).raycast = noRaycast;
+      group.scale.setScalar(effectiveSize * depthMul);
+      meshesRef.current.set(n.id, {
+        group,
+        core: core as NodeMeshes['core'],
+        inner: inner as NodeMeshes['inner'],
+        halo, category: cat, depth,
+      });
+      return group;
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[graph build3dNode] failed for node', n.id, e);
+      return new THREE.Group();    // empty group keeps render alive
+    }
+  }, [settings.depthScale, settings.nodeSize, settings.glow, settings.colors, settings.folderOverrides]);
+
   if (mode === '2d') {
     return (
       <div ref={containerRef} className="w-full h-full relative">
@@ -1076,60 +1135,6 @@ export default function GraphView({
       </div>
     );
   }
-
-  // Pre-compute the 3D node-builder OUTSIDE the JSX. If a closure
-  // capture throws, having it as a named function makes the stack
-  // trace point at the real line, not somewhere inside react-force-
-  // graph-3d's internals.
-  const build3dNode = useCallback((n: { id: string; backlinks?: number; category?: string; isFolder?: boolean }) => {
-    try {
-      const depth = Math.max(0, String(n.id).split('/').length - 1);
-      const depthMul = Math.pow(settings.depthScale, depth);
-      const kindMul = n.isFolder ? 1.4 : 1.0;
-      const overrideSize = resolveFolderField(n.id, 'nodeSize', settings.folderOverrides);
-      const effectiveSize = overrideSize ?? settings.nodeSize;
-      const baseSize = (4 + Math.cbrt(1 + (n.backlinks || 0)) * 2.2) * kindMul;
-      const cat = n.category || '';
-      const overrideColor = resolveFolderField(n.id, 'color', settings.folderOverrides);
-      const color = overrideColor ?? categoryColor(cat, settings.colors);
-      const group = new THREE.Group();
-      const core = new THREE.Mesh(
-        new THREE.SphereGeometry(baseSize * 0.65, 24, 24),
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(color) }),
-      );
-      group.add(core);
-      const inner = new THREE.Mesh(
-        new THREE.SphereGeometry(baseSize * 0.42, 16, 16),
-        new THREE.MeshBasicMaterial({
-          color: 0xffffff, transparent: true,
-          opacity: Math.min(1, 0.55 * settings.glow),
-        }),
-      );
-      group.add(inner);
-      const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: getHaloTexture(color), transparent: true,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-        opacity: Math.min(1, 0.95 * settings.glow),
-      }));
-      halo.scale.set(baseSize * 8, baseSize * 8, 1);
-      group.add(halo);
-      const noRaycast = () => {};
-      (halo as unknown as { raycast: () => void }).raycast = noRaycast;
-      (inner as unknown as { raycast: () => void }).raycast = noRaycast;
-      group.scale.setScalar(effectiveSize * depthMul);
-      meshesRef.current.set(n.id, {
-        group,
-        core: core as NodeMeshes['core'],
-        inner: inner as NodeMeshes['inner'],
-        halo, category: cat, depth,
-      });
-      return group;
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[graph build3dNode] failed for node', n.id, e);
-      return new THREE.Group();    // empty group keeps render alive
-    }
-  }, [settings.depthScale, settings.nodeSize, settings.glow, settings.colors, settings.folderOverrides]);
 
   // 3D — replace the default flat sphere with a custom glowing-orb group
   // (core + white-hot inner + additive halo sprite). Edges remain library-
