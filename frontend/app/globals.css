@@ -356,6 +356,20 @@ select option { background: var(--bg-panel); color: var(--text); }
 [data-theme="light"] .theme-scrim { background-color: rgba(255, 255, 255, 0.28); }
 [data-theme="light"] .reading-wash { background-color: rgba(255, 255, 255, 0.72); }
 
+/* Aurora (default theme) background video — light mode.
+   Instead of a separate, flatter light clip, light reuses the SAME dark
+   starfield (`bg.mp4`) and inverts its luminance: invert(1) turns deep space
+   into bright sky, and hue-rotate(180deg) puts the aurora's blues/greens/violets
+   back roughly in family; brightness/saturate/contrast soften it into a pale
+   aurora so it stays visually aligned with the dark version (same motion +
+   structure). The base rule makes the light↔dark swap a calm fade rather than a
+   hard cut. Tune the five filter numbers to taste — dark mode is unfiltered and
+   unchanged. */
+.aurora-bg-video { transition: filter 320ms ease; }
+[data-theme="light"] .aurora-bg-video {
+  filter: invert(1) hue-rotate(180deg) brightness(1.06) saturate(0.82) contrast(0.9);
+}
+
 /* ── Sakura theme ───────────────────────────────────────────────────────
    Cherry-blossom zen garden. Recolors the accent system, base background,
    body glow, and scrim; the translucent panels pick up each background's tint
