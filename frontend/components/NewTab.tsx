@@ -18,7 +18,7 @@ export default function NewTab({
     <div className="h-full flex items-center justify-center">
       <div className="text-center">
         <div className="text-[0.8571rem] uppercase tracking-[0.18em] text-muted mb-3">New tab</div>
-        <div className="flex flex-col items-end gap-2.5">
+        <div className="nt-actions flex flex-col items-end gap-2.5">
           <button
             onClick={canCreate ? onCreateNote : undefined}
             className={`${itemBase} ${canCreate ? link : muted}`}

@@ -64,9 +64,11 @@ async def create_my_token(
     ))
     await session.commit()
     await session.refresh(token)
-    out = TokenCreated.model_validate(token).model_dump()
-    out["raw_token"] = raw
-    return out
+    # Attach raw token as a transient (non-column) attr so from_attributes picks
+    # it up; validating the bare ORM row 500'd because TokenCreated requires
+    # raw_token (FR-MTOK-002).
+    token.raw_token = raw
+    return TokenCreated.model_validate(token)
 
 
 @router.delete("/{token_id}")

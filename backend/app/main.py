@@ -3,9 +3,11 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from app.core.config import settings
 from app.core.db import Base, SessionLocal, engine
@@ -226,13 +228,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(DBAPIError)
+async def _dbapi_error_to_400(request: Request, exc: DBAPIError):
+    # SQLSTATE class "22" = data exception: malformed input that slipped past
+    # schema validation into the DB layer — an id outside int4 range, a null
+    # byte (0x00) in a text field, a bad datetime, etc. That's a client bad
+    # request, not a server fault, so map it to 400 instead of leaking a 500.
+    # Other DB errors (integrity, operational, …) re-raise and keep 500.
+    sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", "") or ""
+    if sqlstate.startswith("22"):
+        return JSONResponse(status_code=400, content={"detail": "Invalid input."})
+    raise exc
+
+
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(mcp_tokens.router, prefix="/api/mcp-tokens", tags=["mcp"])
 app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
+# comments/flags expose GET /api/pages/{path}/comments|flags; they must be
+# registered BEFORE pages, whose greedy GET /{page_path:path} would otherwise
+# capture those suffixes and 404 (FR-CMT-001 / FR-FLAG-001).
+app.include_router(comments.router, prefix="/api", tags=["comments"])
 app.include_router(pages.router, prefix="/api/pages", tags=["pages"])
 app.include_router(revisions.router, prefix="/api/revisions", tags=["revisions"])
-app.include_router(comments.router, prefix="/api", tags=["comments"])
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])

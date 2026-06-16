@@ -78,7 +78,7 @@ export default function SourcesPanel({
 
   async function uploadFiles(files: FileList | File[]) {
     if (!canUpload) {
-      setError('Readers cannot upload sources.');
+      setError(t('sources.err.readersUpload'));
       return;
     }
     setError(null);
@@ -97,12 +97,12 @@ export default function SourcesPanel({
 
   async function importFromUrl() {
     if (!canUpload) {
-      setError('Readers cannot import sources.');
+      setError(t('sources.err.readersImport'));
       return;
     }
     const url = urlInput.trim();
     if (!url) {
-      setError('Enter an http:// or https:// URL.');
+      setError(t('sources.err.enterUrl'));
       return;
     }
     setError(null);
@@ -163,7 +163,7 @@ export default function SourcesPanel({
   }
 
   async function remove(s: RawSource) {
-    if (!confirm(`Delete "${s.title}"? This is permanent.`)) return;
+    if (!confirm(t('sources.deleteConfirm').replace('{title}', s.title))) return;
     try {
       await api.deleteRawSource(s.id);
       await mutate();
@@ -185,11 +185,10 @@ export default function SourcesPanel({
           <div>
             <h3 className="font-medium text-[1rem]">{t('sources.title')}</h3>
             <div className="text-[0.8214rem] text-muted">
-              Immutable input documents the agent can read on ingest.
-              Wiki pages are written from these — not edited in place.
+              {t('sources.subtitle')}
             </div>
           </div>
-          <button className="text-muted hover:text-ink" onClick={onClose} aria-label="Close">
+          <button className="text-muted hover:text-ink" onClick={onClose} aria-label={t('sources.close')}>
             <X size={16} />
           </button>
         </header>
@@ -206,8 +205,8 @@ export default function SourcesPanel({
               onClick={() => setImportMode(m)}
             >
               {m === 'file'
-                ? <span className="flex items-center gap-1.5"><Upload size={12} /> Upload file</span>
-                : <span className="flex items-center gap-1.5"><Link2 size={12} /> From URL</span>}
+                ? <span className="flex items-center gap-1.5"><Upload size={12} /> {t('sources.uploadFile')}</span>
+                : <span className="flex items-center gap-1.5"><Link2 size={12} /> {t('sources.fromUrl')}</span>}
             </button>
           ))}
         </div>
@@ -233,7 +232,7 @@ export default function SourcesPanel({
               disabled={!canUpload || uploading}
               onClick={() => fileInputRef.current?.click()}
             >
-              {uploading ? <><Loader2 size={13} className="animate-spin" /> Uploading…</> : 'Choose file'}
+              {uploading ? <><Loader2 size={13} className="animate-spin" /> {t('sources.uploading')}</> : t('sources.chooseFile')}
             </button>
             <input
               ref={fileInputRef}
@@ -245,14 +244,14 @@ export default function SourcesPanel({
                 e.target.value = '';
               }}
             />
-            <div className="text-[0.75rem] text-muted mt-2">PDF, markdown, text, images. 50 MB max per file.</div>
+            <div className="text-[0.75rem] text-muted mt-2">{t('sources.fileHint')}</div>
             {!canUpload && (
               <div className="text-[0.75rem] text-muted mt-1">{t('sources.signInToUpload')}</div>
             )}
           </div>
         ) : (
           <div className={`mx-5 mt-3 mb-2 p-4 border border-white/[0.10] rounded-md ${!canUpload ? 'opacity-50' : ''}`}>
-            <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">URL</label>
+            <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('sources.url.label')}</label>
             <input
               type="url"
               className="form-input mt-1 h-9 w-full text-[0.8929rem]"
@@ -263,12 +262,12 @@ export default function SourcesPanel({
               onKeyDown={(e) => { if (e.key === 'Enter') importFromUrl(); }}
             />
             <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted mt-2 block">
-              Title (optional)
+              {t('sources.url.titleLabel')}
             </label>
             <input
               type="text"
               className="form-input mt-1 h-9 w-full text-[0.8929rem]"
-              placeholder="Leave blank to use the page title"
+              placeholder={t('sources.url.titlePlaceholder')}
               value={urlTitle}
               onChange={(e) => setUrlTitle(e.target.value)}
               disabled={!canUpload || importing}
@@ -279,11 +278,11 @@ export default function SourcesPanel({
               onClick={importFromUrl}
             >
               {importing
-                ? <><Loader2 size={13} className="animate-spin" /> Fetching…</>
-                : <><Link2 size={12} /> Import URL</>}
+                ? <><Loader2 size={13} className="animate-spin" /> {t('sources.url.fetching')}</>
+                : <><Link2 size={12} /> {t('sources.url.import')}</>}
             </button>
             <div className="text-[0.75rem] text-muted mt-2">
-              HTML, markdown, plain text, and PDFs are supported. Private and loopback addresses are blocked by default.
+              {t('sources.url.hint')}
             </div>
             {!canUpload && (
               <div className="text-[0.75rem] text-muted mt-1">{t('sources.signInToUpload')}</div>
@@ -300,7 +299,7 @@ export default function SourcesPanel({
         <div className="flex-1 overflow-y-auto scroll-thin px-5 pb-5">
           {sources.length === 0 ? (
             <div className="text-center text-muted text-[0.8929rem] py-6">
-              No sources yet. Drop something above to get started.
+              {t('sources.emptyDrop')}
             </div>
           ) : (
             <ul className="space-y-2">
@@ -336,7 +335,7 @@ export default function SourcesPanel({
                         </a>
                       )}
                       <div className="text-[0.75rem] text-muted mt-1">
-                        Uploaded by {uploader?.name || `user #${s.uploaded_by_id ?? '?'}`}
+                        {t('sources.uploadedBy')} {uploader?.name || `user #${s.uploaded_by_id ?? '?'}`}
                         {' · '}
                         {new Date(s.uploaded_at).toLocaleString()}
                       </div>
@@ -359,12 +358,12 @@ export default function SourcesPanel({
                             try {
                               const runs = await api.rawSourceRuns(s.id);
                               if (runs.length > 0) setPreviewRunId(runs[0].id);
-                              else setError('No plan found.');
+                              else setError(t('sources.err.noPlan'));
                             } catch (e) { setError((e as Error).message); }
                           }}
-                          title="Open the latest plan / run"
+                          title={t('sources.openLatest')}
                         >
-                          <Eye size={13} /> Open plan
+                          <Eye size={13} /> {t('sources.openPlan')}
                         </button>
                       )}
                       {canUpload && s.ingest_status !== 'ingesting' && (
@@ -372,16 +371,16 @@ export default function SourcesPanel({
                           className={s.ingest_status === 'failed' ? 'btn btn-primary' : 'btn'}
                           onClick={() => requestIngest(s)}
                           title={s.ingest_status === 'failed'
-                            ? 'Retry ingest — the previous run failed; this kicks a fresh plan phase.'
-                            : 'Plan an ingest — agent reads the source, you review proposed edits before any drafts are created.'}
+                            ? t('sources.retryIngestTitle')
+                            : t('sources.ingestTitle')}
                         >
-                          <Play size={13} /> {s.ingest_status === 'failed' ? 'Retry ingest' : 'Ingest'}
+                          <Play size={13} /> {s.ingest_status === 'failed' ? t('sources.retryIngest') : t('sources.ingest')}
                         </button>
                       )}
                       <button
                         className="btn btn-icon"
                         onClick={() => setHistoryFor(historyFor === s.id ? null : s.id)}
-                        title="Show ingest history"
+                        title={t('sources.history')}
                       >
                         <History size={13} />
                       </button>
@@ -390,7 +389,7 @@ export default function SourcesPanel({
                         href={api.rawSourceDownloadURL(s.id)}
                         target="_blank"
                         rel="noreferrer"
-                        title="Download"
+                        title={t('sources.download')}
                       >
                         <Download size={13} />
                       </a>
@@ -398,7 +397,7 @@ export default function SourcesPanel({
                         <button
                           className="btn btn-icon"
                           onClick={() => remove(s)}
-                          title="Delete (admin)"
+                          title={t('sources.deleteAdmin')}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -441,11 +440,10 @@ export default function SourcesPanel({
               <AlertTriangle size={18} className="text-amber-300 shrink-0 mt-0.5" />
               <div>
                 <h4 className="font-medium text-[1rem] text-ink">
-                  This source has {duplicateWarn.drafts.length} pending agent draft{duplicateWarn.drafts.length === 1 ? '' : 's'}
+                  {t('sources.dup.thisSourceHas')} {duplicateWarn.drafts.length} {duplicateWarn.drafts.length === 1 ? t('sources.dup.heading.one') : t('sources.dup.heading.many')}
                 </h4>
                 <p className="text-[0.8929rem] text-muted mt-1 leading-relaxed">
-                  Re-ingesting may create duplicate or conflicting drafts. Review or
-                  resolve the existing drafts in the review queue first.
+                  {t('sources.dup.body')}
                 </p>
               </div>
             </div>
@@ -459,9 +457,9 @@ export default function SourcesPanel({
               ))}
             </ul>
             <div className="flex items-center justify-end gap-2">
-              <button className="btn" onClick={() => setDuplicateWarn(null)}>Cancel</button>
+              <button className="btn" onClick={() => setDuplicateWarn(null)}>{t('sources.dup.cancel')}</button>
               <button className="btn btn-primary" onClick={continueAfterDuplicateWarning}>
-                Continue anyway
+                {t('sources.dup.continue')}
               </button>
             </div>
           </div>
@@ -480,20 +478,17 @@ export default function SourcesPanel({
             <div className="flex items-start gap-3 mb-3">
               <AlertTriangle size={18} className="text-amber-300 shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-medium text-[1rem] text-ink">External processing notice</h4>
+                <h4 className="font-medium text-[1rem] text-ink">{t('sources.ext.heading')}</h4>
                 <p className="text-[0.8929rem] text-muted mt-1 leading-relaxed">
-                  This source ({ingestPrompt.mime_type}) will be sent to the
-                  configured LLM provider (Anthropic) for analysis. Bytes leave
-                  this server during ingest.
+                  {t('sources.ext.body1').replace('{mime}', ingestPrompt.mime_type)}
                 </p>
                 <p className="text-[0.8929rem] text-muted mt-2 leading-relaxed">
-                  The agent will return a plan for human review. No drafts are
-                  created until you approve the plan.
+                  {t('sources.ext.body2')}
                 </p>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 mt-5">
-              <button className="btn" onClick={() => setIngestPrompt(null)}>Cancel</button>
+              <button className="btn" onClick={() => setIngestPrompt(null)}>{t('sources.ext.cancel')}</button>
               <button
                 className="btn btn-primary"
                 onClick={() => {
@@ -502,7 +497,7 @@ export default function SourcesPanel({
                   if (s) startIngest(s);
                 }}
               >
-                <Play size={13} /> Send and plan
+                <Play size={13} /> {t('sources.ext.sendAndPlan')}
               </button>
             </div>
           </div>
@@ -522,6 +517,7 @@ function SourceHistory({
   users: Map<number, User>;
   onOpenPlan: (id: number) => void;
 }) {
+  const { t } = useLanguage();
   const { data: runs = [], isLoading, mutate } = useSWR<IngestRun[]>(
     `raw-runs:${sourceId}`,
     () => api.rawSourceRuns(sourceId),
@@ -537,8 +533,8 @@ function SourceHistory({
     }
   }
 
-  if (isLoading) return <div className="text-[0.8214rem] text-muted py-2">Loading history…</div>;
-  if (runs.length === 0) return <div className="text-[0.8214rem] text-muted py-2">No ingest history yet.</div>;
+  if (isLoading) return <div className="text-[0.8214rem] text-muted py-2">{t('sources.loadingHistory')}</div>;
+  if (runs.length === 0) return <div className="text-[0.8214rem] text-muted py-2">{t('sources.noHistory')}</div>;
   return (
     <ul className="mt-2 space-y-1.5 border-t border-white/[0.05] pt-2">
       {runs.map((r) => {
@@ -565,10 +561,10 @@ function SourceHistory({
             }`}>{r.status}</span>
             <div className="flex-1 min-w-0">
               <div className="text-ink/85">
-                Run #{r.id} ·{' '}
+                {t('sources.run')} #{r.id} ·{' '}
                 <span className="text-muted">
                   {triggerer?.name || `user #${r.triggered_by_id ?? '?'}`} →{' '}
-                  {agent?.name || (r.agent_user_id ? `agent #${r.agent_user_id}` : 'pending agent')}
+                  {agent?.name || (r.agent_user_id ? `agent #${r.agent_user_id}` : t('sources.pendingAgent'))}
                 </span>
               </div>
               <div className="text-[0.75rem] text-muted mt-0.5 truncate">
@@ -576,11 +572,11 @@ function SourceHistory({
                 {r.finished_at && <> → {new Date(r.finished_at).toLocaleString()}</>}
                 {' · '}
                 {showProgress
-                  ? <>Applied {r.applied_count}/{target} selected edits</>
-                  : <>{r.edits_count} edits</>}
-                {r.failed_count > 0 && <span className="text-rose-300">, {r.failed_count} failed</span>}
-                {r.conflict_count > 0 && <>, {r.conflict_count} conflicts</>}
-                {r.skipped_count > 0 && <>, {r.skipped_count} over cap</>}
+                  ? <>{t('sources.applied')} {r.applied_count}/{target} {t('sources.selectedEdits')}</>
+                  : <>{r.edits_count} {t('sources.edits')}</>}
+                {r.failed_count > 0 && <span className="text-rose-300">, {r.failed_count} {t('sources.failed')}</span>}
+                {r.conflict_count > 0 && <>, {r.conflict_count} {t('sources.conflicts')}</>}
+                {r.skipped_count > 0 && <>, {r.skipped_count} {t('sources.overCap')}</>}
                 {r.provider_model && <> · {r.provider_model}</>}
                 {r.retrieval_strategy && <> · {r.retrieval_strategy}</>}
               </div>
@@ -591,9 +587,9 @@ function SourceHistory({
                 <button
                   className="text-[0.75rem] text-amber-300 hover:text-ink flex items-center gap-1"
                   onClick={() => retry(r)}
-                  title="Resume / retry the apply phase. Already-applied edits are skipped."
+                  title={t('sources.retryRunTitle')}
                 >
-                  <RotateCcw size={10} /> Retry
+                  <RotateCcw size={10} /> {t('sources.retry')}
                 </button>
               )}
               {r.plan_json && (
@@ -601,7 +597,7 @@ function SourceHistory({
                   className="text-[0.75rem] text-accent hover:text-ink underline"
                   onClick={() => onOpenPlan(r.id)}
                 >
-                  Open plan
+                  {t('sources.openPlanLink')}
                 </button>
               )}
             </div>

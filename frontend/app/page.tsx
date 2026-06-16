@@ -270,6 +270,12 @@ export default function Home() {
     'notifications', () => api.listNotifications(false),
     { ...SWR_OPTS, refreshInterval: 30_000 },
   );
+  // Exact unread badge count (GAP-005): the list above caps at 100 rows, so a
+  // count derived from it undercounts past 100. This dedicated endpoint is exact.
+  const { data: unreadData, mutate: refetchUnread } = useSWR(
+    'notifications-unread', api.unreadCount,
+    { ...SWR_OPTS, refreshInterval: 30_000 },
+  );
   const { data: usersList = [] } = useSWR('users', api.listUsers, {
     ...SWR_OPTS, dedupingInterval: 60_000,
   });
@@ -282,10 +288,9 @@ export default function Home() {
   }, [usersList]);
 
   const allPaths = useMemo(() => new Set(pages.map((p) => p.path)), [pages]);
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.is_read).length,
-    [notifications],
-  );
+  // Prefer the exact server count (GAP-005); fall back to the list-derived
+  // count (capped at 100) only until the count endpoint resolves.
+  const unreadCount = unreadData?.unread ?? notifications.filter((n) => !n.is_read).length;
 
   // Identity. In stub mode the X-User-Email fallback header gets us a
   // user transparently; in oidc mode we need a real JWT in localStorage,
@@ -393,6 +398,22 @@ export default function Home() {
         e.preventDefault();
         if (tabs.activeId) tabs.closeTab(tabs.activeId);
         return;
+      }
+      // Next / previous tab (fixed, non-rebindable). These were advertised in
+      // the shortcut sheet + registry but never wired (GAP-001 / FR-UI-KEYS).
+      {
+        const isNext = matchesCombo(e, 'mod+shift+]');
+        const isPrev = matchesCombo(e, 'mod+shift+[');
+        if (isNext || isPrev) {
+          e.preventDefault();
+          const list = tabs.tabs;
+          const i = list.findIndex((t) => t.id === tabs.activeId);
+          if (i >= 0 && list.length > 1) {
+            const dir = isNext ? 1 : -1;
+            tabs.activate(list[(i + dir + list.length) % list.length].id);
+          }
+          return;
+        }
       }
       // Shortcut sheet (⌘? / ⌘/ / bare ?) — special-cased, not rebindable.
       {
@@ -520,9 +541,9 @@ export default function Home() {
   const refreshAfterMutation = useCallback(async () => {
     await Promise.all([
       refetchPages(), refetchGraph(), refetchPage(),
-      refetchQueue(), refetchNotifs(),
+      refetchQueue(), refetchNotifs(), refetchUnread(),
     ]);
-  }, [refetchPages, refetchGraph, refetchPage, refetchQueue, refetchNotifs]);
+  }, [refetchPages, refetchGraph, refetchPage, refetchQueue, refetchNotifs, refetchUnread]);
 
   async function copyToClipboard(text: string) {
     try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
@@ -752,7 +773,7 @@ export default function Home() {
         </div>
 
         {/* Search */}
-        <div className="flex-1 max-w-xl mx-2 relative">
+        <div className="search-box flex-1 max-w-xl mx-2 relative">
           <div className="relative">
             <input
               ref={searchInputRef}
@@ -783,7 +804,7 @@ export default function Home() {
         </div>
 
         {/* Actions */}
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="topbar-actions ml-auto flex items-center gap-1.5">
           <button
             className="btn btn-icon"
             onClick={toggleThemePersist}
@@ -836,6 +857,7 @@ export default function Home() {
 
           {canReview && (
             <button
+              data-testid="topbar-review"
               className="btn relative"
               onClick={() => setShowReview(true)}
               title={t('topbar.review.title')}
@@ -869,10 +891,12 @@ export default function Home() {
                 onMarkRead={async (id) => {
                   await api.markRead(id);
                   refetchNotifs();
+                  refetchUnread();
                 }}
                 onMarkAllRead={async () => {
                   await api.markAllRead();
                   refetchNotifs();
+                  refetchUnread();
                 }}
                 onLink={onNotificationLink}
               />
@@ -992,7 +1016,7 @@ export default function Home() {
         </div>
 
         <aside className="border-r border-white/[0.06] bg-panel/60 overflow-y-auto scroll-thin">
-          <div className="px-2 pt-2 pb-1.5 flex items-center justify-end gap-0.5 sticky top-0 bg-panel/85 backdrop-blur z-10 border-b border-white/[0.04]">
+          <div className="tree-actions px-2 pt-2 pb-1.5 flex items-center justify-end gap-0.5 sticky top-0 bg-panel/85 backdrop-blur z-10 border-b border-white/[0.04]">
             <button
               className="w-7 h-7 rounded grid place-items-center text-muted hover:text-ink hover:bg-white/[0.06] transition-colors disabled:opacity-40"
               title={t('tree.newNote')}
@@ -1269,7 +1293,7 @@ export default function Home() {
         />
       )}
       {/* Bottom-left: version badge + settings gear, side by side. */}
-      <div className="fixed bottom-2.5 left-2.5 z-30 flex items-center gap-1.5">
+      <div className="corner-actions fixed bottom-2.5 left-2.5 z-30 flex items-center gap-1.5">
         <VersionLog />
         <button
           type="button"
@@ -1321,7 +1345,9 @@ export default function Home() {
         <VersionHistory
           path={historyForPath}
           users={usersById}
+          canRestore={!!user && user.role !== 'reader'}
           onClose={() => setHistoryForPath(null)}
+          onRestored={() => { refetchPage(); refetchPages(); refetchQueue(); }}
         />
       )}
 

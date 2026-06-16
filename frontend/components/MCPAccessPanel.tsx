@@ -67,7 +67,7 @@ export default function MCPAccessPanel({
   }
 
   async function revoke(id: number) {
-    if (!confirm('Revoke this token? Any MCP client using it will lose access.')) return;
+    if (!confirm(t('mcp.revokeConfirm'))) return;
     try {
       await api.revokeMcpToken(id);
       await mutate();
@@ -115,12 +115,10 @@ export default function MCPAccessPanel({
               <Plug size={15} className="text-accent" /> {t('mcp.title')}
             </h3>
             <div className="text-[0.8214rem] text-muted">
-              Connect external LLM clients (Claude Desktop, Claude Code, Cursor)
-              to this wiki. Tokens authenticate as YOU — operations honor your
-              role and category scope.
+              {t('mcp.subtitle')}
             </div>
           </div>
-          <button className="text-muted hover:text-ink" onClick={onClose} aria-label="Close">
+          <button className="text-muted hover:text-ink" onClick={onClose} aria-label={t('mcp.close')}>
             <X size={16} />
           </button>
         </header>
@@ -130,8 +128,7 @@ export default function MCPAccessPanel({
             <div className="bg-rose-500/[0.08] border border-rose-500/30 rounded-md p-3.5 flex items-start gap-3">
               <Lock size={16} className="text-rose-300 shrink-0 mt-0.5" />
               <div className="text-[0.8929rem] text-rose-300">
-                <strong>MCP access not granted.</strong> An admin needs to enable
-                MCP for your account before you can create tokens.
+                <strong>{t('mcp.notGranted')}</strong> {t('mcp.notGrantedBody')}
               </div>
             </div>
           ) : (
@@ -139,24 +136,24 @@ export default function MCPAccessPanel({
               {newToken && configSnippet && (
                 <div className="bg-emerald-500/[0.08] border border-emerald-500/30 rounded-md p-3.5">
                   <div className="text-[0.8929rem] text-emerald-300 font-medium mb-2">
-                    Token created. Copy it now — you won't see it again.
+                    {t('mcp.tokenCreated')}
                   </div>
                   <div className="flex gap-2 items-stretch">
                     <code className="flex-1 bg-[#0a0f1e] border border-emerald-500/30 rounded px-3 py-2 text-[0.8214rem] break-all font-mono text-emerald-200">
                       {newToken}
                     </code>
                     <button className="btn shrink-0" onClick={() => copy(newToken)}>
-                      {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
+                      {copied ? <><Check size={13} /> {t('mcp.tokenCopied')}</> : <><Copy size={13} /> {t('mcp.tokenCopy')}</>}
                     </button>
                   </div>
                   <div className="mt-3 text-[0.7857rem] uppercase tracking-[0.18em] text-muted">
-                    Drop this into your MCP client config:
+                    {t('mcp.dropConfig')}
                   </div>
                   <pre className="mt-1 bg-[#0a0f1e] border border-line rounded p-3 text-[0.8214rem] font-mono text-ink/85 overflow-x-auto">
 {configSnippet}
                   </pre>
                   <button className="mt-2 text-[0.7857rem] text-muted hover:text-ink underline" onClick={() => setNewToken(null)}>
-                    Hide
+                    {t('mcp.hide')}
                   </button>
                 </div>
               )}
@@ -164,13 +161,13 @@ export default function MCPAccessPanel({
               <div className="flex gap-2">
                 <input
                   className="form-input flex-1"
-                  placeholder="Token name (e.g. 'Claude Desktop on laptop')"
+                  placeholder={t('mcp.namePlaceholder')}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && create()}
                 />
                 <button className="btn btn-primary" onClick={create} disabled={!name.trim() || creating}>
-                  {creating ? <><Loader2 size={13} className="animate-spin" /> Creating…</> : 'Create token'}
+                  {creating ? <><Loader2 size={13} className="animate-spin" /> {t('mcp.creating')}</> : t('mcp.create')}
                 </button>
               </div>
               {error && (
@@ -181,23 +178,23 @@ export default function MCPAccessPanel({
 
               <div>
                 <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
-                  Your tokens ({tokens.length})
+                  {t('mcp.yourTokens')} ({tokens.length})
                 </div>
                 {tokens.length === 0 ? (
-                  <div className="text-[0.8571rem] text-muted italic">No active tokens.</div>
+                  <div className="text-[0.8571rem] text-muted italic">{t('mcp.activeNone')}</div>
                 ) : (
                   <div className="border border-white/[0.06] rounded-md overflow-hidden">
-                    {tokens.map((t, i) => (
-                      <div key={t.id} className={`px-4 py-3 text-[0.9286rem] flex items-center gap-3 ${i > 0 ? 'border-t border-white/[0.04]' : ''}`}>
+                    {tokens.map((tok, i) => (
+                      <div key={tok.id} className={`px-4 py-3 text-[0.9286rem] flex items-center gap-3 ${i > 0 ? 'border-t border-white/[0.04]' : ''}`}>
                         <Plug size={13} className="text-accent shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="truncate">{t.name}</div>
+                          <div className="truncate">{tok.name}</div>
                           <div className="text-[0.7857rem] text-muted truncate">
-                            Created {new Date(t.created_at).toLocaleString()}
-                            {t.last_used_at && <> · last used {new Date(t.last_used_at).toLocaleString()}</>}
+                            {t('mcp.created')} {new Date(tok.created_at).toLocaleString()}
+                            {tok.last_used_at && <> · {t('mcp.lastUsed')} {new Date(tok.last_used_at).toLocaleString()}</>}
                           </div>
                         </div>
-                        <button className="btn btn-icon" onClick={() => revoke(t.id)} title="Revoke">
+                        <button className="btn btn-icon" onClick={() => revoke(tok.id)} title={t('mcp.revoke')}>
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -211,10 +208,10 @@ export default function MCPAccessPanel({
           {isAdmin && (
             <div className="pt-4 border-t border-white/[0.06]">
               <div className="text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
-                Admin · MCP access per user
+                {t('mcp.admin.heading')}
               </div>
               <div className="text-[0.8214rem] text-muted mb-2.5">
-                Toggle whether each user can create personal MCP tokens. New users default to enabled.
+                {t('mcp.admin.body')}
               </div>
               <div className="border border-white/[0.06] rounded-md overflow-hidden">
                 {users.filter((u) => !u.is_agent).map((u, i) => {
@@ -223,14 +220,14 @@ export default function MCPAccessPanel({
                     <div key={u.id} className={`px-4 py-2.5 text-[0.8929rem] flex items-center gap-3 ${i > 0 ? 'border-t border-white/[0.04]' : ''}`}>
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{u.name} <span className="text-muted">· {u.email}</span></div>
-                        <div className="text-[0.75rem] text-muted">role: {u.role}</div>
+                        <div className="text-[0.75rem] text-muted">{t('mcp.admin.role')}: {u.role}</div>
                       </div>
                       <button
                         className={`btn ${enabled ? '' : 'btn-primary'}`}
                         onClick={() => toggleUserMcp(u)}
-                        title={enabled ? 'Click to revoke MCP access' : 'Click to grant MCP access'}
+                        title={enabled ? t('mcp.admin.revokeTitle') : t('mcp.admin.grantTitle')}
                       >
-                        {enabled ? <><ShieldCheck size={13} /> Enabled</> : <><ShieldOff size={13} /> Disabled</>}
+                        {enabled ? <><ShieldCheck size={13} /> {t('mcp.admin.enabled')}</> : <><ShieldOff size={13} /> {t('mcp.admin.disabled')}</>}
                       </button>
                     </div>
                   );

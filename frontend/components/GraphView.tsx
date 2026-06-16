@@ -791,6 +791,17 @@ export default function GraphView({
     };
   }, [graph, timelapseVisible]);
 
+  // Performance mode for large graphs. Above this many nodes the 2D renderer
+  // switches to a cheap "lite" path (solid circles, no per-node radial
+  // gradients), lets the simulation cool down and STOP instead of ticking
+  // forever, and drops animated link particles. Small graphs keep the rich,
+  // perpetually-live rendering. This is what fixes the lag when there are many
+  // notes — two createRadialGradient calls per node per frame, forever, is the
+  // cost that doesn't scale.
+  const nodeCount = renderGraph.nodes.length;
+  const perfMode = nodeCount > 200;
+  const hugeMode = nodeCount > 1000;  // extra-aggressive: cool fast, few ticks
+
   // Drive the reveal: step forward every TIMELAPSE_MS until everything's
   // visible, then auto-stop after a short hold so the user sees the final
   // shape before the controls reset.
@@ -988,8 +999,8 @@ export default function GraphView({
           // glide instead of slamming. The aggressive "snap back"
           // behavior came from a strong containment force, not
           // from these — containment is now ~0.025 (was 0.15+).
-          d3AlphaDecay={0.018}
-          d3VelocityDecay={0.35}
+          d3AlphaDecay={hugeMode ? 0.06 : perfMode ? 0.03 : 0.018}
+          d3VelocityDecay={perfMode ? 0.5 : 0.35}
           // No `nodeLabel` here — the canvas rendering below draws labels
           // itself (only for the focused node + neighbors, themed). The
           // lib's default would also pop up an HTML tooltip → double label.
@@ -1025,6 +1036,24 @@ export default function GraphView({
             const kindMul = node.isFolder ? 1.4 : 1.0;
             const effectiveSize = overrideSize ?? settings.nodeSize;
             const r = (3.4 + Math.sqrt((node.backlinks || 0) + 1) * 1.7) * effectiveSize * depthMul * kindMul;
+
+            // Large-graph lite path: one solid circle, no radial gradients (the
+            // per-frame cost killer). Focused node + neighbours still fall
+            // through to the rich rendering below, so interaction stays pretty.
+            if (perfMode && !focused) {
+              ctx.fillStyle = hexToRgba(color, baseAlpha);
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, r, 0, Math.PI * 2);
+              ctx.fill();
+              if ((hoverId && (hoverId === node.id || adjacency.get(hoverId)?.has(node.id))) || globalScale > 1.7) {
+                ctx.font = `500 ${12 / globalScale}px "Inter Tight", system-ui, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillStyle = `rgba(238, 240, 247, ${baseAlpha})`;
+                ctx.fillText(node.title, node.x, node.y + r + 4 / globalScale);
+              }
+              return;
+            }
 
             let pulseAmp = 0;
             if (node.important) {
@@ -1115,7 +1144,7 @@ export default function GraphView({
             settings.linkStyle === 'dashed' ? [6, 4] : null
           }
           linkDirectionalParticles={(l: any) =>
-            (l.kind === 'wiki' || !l.kind) ? settings.particleCount : 0}
+            perfMode ? 0 : ((l.kind === 'wiki' || !l.kind) ? settings.particleCount : 0)}
           linkDirectionalParticleSpeed={settings.particleSpeed}
           linkDirectionalParticleWidth={(l: any) =>
             (1.8 + Math.min(l.weight || 1, 6) * 0.25) * settings.lineThickness * 0.5}
@@ -1124,12 +1153,14 @@ export default function GraphView({
             const tgt = typeof l.target === 'object' ? l.target.id : l.target;
             return isFocusedLink(src, tgt) ? settings.particleColor : 'rgba(0,0,0,0)';
           }}
-          // Run the sim perpetually instead of stopping at 120 ticks.
-          // Obsidian-style: every force-slider tweak settles in
-          // real-time without a freeze-then-thaw jump. d3-force is
-          // cheap enough on wiki-scale graphs to keep ticking.
-          cooldownTicks={Infinity}
-          cooldownTime={Infinity}
+          // Small graphs run the sim perpetually (Obsidian-style: every
+          // force-slider tweak settles in real-time). Large graphs instead cool
+          // down and STOP once settled — `applyPhysics(reheat)` re-warms it on
+          // any slider change and dragging a node auto-reheats, so it stays
+          // interactive without burning CPU on a perpetual redraw of hundreds
+          // of nodes.
+          cooldownTicks={perfMode ? Math.max(90, Math.min(400, Math.round(120000 / nodeCount))) : Infinity}
+          cooldownTime={perfMode ? 8000 : Infinity}
         />}
         </GraphErrorBoundary>
       </div>

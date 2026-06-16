@@ -115,6 +115,15 @@ export type ContextMenuInfo =
   | { kind: 'file'; x: number; y: number; name: string; pagePath: string; stability?: string }
   | { kind: 'folder'; x: number; y: number; name: string; folderPath: string; isEmpty: boolean };
 
+// Stable rainbow color index (0-6) per note path, for the Rainbow theme's
+// colored file tree. Deterministic so a note keeps its color across renders.
+// Only consumed by CSS under [data-theme-id="rainbow"]; inert for other themes.
+function rainbowIndex(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h) % 7;
+}
+
 function NodeRow({
   node, selected, onSelect, openSet, toggleOpen, onContextMenu, onHover,
 }: {
@@ -135,6 +144,7 @@ function NodeRow({
     return (
       <button
         data-path={node.pagePath}
+        data-rainbow={rainbowIndex(node.pagePath || node.name)}
         title={node.name}
         className={`w-full text-left px-2 py-[3px] rounded text-[0.8929rem] flex items-center gap-1.5 transition-colors ${
           isSel
@@ -165,6 +175,7 @@ function NodeRow({
   return (
     <div>
       <button
+        data-rainbow={rainbowIndex(node.path || node.name)}
         title={node.name || 'Wiki'}
         className="w-full text-left px-2 py-[3px] rounded text-[0.8929rem] font-medium flex items-center gap-1.5 hover:bg-white/[0.05] text-ink select-none transition-colors"
         onClick={() => toggleOpen(node.path)}
@@ -345,7 +356,7 @@ const FileTree = forwardRef<FileTreeHandle, {
   }), [tree]);
 
   return (
-    <div ref={rootRef} className="py-2">
+    <div ref={rootRef} className="file-tree py-2">
       {pendingFolder && onPendingFolderConfirm && onPendingFolderCancel && (
         <PendingFolderRow
           initial={pendingFolder.initial}

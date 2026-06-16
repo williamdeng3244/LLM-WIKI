@@ -24,3 +24,12 @@ dist/
 raw/*
 !raw/.gitkeep
 
+# Runtime vault content — each install loads/seeds its own; only the placeholder
+# is tracked (mirrors raw/* above). Keeps QA test pages + local seed md out of git.
+vault/*
+!vault/.gitkeep
+
+# Local broken/renamed Next build dirs (e.g. .next.broken/, ~200MB+). Never commit.
+.next.broken/
+*.broken/
+

@@ -1,4 +1,7 @@
-fastapi==0.115.0
+fastapi==0.136.3
+# starlette pinned to the patched release (CVE-2024-47874 / CVE-2025-54121 /
+# PYSEC-2026-161); pulled by fastapi but locked here for reproducibility.
+starlette==1.3.0
 uvicorn[standard]==0.32.0
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.30.0
@@ -16,10 +19,15 @@ httpx==0.27.2
 # URL-ingest (issue #6): readability strips nav/chrome from fetched HTML;
 # markdownify converts the cleaned HTML to markdown.
 readability-lxml==0.8.1
-markdownify==0.13.1
-authlib==1.3.2
-PyJWT==2.9.0
-python-multipart==0.0.12
+# readability imports lxml.html.clean, which newer lxml (>=5) split into a
+# separate package. Without it `from readability import Document` raises
+# ImportError and URL HTML ingest silently degrades to raw-chrome HTML
+# (caught by fetch_url's fallback). Pin it explicitly. (QA-found 2026-06-12.)
+lxml_html_clean>=0.1
+markdownify==1.2.2
+authlib==1.7.2
+PyJWT==2.13.0
+python-multipart==0.0.32
 sentence-transformers==3.2.1
 diff-match-patch==20241021
 
@@ -31,3 +39,9 @@ diff-match-patch==20241021
 # pre-existing 500 in POST /api/mcp-tokens).
 pytest==8.3.3
 psycopg[binary]==3.2.3
+# Author xlsx/docx fixtures for the MinerU office live-e2e test (test_ingest_e2e).
+openpyxl>=3.1
+python-docx>=1.1
+
+# Schema migrations (added 2026-06-12)
+alembic>=1.13

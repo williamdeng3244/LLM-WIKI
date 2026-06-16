@@ -6,6 +6,7 @@ import {
   GitMerge, RotateCcw,
 } from 'lucide-react';
 import { api, type IngestRun, type IngestEdit } from '@/lib/api';
+import { useLanguage } from '@/lib/i18n';
 import Markdown from './Markdown';
 
 function kindIcon(k: IngestEdit['kind']) {
@@ -15,13 +16,13 @@ function kindIcon(k: IngestEdit['kind']) {
   return GitMerge;
 }
 
-function kindLabel(k: IngestEdit['kind']) {
-  return {
-    edit_existing: 'Edit',
-    create_new: 'New page',
-    source_summary: 'Source summary',
-    conflict: 'Conflict',
-  }[k];
+function kindLabelKey(k: IngestEdit['kind']) {
+  return ({
+    edit_existing: 'ingp.kind.editExisting',
+    create_new: 'ingp.kind.createNew',
+    source_summary: 'ingp.kind.sourceSummary',
+    conflict: 'ingp.kind.conflict',
+  } as const)[k];
 }
 
 export default function IngestPlanPreview({
@@ -42,6 +43,7 @@ export default function IngestPlanPreview({
       },
     },
   );
+  const { t } = useLanguage();
   const [approved, setApproved] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export default function IngestPlanPreview({
 
   async function dismiss() {
     if (!run) return;
-    if (!confirm('Dismiss this plan? No drafts will be created.')) return;
+    if (!confirm(t('ingp.dismissConfirm'))) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -151,33 +153,33 @@ export default function IngestPlanPreview({
       >
         <header className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
           <div>
-            <h3 className="font-medium text-[1rem]">Ingest plan preview</h3>
+            <h3 className="font-medium text-[1rem]">{t('ingp.title')}</h3>
             <div className="text-[0.8214rem] text-muted">
-              Run #{runId} · {run?.provider_model || '…'} · {run?.retrieval_strategy || '…'}
+              {t('ingp.run')} #{runId} · {run?.provider_model || '…'} · {run?.retrieval_strategy || '…'}
             </div>
           </div>
-          <button className="text-muted hover:text-ink" onClick={onClose} aria-label="Close">
+          <button className="text-muted hover:text-ink" onClick={onClose} aria-label={t('ingp.close')}>
             <X size={16} />
           </button>
         </header>
 
         {isLoading && !run ? (
           <div className="flex-1 flex items-center justify-center text-muted text-[0.9286rem]">
-            <Loader2 size={18} className="animate-spin mr-2" /> Loading plan…
+            <Loader2 size={18} className="animate-spin mr-2" /> {t('ingp.loadingPlan')}
           </div>
         ) : isPlanning ? (
           <div className="flex-1 flex flex-col items-center justify-center text-muted text-[0.9286rem]">
             <Loader2 size={20} className="animate-spin mb-2" />
-            Agent is analyzing the source…
+            {t('ingp.planning')}
           </div>
         ) : run?.status === 'failed' ? (
           <div className="flex-1 flex flex-col items-center justify-center text-rose-300 text-[0.9286rem] px-6 text-center">
             <AlertTriangle size={20} className="mb-2" />
-            <div>Plan failed: {run.error || 'unknown error'}</div>
+            <div>{t('ingp.planFailed')} {run.error || t('ingp.unknownError')}</div>
             {(run.applied_count > 0 || (run.approved_edit_indices?.length ?? 0) > 0) && (
               <div className="text-muted mt-2">
-                Applied {run.applied_count}/{run.approved_edit_indices?.length ?? run.edits_count}
-                {run.failed_count > 0 && <>, {run.failed_count} failed</>}.
+                {t('ingp.applied')} {run.applied_count}/{run.approved_edit_indices?.length ?? run.edits_count}
+                {run.failed_count > 0 && <>, {run.failed_count} {t('ingp.failedSuffix')}</>}.
               </div>
             )}
             <button
@@ -186,26 +188,26 @@ export default function IngestPlanPreview({
               disabled={submitting}
             >
               {submitting
-                ? <><Loader2 size={13} className="animate-spin" /> Retrying…</>
-                : <><RotateCcw size={13} /> Retry apply</>}
+                ? <><Loader2 size={13} className="animate-spin" /> {t('ingp.retrying')}</>
+                : <><RotateCcw size={13} /> {t('ingp.retryApply')}</>}
             </button>
           </div>
         ) : isApplying ? (
           <div className="flex-1 flex flex-col items-center justify-center text-muted text-[0.9286rem] px-6 text-center">
             <Loader2 size={20} className="animate-spin mb-2" />
-            Applying {run?.applied_count ?? 0}/{targetCount} selected edits…
+            {t('ingp.applying')} {run?.applied_count ?? 0}/{targetCount} {t('ingp.selectedEdits')}
             {(run?.failed_count ?? 0) > 0 && (
               <div className="text-rose-300 text-[0.8214rem] mt-2">
-                {run!.failed_count} edit{run!.failed_count === 1 ? '' : 's'} failed so far.
+                {run!.failed_count} {run!.failed_count === 1 ? t('ingp.editFailedSoFar') : t('ingp.editsFailedSoFar')}
               </div>
             )}
           </div>
         ) : isPartiallyFailed ? (
           <div className="flex-1 flex flex-col items-center justify-center text-amber-300 text-[0.9286rem] px-6 text-center">
             <AlertTriangle size={20} className="mb-2" />
-            <div>Partially completed.</div>
+            <div>{t('ingp.partiallyCompleted')}</div>
             <div className="text-muted mt-2">
-              Applied {run?.applied_count}/{targetCount}; {run?.failed_count} failed.
+              {t('ingp.appliedOf')} {run?.applied_count}/{targetCount}; {run?.failed_count} {t('ingp.failedCount')}
             </div>
             {run?.summary && (
               <div className="text-muted italic mt-3 max-w-[60ch] whitespace-pre-wrap">
@@ -218,16 +220,16 @@ export default function IngestPlanPreview({
               disabled={submitting}
             >
               {submitting
-                ? <><Loader2 size={13} className="animate-spin" /> Retrying…</>
-                : <><RotateCcw size={13} /> Retry remaining</>}
+                ? <><Loader2 size={13} className="animate-spin" /> {t('ingp.retrying')}</>
+                : <><RotateCcw size={13} /> {t('ingp.retryRemaining')}</>}
             </button>
           </div>
         ) : isTerminal && !isPending ? (
           <div className="flex-1 flex flex-col items-center justify-center text-muted text-[0.9286rem] px-6 text-center">
-            This run is {run?.status}.
+            {t('ingp.thisRunIs')} {run?.status}.
             {run?.status === 'done' && (
               <div className="text-muted mt-2">
-                Applied {run.applied_count}/{targetCount} drafts.
+                {t('ingp.appliedOf')} {run.applied_count}/{targetCount} {t('ingp.appliedDrafts')}
               </div>
             )}
             {run?.summary && <div className="mt-3 italic max-w-[60ch] whitespace-pre-wrap">{run.summary}</div>}
@@ -235,22 +237,22 @@ export default function IngestPlanPreview({
         ) : (
           <>
             <div className="px-5 py-3 border-b border-white/[0.06] flex items-center gap-3 flex-wrap">
-              <span className="badge proposed">{edits.length} edits proposed</span>
+              <span className="badge proposed">{edits.length} {t('ingp.editsProposed')}</span>
               {(run?.conflict_count ?? 0) > 0 && (
-                <span className="badge locked">{run!.conflict_count} conflicts</span>
+                <span className="badge locked">{run!.conflict_count} {t('ingp.conflicts')}</span>
               )}
               {(run?.skipped_count ?? 0) > 0 && (
-                <span className="badge draft">{run!.skipped_count} over cap</span>
+                <span className="badge draft">{run!.skipped_count} {t('ingp.overCap')}</span>
               )}
               <span className="text-[0.7857rem] text-muted">
-                Confidence:
-                {counts.high > 0 && <span className="ml-1.5 text-emerald-300">{counts.high} high</span>}
-                {counts.medium > 0 && <span className="ml-1.5 text-amber-300">{counts.medium} medium</span>}
-                {counts.low > 0 && <span className="ml-1.5 text-rose-300">{counts.low} low</span>}
-                {counts.unset > 0 && <span className="ml-1.5 text-muted">{counts.unset} unset</span>}
+                {t('ingp.confidence')}
+                {counts.high > 0 && <span className="ml-1.5 text-emerald-300">{counts.high} {t('ingp.conf.high')}</span>}
+                {counts.medium > 0 && <span className="ml-1.5 text-amber-300">{counts.medium} {t('ingp.conf.medium')}</span>}
+                {counts.low > 0 && <span className="ml-1.5 text-rose-300">{counts.low} {t('ingp.conf.low')}</span>}
+                {counts.unset > 0 && <span className="ml-1.5 text-muted">{counts.unset} {t('ingp.conf.unset')}</span>}
               </span>
               <span className="text-[0.7857rem] text-muted ml-auto">
-                {approved.size} of {edits.length} approved
+                {approved.size} {t('ingp.of')} {edits.length} {t('ingp.approvedOfTotal')}
               </span>
             </div>
 
@@ -269,7 +271,7 @@ export default function IngestPlanPreview({
             <div className="flex-1 overflow-y-auto scroll-thin px-5 py-4 space-y-2.5">
               {edits.length === 0 && (
                 <div className="text-center text-muted text-[0.9286rem] py-8">
-                  Agent proposed no edits. Dismiss this plan and try a different source.
+                  {t('ingp.noEdits')}
                 </div>
               )}
               {edits.map((e, i) => {
@@ -298,7 +300,7 @@ export default function IngestPlanPreview({
                       }`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="badge">{kindLabel(e.kind)}</span>
+                          <span className="badge">{t(kindLabelKey(e.kind))}</span>
                           <code className="text-[0.7857rem] text-muted bg-white/[0.06] px-1.5 py-0.5 rounded font-mono truncate">
                             {e.path}
                           </code>
@@ -306,7 +308,7 @@ export default function IngestPlanPreview({
                             <span className={`badge ${
                               e.confidence === 'high' ? 'accepted'
                               : e.confidence === 'low' ? 'rejected' : 'proposed'
-                            }`}>{e.confidence}</span>
+                            }`}>{t(`ingp.conf.${e.confidence}`)}</span>
                           )}
                         </div>
                         <div className="text-[0.9286rem] text-ink mt-1 truncate">{e.title}</div>
@@ -316,7 +318,7 @@ export default function IngestPlanPreview({
                         {e.conflict_notes && (
                           <div className="mt-1.5 text-[0.8571rem] text-rose-300 flex items-start gap-1.5">
                             <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-                            <span><strong>Conflict:</strong> {e.conflict_notes}</span>
+                            <span><strong>{t('ingp.conflictLabel')}</strong> {e.conflict_notes}</span>
                           </div>
                         )}
                         {e.source_refs && e.source_refs.length > 0 && (
@@ -340,7 +342,7 @@ export default function IngestPlanPreview({
                             });
                           }}
                         >
-                          {isOpen ? 'Hide body' : 'Show full body →'}
+                          {isOpen ? t('ingp.hideBody') : t('ingp.showBody')}
                         </button>
                         {isOpen && (
                           <div className="mt-2 p-3 bg-[#0a0f1e] border border-line rounded text-[0.9286rem] max-h-[280px] overflow-y-auto scroll-thin">
@@ -356,17 +358,17 @@ export default function IngestPlanPreview({
 
             <div className="px-5 py-3 border-t border-line flex items-center gap-3">
               <div className="text-[0.7857rem] text-muted flex items-center gap-2">
-                {isApplying && <><Loader2 size={11} className="animate-spin" /> Applying…</>}
-                {isPending && <span>Plans persist forever — dismiss or approve at any time.</span>}
+                {isApplying && <><Loader2 size={11} className="animate-spin" /> {t('ingp.applyingShort')}</>}
+                {isPending && <span>{t('ingp.persistHint')}</span>}
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <button
                   className="btn"
                   onClick={dismiss}
                   disabled={!isPending || submitting}
-                  title="Discard this plan; nothing publishes"
+                  title={t('ingp.dismissTitle')}
                 >
-                  Dismiss
+                  {t('ingp.dismiss')}
                 </button>
                 <button
                   className="btn btn-primary"
@@ -374,8 +376,8 @@ export default function IngestPlanPreview({
                   disabled={!isPending || submitting || approved.size === 0}
                 >
                   {submitting
-                    ? <><Loader2 size={13} className="animate-spin" /> Submitting…</>
-                    : <><Check size={13} /> Approve {approved.size > 0 ? `(${approved.size})` : ''}</>}
+                    ? <><Loader2 size={13} className="animate-spin" /> {t('ingp.submitting')}</>
+                    : <><Check size={13} /> {t('ingp.approve')} {approved.size > 0 ? `(${approved.size})` : ''}</>}
                 </button>
               </div>
             </div>

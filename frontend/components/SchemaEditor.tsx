@@ -74,7 +74,7 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
             </code>
             {!canEdit && !isLoading && (
               <span className="flex items-center gap-1 text-[0.7857rem] text-muted">
-                <Lock size={11} /> read-only
+                <Lock size={11} /> {t('schema.readOnly')}
               </span>
             )}
           </div>
@@ -88,19 +88,18 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
                   }`}
                   onClick={() => setView(m)}
                 >
-                  {m[0].toUpperCase() + m.slice(1)}
+                  {m === 'edit' ? t('schema.view.edit') : m === 'split' ? t('schema.view.split') : t('schema.view.preview')}
                 </button>
               ))}
             </div>
-            <button className="text-muted hover:text-ink" onClick={onClose} aria-label="Close">
+            <button className="text-muted hover:text-ink" onClick={onClose} aria-label={t('schema.close')}>
               <X size={16} />
             </button>
           </div>
         </header>
 
         <div className="px-5 py-2 border-b border-white/[0.06] text-[0.8214rem] text-muted">
-          This file is injected into the agent's context for ingest and lint.
-          Edit the conventions here and every future agent run picks them up.
+          {t('schema.intro')}
         </div>
 
         {error && (
@@ -113,7 +112,7 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
           {(view === 'edit' || view === 'split') && (
             <div className="flex flex-col min-h-0 border-r border-white/[0.06]">
               <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.18em] text-muted bg-white/[0.02] border-b border-white/[0.06]">
-                Markdown
+                {t('schema.markdown')}
               </div>
               <textarea
                 className="form-input form-textarea flex-1 rounded-none border-0 px-5 py-3 text-[0.9286rem] leading-[1.6] focus:shadow-none disabled:opacity-70"
@@ -127,13 +126,13 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
           {(view === 'preview' || view === 'split') && (
             <div className="flex flex-col min-h-0">
               <div className="px-5 py-2 text-[0.7143rem] uppercase tracking-[0.18em] text-muted bg-white/[0.02] border-b border-white/[0.06]">
-                Preview
+                {t('schema.preview')}
               </div>
               <div className="flex-1 overflow-y-auto scroll-thin px-6 py-5">
                 {draft.trim() ? (
                   <Markdown>{draft}</Markdown>
                 ) : (
-                  <div className="text-muted text-[0.9286rem] italic">Empty.</div>
+                  <div className="text-muted text-[0.9286rem] italic">{t('schema.empty')}</div>
                 )}
               </div>
             </div>
@@ -144,14 +143,14 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
           <div className="text-[0.7857rem] text-muted flex items-center gap-2">
             {data?.last_modified && (
               <span>
-                Last saved {new Date(data.last_modified).toLocaleString()}
+                {t('schema.lastSaved')} {new Date(data.last_modified).toLocaleString()}
               </span>
             )}
             {savedAt && (
-              <span className="text-emerald-300">· just saved</span>
+              <span className="text-emerald-300">· {t('schema.justSaved')}</span>
             )}
             {dirty && canEdit && (
-              <span className="text-amber-300">· unsaved changes</span>
+              <span className="text-amber-300">· {t('schema.unsavedChanges')}</span>
             )}
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -159,19 +158,19 @@ export default function SchemaEditor({ onClose }: { onClose: () => void }) {
               className="btn"
               disabled={!dirty || saving}
               onClick={reset}
-              title="Discard local edits"
+              title={t('schema.discard')}
             >
-              <RotateCcw size={13} /> Reset
+              <RotateCcw size={13} /> {t('schema.reset')}
             </button>
             <button
               className="btn btn-primary"
               disabled={!canEdit || !dirty || saving}
               onClick={save}
-              title={canEdit ? 'Save changes' : 'Admins only'}
+              title={canEdit ? t('schema.saveChanges') : t('schema.adminsOnly')}
             >
               {saving
-                ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
-                : <><Save size={13} /> Save</>}
+                ? <><Loader2 size={13} className="animate-spin" /> {t('schema.saving')}</>
+                : <><Save size={13} /> {t('schema.save')}</>}
             </button>
           </div>
         </div>

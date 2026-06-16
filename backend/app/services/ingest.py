@@ -242,6 +242,21 @@ async def _recent_reject_feedback(session: AsyncSession) -> str:
 # The block shape here matches `services.llm_client` generic blocks, not any
 # specific vendor SDK. The LLM client translates to Anthropic/OpenAI shapes.
 
+def is_supported_ingest_mime(mime: str) -> bool:
+    """Whether the ingest pipeline can read this MIME type — mirrors the
+    dispatch in `_read_raw_source_block` exactly. The upload + URL-import
+    allow-lists gate on this so an unsupported file is rejected up front (415)
+    instead of being silently stored and only failing later at ingest. GAP-011.
+    """
+    m = (mime or "").lower()
+    return (
+        m.startswith(TEXT_MIME_PREFIXES)
+        or m == PDF_MIME
+        or m in MINERU_OFFICE_MIMES
+        or m.startswith("image/")
+    )
+
+
 async def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]]:
     """Async because PDF ingest may detour through the MinerU sidecar
     (high-fidelity Markdown extraction). Falls back to the native

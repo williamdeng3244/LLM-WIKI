@@ -1,0 +1,60 @@
+name: Tests
+
+# Runs the automated suites on every push / PR so regressions are caught before
+# merge. (Previously only release.yml existed — there was no test CI.)
+#
+# Two jobs:
+#   frontend  — fast: vitest unit tests + next lint (no services needed).
+#   backend   — heavier: brings up the Postgres/Redis/backend/worker stack and
+#               runs the pytest suite black-box against it. The LLM/MinerU
+#               live-e2e tests skip automatically when no key/sidecar is present
+#               (WIKI_RUN_LIVE_E2E unset), so no secrets are required for green.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # --legacy-peer-deps: @vitejs/plugin-react / vite peer ranges (see
+      # vitest.config.mts note). Mirrors the local install.
+      - run: npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+      - name: Unit tests (vitest)
+        run: npm test
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true   # surface lint issues without blocking the test signal
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + start the stack (db, redis, backend, worker)
+        run: docker compose up -d --build db redis backend worker
+      - name: Wait for the backend to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/auth/config', timeout=2)" 2>/dev/null; then
+              echo "backend ready"; exit 0
+            fi
+            sleep 5
+          done
+          echo "backend did not become healthy"; docker compose logs backend | tail -50; exit 1
+      - name: Backend test suite
+        run: docker compose exec -T backend python -m pytest tests/ -q
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs --tail=100
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

@@ -12,13 +12,13 @@ import {
 } from '@/lib/api';
 import { useLanguage } from '@/lib/i18n';
 
-const KIND_LABEL: Record<LintIssueKind, string> = {
-  orphan: 'Orphan',
-  broken_link: 'Broken link',
-  conflict: 'Conflict',
-  stale: 'Stale',
-  source_drift: 'Source drift',
-  other: 'Other',
+const KIND_LABEL_KEY: Record<LintIssueKind, string> = {
+  orphan: 'lint.kind.orphan',
+  broken_link: 'lint.kind.broken_link',
+  conflict: 'lint.kind.conflict',
+  stale: 'lint.kind.stale',
+  source_drift: 'lint.kind.source_drift',
+  other: 'lint.kind.other',
 };
 const KIND_ICON: Record<LintIssueKind, typeof FileWarning> = {
   orphan: FileWarning,
@@ -96,7 +96,7 @@ export default function LintPanel({
   }
 
   async function dismiss(issue: LintIssue) {
-    const note = window.prompt(`Dismiss "${issue.title}"? Optional note for the audit log:`, '') ?? undefined;
+    const note = window.prompt(t('lint.dismissPrompt').replace('{title}', issue.title), '') ?? undefined;
     try {
       await api.dismissLintIssue(issue.id, note);
       await mutateIssues();
@@ -142,10 +142,10 @@ export default function LintPanel({
               <ShieldCheck size={15} className="text-accent" /> {t('lint.title')}
             </h3>
             <div className="text-[0.8214rem] text-muted">
-              Read-only audit pass. Findings are surfaced; the agent never auto-edits.
+              {t('lint.subtitle')}
             </div>
           </div>
-          <button className="text-muted hover:text-ink" onClick={onClose} aria-label="Close">
+          <button className="text-muted hover:text-ink" onClick={onClose} aria-label={t('lint.close')}>
             <X size={16} />
           </button>
         </header>
@@ -163,10 +163,10 @@ export default function LintPanel({
           </button>
           {activeReport && (
             <span className="text-[0.8214rem] text-muted">
-              Report #{activeReport.id} · {activeReport.status}
+              {t('lint.report')} #{activeReport.id} · {activeReport.status}
               {activeReport.provider_model && <> · {activeReport.provider_model}</>}
               {activeReport.finished_at && (
-                <> · finished {new Date(activeReport.finished_at).toLocaleString()}</>
+                <> · {t('lint.finished')} {new Date(activeReport.finished_at).toLocaleString()}</>
               )}
             </span>
           )}
@@ -177,7 +177,7 @@ export default function LintPanel({
               onChange={(e) => setShowDismissed(e.target.checked)}
               className="accent-accent"
             />
-            Show dismissed
+            {t('lint.showDismissed')}
           </label>
         </div>
 
@@ -191,24 +191,24 @@ export default function LintPanel({
           {!activeReport ? (
             <div className="h-full flex flex-col items-center justify-center text-muted text-[0.9286rem] gap-2">
               <ShieldCheck size={24} />
-              No lint reports yet. Click <strong className="text-ink">Run lint</strong> to start one.
+              {t('lint.emptyPrefix')} <strong className="text-ink">{t('lint.runLint')}</strong> {t('lint.emptySuffix')}
             </div>
           ) : isPlanning ? (
             <div className="h-full flex flex-col items-center justify-center text-muted text-[0.9286rem] gap-2">
               <Loader2 size={20} className="animate-spin" />
-              Agent is auditing the wiki…
+              {t('lint.auditing')}
             </div>
           ) : isFailed ? (
             <div className="h-full flex flex-col items-center justify-center text-rose-300 text-[0.9286rem] px-6 text-center gap-2">
               <AlertTriangle size={20} />
-              Lint failed: {activeReport.error || 'unknown error'}
+              {t('lint.failed')}: {activeReport.error || t('lint.unknownError')}
             </div>
           ) : visibleCount === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-muted text-[0.9286rem] gap-2 px-6 text-center">
               <CheckCircle2 size={24} className="text-emerald-300" />
               {issues.length === 0
-                ? 'No issues found in this pass.'
-                : 'All issues dismissed. Toggle "Show dismissed" to view them.'}
+                ? t('lint.noIssues')
+                : t('lint.allDismissed')}
               {activeReport.summary && (
                 <div className="italic mt-2 max-w-[60ch] text-[0.8571rem]">{activeReport.summary}</div>
               )}
@@ -229,7 +229,7 @@ export default function LintPanel({
                   <section key={kind}>
                     <div className="flex items-center gap-2 text-[0.7143rem] uppercase tracking-[0.18em] text-muted mb-2">
                       <Icon size={11} />
-                      <span>{KIND_LABEL[kind]}</span>
+                      <span>{t(KIND_LABEL_KEY[kind] as Parameters<typeof t>[0])}</span>
                       <span className="text-muted/70">({list.length})</span>
                     </div>
                     <ul className="space-y-1.5">
@@ -260,7 +260,7 @@ export default function LintPanel({
 
         {reports.length > 1 && (
           <div className="px-5 py-2 border-t border-white/[0.06] text-[0.7857rem] text-muted overflow-x-auto scroll-thin whitespace-nowrap">
-            History:
+            {t('lint.history')}:
             {reports.slice(0, 12).map((r) => (
               <button
                 key={r.id}
@@ -289,6 +289,7 @@ function IssueRow({
   onSuggestEdit: (path: string) => void;
   onDismiss: () => void;
 }) {
+  const { t } = useLanguage();
   const isDismissed = issue.status === 'dismissed';
   return (
     <li className={`border rounded-md transition-colors ${
@@ -322,7 +323,7 @@ function IssueRow({
                 </div>
               )}
               {issue.dismiss_note && (
-                <div className="text-muted italic">Dismiss note: {issue.dismiss_note}</div>
+                <div className="text-muted italic">{t('lint.dismissNoteLabel')}: {issue.dismiss_note}</div>
               )}
               <div className="flex items-center gap-2 flex-wrap pt-1">
                 {(issue.affected_paths ?? []).map((p) => (
@@ -330,16 +331,16 @@ function IssueRow({
                     <button
                       className="btn"
                       onClick={() => onOpenPath(p)}
-                      title="Open this page"
+                      title={t('lint.openThisPage')}
                     >
-                      <ExternalLink size={11} /> Open {p}
+                      <ExternalLink size={11} /> {t('lint.open')} {p}
                     </button>
                     <button
                       className="btn"
                       onClick={() => onSuggestEdit(p)}
-                      title="Open Suggest edit on this page"
+                      title={t('lint.suggestEdit')}
                     >
-                      <Pencil size={11} /> Suggest edit
+                      <Pencil size={11} /> {t('lint.suggestEditBtn')}
                     </button>
                   </span>
                 ))}
@@ -347,9 +348,9 @@ function IssueRow({
                   <button
                     className="btn ml-auto"
                     onClick={onDismiss}
-                    title="Dismiss — kept in audit log"
+                    title={t('lint.dismissTitle')}
                   >
-                    <Trash2 size={11} /> Dismiss
+                    <Trash2 size={11} /> {t('lint.dismiss')}
                   </button>
                 )}
               </div>

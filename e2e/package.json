@@ -1,0 +1,14 @@
+{
+  "name": "wiki-e2e",
+  "private": true,
+  "description": "Playwright E2E suite for the Enflame Wiki frontend (run via the dockerized playwright image; see README).",
+  "devDependencies": {
+    "@playwright/test": "1.49.0"
+  },
+  "scripts": {
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.11.3"
+  }
+}

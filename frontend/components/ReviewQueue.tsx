@@ -158,7 +158,7 @@ export default function ReviewQueue({
           {/* Detail */}
           {!selected ? (
             <div className="flex items-center justify-center text-muted text-[0.9286rem]">
-              Select a revision to review.
+              {t('review.selectRevision')}
             </div>
           ) : (
             <div className="flex flex-col min-h-0 overflow-hidden">
@@ -345,6 +345,7 @@ export default function ReviewQueue({
                   <RotateCcw size={13} /> {t('review.decision.requestChanges')}
                 </button>
                 <button
+                  data-testid="review-accept"
                   className="btn btn-primary"
                   onClick={() => review('accept')}
                   title={t('review.decision.accept.title')}

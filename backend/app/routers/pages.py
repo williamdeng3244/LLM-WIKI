@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import current_user, require_role
 from app.core.db import get_session
-from app.core.permissions import can_lock, can_propose
+from app.core.permissions import can_propose, is_editor_for_page
 from app.models import (
     AuditLog, Category, Link, Page, PageStability,
     Revision, RevisionStatus, Role, User,
@@ -78,8 +78,16 @@ async def list_revisions(
     )).scalar_one_or_none()
     if not page:
         raise HTTPException(404, "Page not found")
+    # Drafts are private to their author (mirrors the single-revision guard in
+    # GET /revisions/{id}); everyone sees non-draft revisions. Without this
+    # filter the list leaks other users' draft bodies (GAP-008 / FR-PAGE-007).
     rows = (await session.execute(
-        select(Revision).where(Revision.page_id == page.id).order_by(Revision.id.desc())
+        select(Revision)
+        .where(
+            Revision.page_id == page.id,
+            (Revision.status != RevisionStatus.draft) | (Revision.author_id == user.id),
+        )
+        .order_by(Revision.id.desc())
     )).scalars().all()
     return rows
 
@@ -193,11 +201,13 @@ async def move_page(
     must be non-empty, not collide with any other page, and not be a
     pure traversal string like `..`.
     """
-    if user.role not in (Role.admin, Role.editor):
-        raise HTTPException(403, "Only editors and admins can move pages")
     page = await _resolve_page(session, page_path)
     if not page:
         raise HTTPException(404, "Page not found")
+    # Editor scoping: admins always; an editor only within this page's category
+    # (uncategorized pages stay open to any editor). GAP-010 / FR-PAGE-010.
+    if not await is_editor_for_page(session, user, page):
+        raise HTTPException(403, "Only editors in this page's category (or admins) can move pages")
 
     new_path = (body.new_path or "").strip().lstrip("/")
     if not new_path:

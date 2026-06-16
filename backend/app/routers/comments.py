@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import current_user, require_role
+from app.core.permissions import is_editor_for_page
 from app.core.db import get_session
 from app.models import AuditLog, Comment, Flag, FlagStatus, Page, Role, User
 from app.schemas import CommentCreate, CommentOut, FlagCreate, FlagOut
@@ -103,12 +104,20 @@ async def resolve_flag(
     f = await session.get(Flag, flag_id)
     if not f:
         raise HTTPException(404, "Not found")
-    # Editors-or-above can resolve
-    if user.role not in (Role.editor, Role.admin):
-        raise HTTPException(403, "Editor or admin role required")
+    # Editor scoping: admins always; an editor only within this page's category
+    # (uncategorized pages stay open to any editor). GAP-009 / FR-FLAG-003.
+    page = await session.get(Page, f.page_id)
+    if not page or not await is_editor_for_page(session, user, page):
+        raise HTTPException(403, "Editor in this page's category (or admin) required")
     f.status = FlagStatus.dismissed if dismiss else FlagStatus.resolved
     f.resolved_by_id = user.id
     f.resolved_at = datetime.now(timezone.utc)
+    # Audit completeness: raising a flag was audited but resolving was not.
+    session.add(AuditLog(
+        actor_id=user.id, action="flag.resolve",
+        target_type="flag", target_id=f.id,
+        payload={"dismiss": dismiss},
+    ))
     await session.commit()
     await session.refresh(f)
     return f

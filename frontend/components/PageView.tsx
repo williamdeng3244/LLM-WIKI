@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import {
   Flag as FlagIcon, Lock, Unlock, Pencil, MoreVertical,
   FolderInput, Bookmark, BookmarkCheck, GitMerge, FileDown,
-  Clipboard, History, LocateFixed, Trash2,
+  Clipboard, History, LocateFixed, Trash2, ExternalLink,
 } from 'lucide-react';
 import Markdown from './Markdown';
 import ContextMenu, { type MenuItem } from './ContextMenu';
@@ -120,6 +120,12 @@ export default function PageView({
     return [
       {
         kind: 'item',
+        label: t('menu.file.openNewTab'),
+        icon: <ExternalLink size={13} />,
+        onClick: () => onNavigate(p.path, true),
+      },
+      {
+        kind: 'item',
         label: isBookmarked ? t('menu.page.unbookmark') : t('menu.page.bookmark'),
         icon: isBookmarked ? <BookmarkCheck size={13} /> : <Bookmark size={13} />,
         disabled: !onToggleBookmark,
@@ -210,7 +216,7 @@ export default function PageView({
         >
           {page.path.split('/').join(' · ')}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="note-actions flex items-center gap-1.5 shrink-0">
           {canSuggest && (
             <button className="btn" onClick={onPropose}>
               <Pencil size={13} /> {t('page.toolbar.suggest')}
@@ -306,8 +312,8 @@ export default function PageView({
             {page.tags.length > 0 && (
               <>
                 <span className="text-muted/40">·</span>
-                {page.tags.slice(0, 8).map((t) => (
-                  <span key={t} className="badge">#{t}</span>
+                {page.tags.slice(0, 8).map((t, i) => (
+                  <span key={t} data-rainbow={i % 7} className="badge">#{t}</span>
                 ))}
               </>
             )}

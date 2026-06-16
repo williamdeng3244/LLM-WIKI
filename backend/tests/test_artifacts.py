@@ -12,13 +12,17 @@ Spec § 11 mapping (each test below cites the spec name in its docstring).
 from __future__ import annotations
 
 import hashlib
+import os
 import uuid
 
 import httpx
 import pytest
 
 
-BASE_URL = "http://localhost:8000"
+# Honor WIKI_TEST_BASE_URL (used by the coverage-instrumented run on :8099);
+# fall back to the live dev backend on :8000. Previously hardcoded to :8000,
+# which silently bypassed the instrumented server during coverage measurement.
+BASE_URL = os.environ.get("WIKI_TEST_BASE_URL", "http://localhost:8000")
 
 
 def _email() -> str:
@@ -193,6 +197,23 @@ def test_max_body_size_enforced():
             data={"name": "Too big"},
         )
         assert r.status_code == 413, r.text
+
+
+# ── 6b: bad MIME (not html/markdown/plain) → 415 [FR-ART-001] ──────────
+
+
+def test_FR_ART_001_bad_mime_415():
+    """FR-ART-001 — a single-file upload whose content type is not one of
+    {text/html, text/markdown, text/plain} is rejected with 415, BEFORE the
+    body is stored. (test_artifacts.py already covers the 413/403 branches of
+    FR-ART-001; this fills the unsupported-type branch.)"""
+    with _client(_email()) as c:
+        r = c.post(
+            "/api/artifacts",
+            files={"file": ("app.js", b"alert(1)", "application/javascript")},
+            data={"name": "JS not allowed"},
+        )
+        assert r.status_code == 415, r.text
 
 
 # ── 7: public visibility is gated by ARTIFACTS_ALLOW_PUBLIC ─────────────
@@ -402,3 +423,105 @@ def test_bundle_publish_and_serve():
         # /raw is meaningless for a bundle; a missing member is a generic 404.
         assert c.get(f"/a/{sid}/raw").status_code == 404
         assert c.get(f"/a/{sid}/nope.js").status_code == 404
+
+
+# ── FR-ART-007: private metadata is owner/admin-only (QA-found leak, fixed) ──
+
+def test_FR_ART_007_private_metadata_owner_admin_only():
+    """A private artifact's METADATA (GET /api/artifacts/{sid}) must be
+    owner/admin-only — a different signed-in user gets the generic 404, not a
+    leak of the name/owner/existence (matches the viewer route). `wiki`
+    artifacts stay readable. Regression for a QA-found info-disclosure."""
+    a_email = _email()
+    with _client(a_email) as a:
+        psid = a.post("/api/artifacts", files={"file": ("p.html", b"<h1>s</h1>", "text/html")},
+                      data={"visibility": "private"}).json()["short_id"]
+        wsid = a.post("/api/artifacts", files={"file": ("w.html", b"<h1>w</h1>", "text/html")},
+                      data={"visibility": "wiki"}).json()["short_id"]
+        assert a.get(f"/api/artifacts/{psid}").status_code == 200  # owner sees own private
+
+    with _client(_email()) as b:  # a different authenticated user
+        assert b.get(f"/api/artifacts/{psid}").status_code == 404, "private metadata leaked to non-owner"
+        assert b.get(f"/api/artifacts/{wsid}").status_code == 200, "wiki metadata must stay readable"
+
+    with httpx.Client(base_url=BASE_URL, headers={"X-User-Email": "admin@example.com", "X-User-Role": "admin"},
+                      follow_redirects=False, timeout=10.0) as adm:
+        assert adm.get(f"/api/artifacts/{psid}").status_code == 200, "admin should read any artifact's metadata"
+
+
+def test_FR_ART_005_viewer_generic_404_and_login_redirect():
+    """FR-ART-005 (SEC): a missing artifact viewer → generic 404 (existence not
+    leaked); an UNauthenticated request for a non-public artifact → 302 to
+    /login?next=/a/<sid> (no body leak)."""
+    with _client(_email()) as c:
+        assert c.get("/a/nonexistent404x").status_code == 404
+        sid = c.post("/api/artifacts", files={"file": ("p.html", b"<h1>p</h1>", "text/html")},
+                     data={"visibility": "private"}).json()["short_id"]
+    with _client(None) as anon:  # no stub identity → unauthenticated
+        r = anon.get(f"/a/{sid}")
+        assert r.status_code == 302, r.text
+        assert f"/login?next=/a/{sid}" in (r.headers.get("location") or "")
+
+
+def test_FR_ART_006_viewer_security_headers_and_iframe_sandbox():
+    """FR-ART-006 (SEC): the HTML viewer shell sets X-Frame-Options SAMEORIGIN,
+    Referrer-Policy same-origin, Cache-Control no-store, and sandboxes the
+    artifact iframe with EXACTLY 'allow-scripts allow-popups allow-forms' —
+    crucially NOT allow-same-origin (which would let the artifact escape)."""
+    with _client(_email()) as c:
+        sid = c.post("/api/artifacts", files={"file": ("h.html", b"<h1>hi</h1>", "text/html")},
+                     data={"visibility": "wiki"}).json()["short_id"]
+        shell = c.get(f"/a/{sid}")
+        assert shell.status_code == 200, shell.text
+        assert shell.headers.get("x-frame-options") == "SAMEORIGIN"
+        assert shell.headers.get("referrer-policy") == "same-origin"
+        assert "no-store" in (shell.headers.get("cache-control") or "")
+        assert 'sandbox="allow-scripts allow-popups allow-forms"' in shell.text
+        assert "allow-same-origin" not in shell.text
+
+
+def test_FR_ART_002_versions_patch_delete():
+    """FR-ART-002: add-version + patch are owner/admin-only; a bad visibility →
+    400; a missing artifact → 404; delete soft-deletes (the viewer then 404s)."""
+    with _client(_email()) as a, _client(_email()) as b:
+        sid = a.post("/api/artifacts", files={"file": ("v.html", b"<h1>v1</h1>", "text/html")},
+                     data={"visibility": "wiki"}).json()["short_id"]
+        assert a.post(f"/api/artifacts/{sid}/versions",
+                      files={"file": ("v2.html", b"<h1>v2</h1>", "text/html")}).status_code == 201
+        assert b.post(f"/api/artifacts/{sid}/versions",
+                      files={"file": ("x.html", b"x", "text/html")}).status_code == 403
+        assert a.post("/api/artifacts/nope404/versions",
+                      files={"file": ("x.html", b"x", "text/html")}).status_code == 404
+        assert a.patch(f"/api/artifacts/{sid}", json={"visibility": "bogus"}).status_code == 400
+        assert b.patch(f"/api/artifacts/{sid}", json={"name": "hijack"}).status_code == 403
+        assert a.delete(f"/api/artifacts/{sid}").status_code == 204
+        assert a.get(f"/a/{sid}").status_code == 404  # soft-deleted → generic 404
+
+
+def test_FR_ART_003_access_log_owner_only():
+    """FR-ART-003: the access log is owner-readable; a non-owner gets 403."""
+    with _client(_email()) as a, _client(_email()) as b:
+        sid = a.post("/api/artifacts", files={"file": ("h.html", b"<h1>h</h1>", "text/html")},
+                     data={"visibility": "wiki"}).json()["short_id"]
+        assert a.get(f"/api/artifacts/{sid}/access-log").status_code == 200
+        assert b.get(f"/api/artifacts/{sid}/access-log").status_code == 403
+
+
+def test_FR_ART_004_bundle_serves_and_is_traversal_safe():
+    """FR-ART-004: a zipped bundle (index.html) serves its members at /a/<sid>/…
+    and is path-traversal-safe (only exact archive members; `../` → 404)."""
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("index.html", b"<h1>bundle</h1>")
+        z.writestr("style.css", b"body{}")
+    with _client(_email()) as a:
+        r = a.post("/api/artifacts/bundle",
+                   files={"file": ("b.zip", buf.getvalue(), "application/zip")}, data={"name": "B"})
+        assert r.status_code == 201, r.text
+        bid = r.json()["short_id"]
+        assert a.get(f"/a/{bid}/").status_code == 200
+        assert a.get(f"/a/{bid}/style.css").status_code == 200
+        assert a.get(f"/a/{bid}/../../etc/passwd").status_code == 404  # traversal blocked
+        assert a.get(f"/a/{bid}/nope.js").status_code == 404

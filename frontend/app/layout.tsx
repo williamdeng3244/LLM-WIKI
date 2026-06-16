@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import VideoBackground from '@/components/VideoBackground';
+import BackgroundLayer from '@/components/BackgroundLayer';
 import SWRProvider from '@/components/SWRProvider';
 import './globals.css';
 
@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               "try{var d=document.documentElement;d.setAttribute('data-theme-id',localStorage.getItem('wiki:theme-id')||'aurora');var m=localStorage.getItem('wiki:theme');if(m==='light'||m==='dark')d.setAttribute('data-theme',m);}catch(e){}",
           }}
         />
-        <VideoBackground />
+        <BackgroundLayer />
         <SWRProvider>{children}</SWRProvider>
       </body>
     </html>

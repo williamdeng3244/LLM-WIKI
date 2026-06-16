@@ -18,6 +18,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import hash_token
@@ -244,7 +245,15 @@ async def _tool_search(user: User, args: dict, session: AsyncSession) -> dict:
     q = (args.get("query") or "").strip()
     if not q:
         raise ValueError("query required")
-    limit = int(args.get("limit") or 10)
+    # The MCP layer does NOT enforce the tool inputSchema, so a negative / huge /
+    # non-numeric limit otherwise reaches the SQL LIMIT and crashes — a negative
+    # LIMIT even aborts the whole transaction. Coerce + clamp to the advertised
+    # 1–50, mirroring the artifact-list tool's guard below.
+    try:
+        limit = int(args.get("limit") or 10)
+    except (TypeError, ValueError):
+        limit = 10
+    limit = max(1, min(limit, 50))
     rows = await retrieve(session, q, k=limit)
     out = [{
         "page_path": r.page_path, "page_title": r.page_title,
@@ -589,6 +598,20 @@ async def mcp_endpoint(
             except (ValueError, PermissionError) as e:
                 return _rpc_ok(req_id, {
                     "content": [{"type": "text", "text": f"Error: {e}"}],
+                    "isError": True,
+                })
+            except DBAPIError as e:
+                # Malformed tool input reached the DB — a null byte (0x00), an
+                # out-of-range number, etc. (SQLSTATE class 22). That aborts the
+                # transaction, so roll it back, and return a clean tool error
+                # instead of a -32603. (HTTP requests get the same treatment via
+                # the global handler in main.py; MCP has its own dispatch.)
+                sqlstate = getattr(getattr(e, "orig", None), "sqlstate", "") or ""
+                if not sqlstate.startswith("22"):
+                    raise
+                await session.rollback()
+                return _rpc_ok(req_id, {
+                    "content": [{"type": "text", "text": "Error: invalid input."}],
                     "isError": True,
                 })
         if method in ("resources/list", "prompts/list"):

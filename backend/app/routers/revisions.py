@@ -5,12 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import current_user
 from app.core.db import get_session
-from app.core.permissions import can_review
+from app.core.permissions import can_propose, can_review
 from app.models import (
     CategoryEditor, Page, Revision, RevisionProvenance, RevisionStatus, Role, User,
 )
 from app.schemas import RevisionOut, RevisionProvenanceOut, ReviewBody
-from app.services.workflow import review, submit_for_review
+from app.services.workflow import create_draft, review, submit_for_review
 
 router = APIRouter()
 
@@ -99,6 +99,44 @@ async def submit(
     if not rev:
         raise HTTPException(404, "Not found")
     return await submit_for_review(session, rev, user)
+
+
+@router.post("/{revision_id}/restore", response_model=RevisionOut)
+async def restore(
+    revision_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),
+):
+    """Restore an older published version (GAP-002 / GAP-004 / FR-REV-011).
+
+    Recreates the chosen revision's content as a fresh draft and runs it
+    through the normal workflow, so it honours the page's trust dial exactly
+    like any other edit: an open page republishes immediately, a stable or
+    locked page enters the review queue. The returned revision's `status`
+    tells the caller which happened (`accepted` = live, `proposed` = queued).
+
+    Only a *published* version can be restored — restoring a half-finished
+    draft, an in-flight proposal, or a rejected edit makes no sense and is a
+    400. Readers can't restore (same bar as proposing any change); a
+    contributor restoring a stable page just lands in review, which is the
+    point of option A.
+    """
+    rev = await session.get(Revision, revision_id)
+    if not rev:
+        raise HTTPException(404, "Not found")
+    if rev.status not in (RevisionStatus.accepted, RevisionStatus.superseded):
+        raise HTTPException(400, "Only a published version can be restored")
+    if not await can_propose(user):
+        raise HTTPException(403, "Readers cannot restore versions")
+    page = await session.get(Page, rev.page_id)
+    if not page:
+        raise HTTPException(404, "Page not found")
+    draft = await create_draft(
+        session, page=page, author=user,
+        title=rev.title, body=rev.body, tags=list(rev.tags or []),
+        rationale=f"Restore of rev #{rev.id}",
+    )
+    return await submit_for_review(session, draft, user)
 
 
 @router.post("/{revision_id}/review", response_model=RevisionOut)

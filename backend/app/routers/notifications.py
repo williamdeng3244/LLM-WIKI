@@ -1,6 +1,6 @@
 """User notifications."""
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import current_user
@@ -24,6 +24,26 @@ async def list_notifications(
         stmt.order_by(Notification.created_at.desc()).limit(100)
     )).scalars().all()
     return rows
+
+
+@router.get("/unread-count")
+async def unread_count(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(current_user),
+):
+    """Exact count of the caller's unread notifications (GAP-005).
+
+    The list endpoint caps at 100 rows, so deriving the badge count from it
+    silently undercounts past 100. This returns the true count straight from
+    the DB. Scoped to the caller; never leaks other users' counts.
+    """
+    n = (await session.execute(
+        select(func.count()).select_from(Notification).where(
+            Notification.user_id == user.id,
+            Notification.is_read.is_(False),
+        )
+    )).scalar_one()
+    return {"unread": int(n)}
 
 
 @router.post("/{notif_id}/read")

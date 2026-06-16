@@ -335,6 +335,12 @@ export const api = {
   getRevision: (id: number) => call<Revision>(`/revisions/${id}`),
   submitRevision: (id: number) =>
     call<Revision>(`/revisions/${id}/submit`, { method: 'POST' }),
+  // Restore a published version: recreates it as a draft and submits it
+  // through the normal workflow. The returned revision's `status` says what
+  // happened — `accepted` (open page, republished now) or `proposed` (stable
+  // page, sent to review).
+  restoreRevision: (id: number) =>
+    call<Revision>(`/revisions/${id}/restore`, { method: 'POST' }),
   reviewRevision: (
     id: number,
     decision: 'accept' | 'reject' | 'request_changes',
@@ -421,6 +427,9 @@ export const api = {
     call(`/notifications/${id}/read`, { method: 'POST' }),
   markAllRead: () =>
     call('/notifications/read-all', { method: 'POST' }),
+  // Exact unread count (GAP-005) — not capped at the 100-row list limit.
+  unreadCount: () =>
+    call<{ unread: number }>('/notifications/unread-count'),
 
   // Schema layer — agents.md (Karpathy's "idea file")
   getIdeaFile: () => call<{

@@ -1,6 +1,7 @@
 """Auth: whoami, login (static admin + OIDC), tokens, logout."""
 import logging
 import secrets
+from typing import Any
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
@@ -32,7 +33,7 @@ async def whoami(user: User = Depends(current_user)):
 
 @router.put("/me/preferences", response_model=UserOut)
 async def update_my_preferences(
-    body: dict = Body(...),
+    body: Any = Body(...),  # accept any JSON so the isinstance 400 guard runs (FR-AUTH-010)
     session: AsyncSession = Depends(get_session),
     user: User = Depends(current_user),
 ):
@@ -81,8 +82,11 @@ async def local_admin_login(
     submitted_email = body.email.strip().lower()
     expected_email = settings.admin_email.strip().lower()
     # secrets.compare_digest avoids timing side channels on credential comparison.
-    email_ok = secrets.compare_digest(submitted_email, expected_email)
-    pw_ok = secrets.compare_digest(body.password, settings.admin_password)
+    # Compare on BYTES, not str: compare_digest raises TypeError on non-ASCII
+    # str input, which would surface as a 500 — a non-ASCII password/email must
+    # simply compare unequal and yield a clean 401.
+    email_ok = secrets.compare_digest(submitted_email.encode("utf-8"), expected_email.encode("utf-8"))
+    pw_ok = secrets.compare_digest(body.password.encode("utf-8"), settings.admin_password.encode("utf-8"))
     if not (email_ok and pw_ok):
         raise HTTPException(401, "Invalid credentials")
     # Upsert the admin user. ensure_default_admin already runs at startup
@@ -249,9 +253,11 @@ async def create_token(
     session.add(token)
     await session.commit()
     await session.refresh(token)
-    out = TokenCreated.model_validate(token).model_dump()
-    out["raw_token"] = raw
-    return out
+    # Attach raw token as a transient (non-column) attr so from_attributes picks
+    # it up; validating the bare ORM row 500'd because TokenCreated requires
+    # raw_token (FR-AUTH-015).
+    token.raw_token = raw
+    return TokenCreated.model_validate(token)
 
 
 @router.delete("/tokens/{token_id}")

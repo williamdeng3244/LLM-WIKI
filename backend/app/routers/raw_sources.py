@@ -25,7 +25,7 @@ from app.schemas import (
     IngestRunOut, PendingDraftOut, RawSourceFromUrl, RawSourceOut, RawSourceUpdate,
 )
 from app.services.ingest import (
-    list_pending_drafts_for_source, supersede_pending_runs,
+    is_supported_ingest_mime, list_pending_drafts_for_source, supersede_pending_runs,
 )
 from app.services.url_fetcher import fetch_url
 from sqlalchemy import select as sa_select  # alias to avoid shadowing imports below
@@ -106,6 +106,18 @@ async def upload_source(
     if not client_mime or client_mime == "application/octet-stream":
         guessed, _ = mimetypes.guess_type(file.filename or disk_name)
         client_mime = guessed or "application/octet-stream"
+
+    # Reject unsupported types up front (GAP-011) instead of storing them and
+    # only failing later at ingest. Mirrors the URL-import allow-list and the
+    # ingest dispatcher's supported set exactly. The bytes are already on disk
+    # (streamed above for the size cap), so clean them up before erroring.
+    if not is_supported_ingest_mime(client_mime):
+        target.unlink(missing_ok=True)
+        raise HTTPException(
+            415,
+            f"Unsupported file type {client_mime!r}. Accepted: text, markdown, "
+            f"JSON/YAML, PDF, Office docs (.docx/.pptx/.xlsx), and images.",
+        )
 
     rs = RawSource(
         title=(title.strip() or (file.filename or disk_name)),

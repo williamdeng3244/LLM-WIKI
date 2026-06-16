@@ -51,7 +51,3 @@ async def can_review(session: AsyncSession, user: User, page: Page) -> bool:
 
 async def can_propose(user: User) -> bool:
     return user.role in (Role.contributor, Role.editor, Role.admin)
-
-
-async def can_lock(user: User) -> bool:
-    return user.role == Role.admin

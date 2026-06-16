@@ -200,6 +200,7 @@ export default function ProposeDialog({
                   <div className="col-span-4">
                     <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.path')}</label>
                     <input
+                      data-testid="propose-path"
                       className="form-input mt-0.5 h-8 text-[0.8929rem]"
                       value={newPath}
                       onChange={(e) => setNewPath(e.target.value)}
@@ -234,6 +235,7 @@ export default function ProposeDialog({
               <div className={mode === 'new' ? 'col-span-3' : 'col-span-8'}>
                 <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.title')}</label>
                 <input
+                  data-testid="propose-title"
                   className="form-input mt-0.5 h-8 text-[0.8929rem]"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -258,6 +260,7 @@ export default function ProposeDialog({
             <div className="flex-1 min-h-0 flex flex-col">
               {view === 'edit' ? (
                 <textarea
+                  data-testid="propose-body"
                   className="form-input form-textarea flex-1 rounded-none border-0 px-6 py-4 text-[0.9286rem] leading-[1.6] focus:shadow-none"
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
@@ -285,6 +288,7 @@ export default function ProposeDialog({
               />
               <button className="btn" onClick={onClose}>{t('propose.cancel')}</button>
               <button
+                data-testid="propose-submit"
                 className="btn btn-primary"
                 onClick={submit}
                 disabled={

@@ -38,7 +38,7 @@ from app.core.config import settings
 from app.core.db import get_session
 from app.models import (
     ALLOWED_MIME_TYPES, Artifact, ArtifactAccessLog, ArtifactVersion,
-    Page, Revision, Role, User, VALID_VISIBILITIES, VISIBILITY_WIKI,
+    Page, Revision, Role, User, VALID_VISIBILITIES, VISIBILITY_PRIVATE, VISIBILITY_WIKI,
     VISIBILITY_PUBLIC,
 )
 from app.schemas import (
@@ -460,8 +460,11 @@ async def get_artifact(
     art = await _resolve_artifact(session, short_id)
     if art is None:
         raise HTTPException(404, "Artifact not found.")
-    # Metadata is visible to any authenticated user in the same instance
-    # (matches `visibility=wiki` semantics for the viewer route).
+    # A private artifact's metadata is owner/admin-only — return the SAME generic
+    # 404 as the viewer for anyone else, so its name/owner/existence isn't leaked
+    # (FR-ART-007). wiki/public metadata stays visible to any authenticated user.
+    if art.visibility == VISIBILITY_PRIVATE and not _can_modify(art, user):
+        raise HTTPException(404, "Artifact not found.")
     return await _to_meta(session, art)
 
 

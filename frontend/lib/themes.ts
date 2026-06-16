@@ -9,8 +9,9 @@
 export type ThemeMode = 'light' | 'dark';
 
 export type ThemeBg =
-  | { type: 'video'; src: string }
-  | { type: 'image'; src: string };
+  | { type: 'video'; src: string; rate?: number }   // rate < 1 slows playback → longer loop
+  | { type: 'image'; src: string }
+  | { type: 'css' };   // minimal CSS-painted backdrop (no asset); see globals.css
 
 export type ThemeDef = {
   id: string;
@@ -36,6 +37,58 @@ export const THEMES: ThemeDef[] = [
     background: {
       light: { type: 'video', src: '/bg-light.mp4' },
       dark: { type: 'video', src: '/bg.mp4' },
+    },
+  },
+  {
+    id: 'sakura',
+    name: 'Sakura',
+    description: 'Cherry-blossom zen garden — bright day, lantern-lit night.',
+    preview: {
+      light: { bg: '#f6ece8', accent: '#c85d80' },
+      dark: { bg: '#0b0c1a', accent: '#e88aa6' },
+    },
+    background: {
+      light: { type: 'video', src: '/themes/sakura/light.mp4' },
+      dark: { type: 'video', src: '/themes/sakura/dark.mp4' },
+    },
+  },
+  {
+    id: 'slate',
+    name: 'Slate',
+    description: 'Minimal — flat backdrop with a faint dot grid and soft glow.',
+    preview: {
+      light: { bg: '#f6f7f9', accent: '#4f46e5' },
+      dark: { bg: '#0e1014', accent: '#818cf8' },
+    },
+    background: {
+      light: { type: 'css' },
+      dark: { type: 'css' },
+    },
+  },
+  {
+    id: 'synthwave',
+    name: 'Synthwave',
+    description: 'Rainy cyberpunk neon city — Blade Runner night, misty chrome dawn.',
+    preview: {
+      light: { bg: '#f4f2f8', accent: '#7c3aed' },
+      dark: { bg: '#0c0a14', accent: '#a855f7' },
+    },
+    background: {
+      light: { type: 'video', src: '/themes/synthwave/light.mp4?v=2', rate: 0.6 },
+      dark: { type: 'video', src: '/themes/synthwave/dark.mp4?v=2', rate: 0.6 },
+    },
+  },
+  {
+    id: 'rainbow',
+    name: 'Rainbow',
+    description: 'Rainbow titles, headings & notes — Dracula dark, Alucard light.',
+    preview: {
+      light: { bg: '#fffbeb', accent: '#8b2fd6' },
+      dark: { bg: '#282a36', accent: '#bd93f9' },
+    },
+    background: {
+      light: { type: 'image', src: '/themes/rainbow/light.png' },
+      dark: { type: 'image', src: '/themes/rainbow/dark.png' },
     },
   },
 ];

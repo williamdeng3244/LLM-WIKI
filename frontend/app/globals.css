@@ -20,6 +20,10 @@
   --text-faint: #6c7388;
   --accent: #7c9cff;
   --accent-glow: #a78bfa;
+  /* RGB channels backing the Tailwind accent/glow tokens — themed per
+     data-theme-id. Aurora values equal #7c9cff / #a78bfa exactly. */
+  --accent-rgb: 124 156 255;
+  --glow-rgb: 167 139 250;
 }
 
 html, body { height: 100%; }
@@ -352,12 +356,290 @@ select option { background: var(--bg-panel); color: var(--text); }
 [data-theme="light"] .theme-scrim { background-color: rgba(255, 255, 255, 0.28); }
 [data-theme="light"] .reading-wash { background-color: rgba(255, 255, 255, 0.72); }
 
+/* ── Sakura theme ───────────────────────────────────────────────────────
+   Cherry-blossom zen garden. Recolors the accent system, base background,
+   body glow, and scrim; the translucent panels pick up each background's tint
+   on their own. Aurora is untouched — these selectors are higher-specificity. */
+
+/* Sakura — DARK (lantern-lit night): deep twilight base, sakura-pink accent,
+   warm rose-gold glow echoing the lanterns. */
+[data-theme-id="sakura"][data-theme="dark"] {
+  --bg: #0b0c1a;
+  --accent: #e88aa6;
+  --accent-glow: #e8a07a;
+  --accent-rgb: 232 138 166;
+  --glow-rgb: 232 160 122;
+}
+[data-theme-id="sakura"][data-theme="dark"] body {
+  background-image:
+    radial-gradient(ellipse 1200px 800px at 78% -10%, rgba(232, 160, 122, 0.10), transparent 60%),
+    radial-gradient(ellipse 900px 700px at 8% 110%, rgba(232, 138, 166, 0.08), transparent 60%);
+}
+[data-theme-id="sakura"][data-theme="dark"] .theme-scrim { background-color: rgba(11, 12, 26, 0.42); }
+
+/* Sakura — LIGHT (bright zen day): warm cream base, rose accent. Inherits the
+   light-mode white panels, which warm up over the pink video. */
+[data-theme-id="sakura"][data-theme="light"] {
+  --bg: #f6ece8;
+  --accent: #c85d80;
+  --accent-glow: #dd8f9e;
+  --accent-rgb: 200 93 128;
+  --glow-rgb: 221 143 158;
+}
+[data-theme-id="sakura"][data-theme="light"] .theme-scrim { background-color: rgba(255, 248, 246, 0.26); }
+
+/* Sakura: tint the file-tree row labels with the accent (icons keep their own
+   muted color, so only the letters turn pink). Both modes. */
+[data-theme-id="sakura"] .file-tree button { color: var(--accent); }
+
+/* ── Slate theme (minimal) ──────────────────────────────────────────────
+   No video — a flat backdrop with a faint dot grid + a soft accent glow,
+   painted on the `.theme-css-bg` layer ThemeBackground renders. Clean indigo
+   accent. Aurora/Sakura unaffected. */
+[data-theme-id="slate"][data-theme="dark"] {
+  --bg: #0e1014;
+  --accent: #818cf8;
+  --accent-glow: #a5b4fc;
+  --accent-rgb: 129 140 248;
+  --glow-rgb: 165 180 252;
+}
+[data-theme-id="slate"][data-theme="dark"] .theme-css-bg {
+  background-color: #0e1014;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0),
+    radial-gradient(ellipse 820px 520px at 86% -6%, rgba(129, 140, 248, 0.12), transparent 60%),
+    radial-gradient(ellipse 720px 520px at 8% 106%, rgba(129, 140, 248, 0.06), transparent 60%);
+  background-size: 22px 22px, 100% 100%, 100% 100%;
+}
+
+[data-theme-id="slate"][data-theme="light"] {
+  --bg: #f6f7f9;
+  --accent: #4f46e5;
+  --accent-glow: #6366f1;
+  --accent-rgb: 79 70 229;
+  --glow-rgb: 99 102 241;
+}
+[data-theme-id="slate"][data-theme="light"] .theme-css-bg {
+  background-color: #f6f7f9;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.055) 1px, transparent 0),
+    radial-gradient(ellipse 820px 520px at 86% -6%, rgba(79, 70, 229, 0.07), transparent 60%),
+    radial-gradient(ellipse 720px 520px at 8% 106%, rgba(79, 70, 229, 0.04), transparent 60%);
+  background-size: 22px 22px, 100% 100%, 100% 100%;
+}
+
+/* ── Synthwave theme ────────────────────────────────────────────────────
+   Rainy cyberpunk neon city (video). Recolors the accent system, base
+   background, body glow, and scrim; translucent panels pick up the video's
+   tint on their own. Aurora/Sakura/Slate untouched — higher specificity. */
+
+/* Synthwave — DARK (Blade Runner night): near-black violet base, electric
+   violet accent, hot-pink glow echoing the neon signs. */
+[data-theme-id="synthwave"][data-theme="dark"] {
+  --bg: #0c0a14;
+  --accent: #a855f7;
+  --accent-glow: #f472b6;
+  --accent-rgb: 168 85 247;
+  --glow-rgb: 244 114 182;
+}
+[data-theme-id="synthwave"][data-theme="dark"] body {
+  background-image:
+    radial-gradient(ellipse 1200px 800px at 88% -10%, rgba(244, 114, 182, 0.10), transparent 60%),
+    radial-gradient(ellipse 900px 700px at 6% 110%, rgba(168, 85, 247, 0.10), transparent 60%);
+}
+[data-theme-id="synthwave"][data-theme="dark"] .theme-scrim { background-color: rgba(12, 10, 20, 0.42); }
+
+/* Synthwave — LIGHT (misty chrome dawn): cool off-white base, deeper violet
+   accent so it stays legible on the pale background. */
+[data-theme-id="synthwave"][data-theme="light"] {
+  --bg: #f4f2f8;
+  --accent: #7c3aed;
+  --accent-glow: #a855f7;
+  --accent-rgb: 124 58 237;
+  --glow-rgb: 168 85 247;
+}
+[data-theme-id="synthwave"][data-theme="light"] .theme-scrim { background-color: rgba(244, 242, 248, 0.26); }
+
+/* Synthwave: tint the file-tree row labels with the violet accent. Both modes. */
+[data-theme-id="synthwave"] .file-tree button { color: var(--accent); }
+
+/* Synthwave LIGHT: make the side panels (file tree) more translucent so the
+   misty city shows through. Higher specificity beats the global light rule. */
+[data-theme-id="synthwave"][data-theme="light"] .bg-panel\/60 { background-color: rgba(244, 242, 248, 0.45); }
+
+/* ── Rainbow theme ──────────────────────────────────────────────────────
+   Dark = Dracula (#282a36), light = Alucard (#fffbeb); minimal texture image
+   backgrounds. Recolors accent + scrim, and paints the note TITLE, RAINBOW
+   markdown headings, colored bold / links / inline-code (.prose-body), and a
+   per-note rainbow file tree (via [data-rainbow], index set in FileTree.tsx).
+   Scoped per mode; code blocks (pre code) left alone. Light uses vibrant jewel
+   tones legible on cream. Other themes untouched. */
+
+/* Rainbow — DARK (Dracula palette) */
+[data-theme-id="rainbow"][data-theme="dark"] {
+  --bg: #282a36;
+  --accent: #bd93f9;
+  --accent-glow: #ff79c6;
+  --accent-rgb: 189 147 249;
+  --glow-rgb: 255 121 198;
+}
+[data-theme-id="rainbow"][data-theme="dark"] .theme-scrim { background-color: rgba(40, 42, 54, 0.46); }
+/* Note title + every heading: left→right fading gradient, each a different fade.
+   Title gets a fuller rainbow sweep. */
+[data-theme-id="rainbow"][data-theme="dark"] h1.font-serif { background-image: linear-gradient(90deg, #ff79c6, #bd93f9, #8be9fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body h1 { background-image: linear-gradient(90deg, #ff79c6, #bd93f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body h2 { background-image: linear-gradient(90deg, #bd93f9, #ff5555); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body h3 { background-image: linear-gradient(90deg, #ff5555, #ffb86c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body h4 { background-image: linear-gradient(90deg, #ffb86c, #50fa7b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body h5 { background-image: linear-gradient(90deg, #50fa7b, #8be9fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body h6 { background-image: linear-gradient(90deg, #8be9fd, #f1fa8c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body strong { color: #50fa7b; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body a { color: #8be9fd; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body a:hover { color: #a5f0ff; }
+[data-theme-id="rainbow"][data-theme="dark"] .prose-body :not(pre) > code {
+  color: #bd93f9;
+  background: rgba(189, 147, 249, 0.10);
+  border-color: rgba(189, 147, 249, 0.22);
+}
+/* per-note + per-folder rainbow file tree — a left→right gradient painted on
+   the row's name text (the .truncate span), so each row fades between two
+   colors. Applied to the span (not the button) to keep hover/selected bg. */
+[data-theme-id="rainbow"][data-theme="dark"] .file-tree button[data-rainbow="0"] .truncate { background-image: linear-gradient(90deg, #ff79c6, #bd93f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .file-tree button[data-rainbow="1"] .truncate { background-image: linear-gradient(90deg, #bd93f9, #ff5555); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .file-tree button[data-rainbow="2"] .truncate { background-image: linear-gradient(90deg, #ff5555, #ffb86c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .file-tree button[data-rainbow="3"] .truncate { background-image: linear-gradient(90deg, #ffb86c, #50fa7b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .file-tree button[data-rainbow="4"] .truncate { background-image: linear-gradient(90deg, #50fa7b, #8be9fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .file-tree button[data-rainbow="5"] .truncate { background-image: linear-gradient(90deg, #8be9fd, #f1fa8c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .file-tree button[data-rainbow="6"] .truncate { background-image: linear-gradient(90deg, #f1fa8c, #ff79c6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Rainbow — LIGHT (Alucard base, vibrant jewel tones legible on cream) */
+[data-theme-id="rainbow"][data-theme="light"] {
+  --bg: #fffbeb;
+  --accent: #8b2fd6;
+  --accent-glow: #ec0e7b;
+  --accent-rgb: 139 47 214;
+  --glow-rgb: 236 14 123;
+}
+[data-theme-id="rainbow"][data-theme="light"] .theme-scrim { background-color: rgba(255, 251, 235, 0.30); }
+/* the slim note toolbar uses bg-paper/55 (dark base, no light override) — lift
+   it to cream so the breadcrumb + Suggest/Flag/Lock buttons are readable. */
+[data-theme-id="rainbow"][data-theme="light"] .bg-paper\/55 { background-color: rgba(255, 251, 235, 0.72); }
+[data-theme-id="rainbow"][data-theme="light"] h1.font-serif { background-image: linear-gradient(90deg, #ec0e7b, #8b2fd6, #0a9fc0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body h1 { background-image: linear-gradient(90deg, #ec0e7b, #8b2fd6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body h2 { background-image: linear-gradient(90deg, #8b2fd6, #e11d2e); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body h3 { background-image: linear-gradient(90deg, #e11d2e, #f97316); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body h4 { background-image: linear-gradient(90deg, #f97316, #16a34a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body h5 { background-image: linear-gradient(90deg, #16a34a, #0a9fc0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body h6 { background-image: linear-gradient(90deg, #0a9fc0, #c79500); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body strong { color: #16a34a; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body a { color: #0a9fc0; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body a:hover { color: #066a85; }
+[data-theme-id="rainbow"][data-theme="light"] .prose-body :not(pre) > code {
+  color: #8b2fd6;
+  background: rgba(139, 47, 214, 0.09);
+  border-color: rgba(139, 47, 214, 0.22);
+}
+[data-theme-id="rainbow"][data-theme="light"] .file-tree button[data-rainbow="0"] .truncate { background-image: linear-gradient(90deg, #ec0e7b, #8b2fd6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .file-tree button[data-rainbow="1"] .truncate { background-image: linear-gradient(90deg, #8b2fd6, #e11d2e); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .file-tree button[data-rainbow="2"] .truncate { background-image: linear-gradient(90deg, #e11d2e, #f97316); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .file-tree button[data-rainbow="3"] .truncate { background-image: linear-gradient(90deg, #f97316, #16a34a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .file-tree button[data-rainbow="4"] .truncate { background-image: linear-gradient(90deg, #16a34a, #0a9fc0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .file-tree button[data-rainbow="5"] .truncate { background-image: linear-gradient(90deg, #0a9fc0, #c79500); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .file-tree button[data-rainbow="6"] .truncate { background-image: linear-gradient(90deg, #c79500, #ec0e7b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ── Rainbow: chrome buttons (topbar actions, New-tab actions, bottom badge +
+   gear). Each gets a different rainbow color, cycling a mid-tone palette that
+   stays legible on BOTH the dark and light chrome, so no per-mode split. The
+   !important beats the .btn utility color; color also tints the lucide icons
+   (currentColor). Scoped to the Rainbow theme only. */
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+1),
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+1) button { color: #e0218a !important; }
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+2),
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+2) button { color: #9333ea !important; }
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+3),
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+3) button { color: #e23b3b !important; }
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+4),
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+4) button { color: #e8770a !important; }
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+5),
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+5) button { color: #1fa83f !important; }
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+6),
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+6) button { color: #0e9fc0 !important; }
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+7),
+[data-theme-id="rainbow"] .topbar-actions > *:nth-child(7n+7) button { color: #c79500 !important; }
+
+/* New-tab page: Create note / Go to file / Close */
+[data-theme-id="rainbow"] .nt-actions > button:nth-child(1) { color: #e0218a; }
+[data-theme-id="rainbow"] .nt-actions > button:nth-child(2) { color: #9333ea; }
+[data-theme-id="rainbow"] .nt-actions > button:nth-child(3) { color: #1fa83f; }
+
+/* Bottom-left: version badge (child 1) + settings gear (child 2) */
+[data-theme-id="rainbow"] .corner-actions > *:nth-child(1),
+[data-theme-id="rainbow"] .corner-actions > *:nth-child(1) button { color: #e0218a !important; }
+[data-theme-id="rainbow"] .corner-actions > *:nth-child(2),
+[data-theme-id="rainbow"] .corner-actions > *:nth-child(2) button { color: #0e9fc0 !important; }
+
+/* Note toolbar: Suggest edit / Flag / Lock / More */
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+1),
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+1) button { color: #e0218a !important; }
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+2),
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+2) button { color: #9333ea !important; }
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+3),
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+3) button { color: #e23b3b !important; }
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+4),
+[data-theme-id="rainbow"] .note-actions > *:nth-child(7n+4) button { color: #1fa83f !important; }
+
+/* Tree toolbar: new note / new folder / sort / collapse / graph */
+[data-theme-id="rainbow"] .tree-actions > button:nth-of-type(7n+1) { color: #e0218a !important; }
+[data-theme-id="rainbow"] .tree-actions > button:nth-of-type(7n+2) { color: #9333ea !important; }
+[data-theme-id="rainbow"] .tree-actions > button:nth-of-type(7n+3) { color: #e23b3b !important; }
+[data-theme-id="rainbow"] .tree-actions > button:nth-of-type(7n+4) { color: #e8770a !important; }
+[data-theme-id="rainbow"] .tree-actions > button:nth-of-type(7n+5) { color: #1fa83f !important; }
+[data-theme-id="rainbow"] .tree-actions > button:nth-of-type(7n+6) { color: #0e9fc0 !important; }
+[data-theme-id="rainbow"] .tree-actions > button:nth-of-type(7n+7) { color: #c79500 !important; }
+
+/* Search box: tint the magnifier icon (direct child only, not result icons) */
+[data-theme-id="rainbow"] .search-box > div > svg { color: #9333ea; }
+
+/* Note tags (#hashtags in the metadata strip): each a different fading
+   gradient. Gradient clips to the text; the chip keeps its border/padding. */
+[data-theme-id="rainbow"][data-theme="dark"] .badge[data-rainbow="0"] { background-image: linear-gradient(90deg, #ff79c6, #bd93f9); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .badge[data-rainbow="1"] { background-image: linear-gradient(90deg, #bd93f9, #ff5555); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .badge[data-rainbow="2"] { background-image: linear-gradient(90deg, #ff5555, #ffb86c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .badge[data-rainbow="3"] { background-image: linear-gradient(90deg, #ffb86c, #50fa7b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .badge[data-rainbow="4"] { background-image: linear-gradient(90deg, #50fa7b, #8be9fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .badge[data-rainbow="5"] { background-image: linear-gradient(90deg, #8be9fd, #f1fa8c); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="dark"] .badge[data-rainbow="6"] { background-image: linear-gradient(90deg, #f1fa8c, #ff79c6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .badge[data-rainbow="0"] { background-image: linear-gradient(90deg, #ec0e7b, #8b2fd6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .badge[data-rainbow="1"] { background-image: linear-gradient(90deg, #8b2fd6, #e11d2e); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .badge[data-rainbow="2"] { background-image: linear-gradient(90deg, #e11d2e, #f97316); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .badge[data-rainbow="3"] { background-image: linear-gradient(90deg, #f97316, #16a34a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .badge[data-rainbow="4"] { background-image: linear-gradient(90deg, #16a34a, #0a9fc0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .badge[data-rainbow="5"] { background-image: linear-gradient(90deg, #0a9fc0, #c79500); -webkit-background-clip: text; background-clip: text; color: transparent; }
+[data-theme-id="rainbow"][data-theme="light"] .badge[data-rainbow="6"] { background-image: linear-gradient(90deg, #c79500, #ec0e7b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Topbar "Suggest" (btn-primary): drop the dominating purple fill — outline
+   only — and give the label a gradient with a solid icon. Beats the topbar
+   cycling rule (later + !important). */
+[data-theme-id="rainbow"] .topbar-actions .btn-primary {
+  background-image: linear-gradient(90deg, #e0218a, #9333ea) !important;
+  background-color: transparent !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  border-color: rgba(147, 51, 234, 0.40) !important;
+}
+[data-theme-id="rainbow"] .topbar-actions .btn-primary:hover {
+  border-color: rgba(147, 51, 234, 0.65) !important;
+}
+[data-theme-id="rainbow"] .topbar-actions .btn-primary svg { color: #9333ea !important; }
+
 /* Chrome surface colors: panel = white card; elev = same as panel but
    slightly more opaque for raised elements. */
 [data-theme="light"] .bg-panel        { background-color: rgba(255, 255, 255, 0.92); }
 [data-theme="light"] .bg-panel\/90    { background-color: rgba(255, 255, 255, 0.90); }
 [data-theme="light"] .bg-panel\/85    { background-color: rgba(255, 255, 255, 0.85); }
 [data-theme="light"] .bg-panel\/80    { background-color: rgba(255, 255, 255, 0.80); }
+[data-theme="light"] .bg-panel\/70    { background-color: rgba(255, 255, 255, 0.70); }
 [data-theme="light"] .bg-panel\/60    { background-color: rgba(255, 255, 255, 0.62); }
 [data-theme="light"] .bg-panel\/55    { background-color: rgba(255, 255, 255, 0.55); }
 [data-theme="light"] .bg-panel\/40    { background-color: rgba(255, 255, 255, 0.45); }

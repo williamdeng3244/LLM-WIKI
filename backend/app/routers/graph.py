@@ -57,6 +57,8 @@ async def graph(
         sp, tp = pages_by_id.get(sid), pages_by_id.get(tid)
         if not sp or not tp:
             continue
+        if sp.path == tp.path:
+            continue  # self-links collapse (FR-GRAPH-002)
         a, b = sorted([sp.path, tp.path])
         if (a, b) in seen:
             continue
