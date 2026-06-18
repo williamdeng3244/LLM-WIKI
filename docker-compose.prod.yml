@@ -14,6 +14,15 @@ services:
     build: !reset null
     image: ghcr.io/williamdeng3244/llm-wiki-backend:${TAG:-latest}
     command: !reset null
+    # Production runs on the EXTERNAL API model — there is no local LLM.
+    # The base compose already defaults LLM_PROVIDER=anthropic /
+    # CHAT_MODEL=claude-sonnet-4-6; reaffirmed here so the prod deploy is
+    # explicit about the model. Set ANTHROPIC_API_KEY in .env. To use a
+    # different *hosted* API, set LLM_PROVIDER=openai + OPENAI_API_KEY + a
+    # hosted OPENAI_BASE_URL — never point it at a local model server.
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      CHAT_MODEL: ${CHAT_MODEL:-claude-sonnet-4-6}
     # `!override` fully replaces the base file's volume list (it does
     # NOT merge), so the artifact storage mount has to be re-listed here
     # too — otherwise prod loses persistence for /a/<short_id> bodies.
@@ -27,6 +36,11 @@ services:
   worker:
     build: !reset null
     image: ghcr.io/williamdeng3244/llm-wiki-backend:${TAG:-latest}
+    # The Celery worker also calls the LLM (ingest / lint tasks) — keep it
+    # on the same external API model as the backend.
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      CHAT_MODEL: ${CHAT_MODEL:-claude-sonnet-4-6}
     volumes: !override
       - ./vault:/vault
       - ./raw:/raw
@@ -47,3 +61,35 @@ services:
   mineru:
     build: !reset null
     image: ghcr.io/williamdeng3244/llm-wiki-mineru:${TAG:-latest}
+
+  # ── PostgreSQL (production tuning + hardening) ─────────────────────────
+  # The base compose defines `db` (pgvector/pgvector:pg16, a persistent
+  # `db_data` volume, and a pg_isready healthcheck). This override tunes it
+  # for the 700–900-staff deployment:
+  #   • max_connections 100 → 200 — under the load test, the 4 uvicorn
+  #     workers + the Celery worker + the SQLAlchemy pools drove ~82 live
+  #     connections, close to Postgres's default 100 cap
+  #     (docs/srs/performance-report.md §6.5).
+  #   • shared_buffers / effective_cache_size / work_mem / maintenance_work_mem
+  #     — modest prod memory settings sized for a ~2–4 GB Postgres allotment;
+  #     raise them to match your DB host's RAM.
+  #   • The host port (5432) is REMOVED — Postgres is reachable only on the
+  #     internal docker network (backend + worker). Re-add a `ports:` mapping
+  #     if a DBA tool on the host must connect directly.
+  # Also set a STRONG POSTGRES_PASSWORD in .env — the base default (`wiki`)
+  # is for local dev only.
+  db:
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1536MB"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+    shm_size: "256mb"
+    ports: !override []
