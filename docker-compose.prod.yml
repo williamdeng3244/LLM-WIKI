@@ -20,9 +20,19 @@ services:
     # explicit about the model. Set ANTHROPIC_API_KEY in .env. To use a
     # different *hosted* API, set LLM_PROVIDER=openai + OPENAI_API_KEY + a
     # hosted OPENAI_BASE_URL — never point it at a local model server.
+    # Embeddings are likewise API-only (provider `openai`): the wiki ships no
+    # local embedding model. Set EMBEDDINGS_API_KEY (+ EMBEDDINGS_BASE_URL for
+    # Azure / an internal gateway); EMBEDDING_DIM must match the model (1536 =
+    # text-embedding-3-small). After a 384->1536 upgrade on an existing DB, run
+    # `python -m app.scripts.backfill_embeddings` once to re-embed.
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       CHAT_MODEL: ${CHAT_MODEL:-claude-sonnet-4-6}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-openai}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-text-embedding-3-small}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
+      EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
     # `!override` fully replaces the base file's volume list (it does
     # NOT merge), so the artifact storage mount has to be re-listed here
     # too — otherwise prod loses persistence for /a/<short_id> bodies.
@@ -36,11 +46,17 @@ services:
   worker:
     build: !reset null
     image: ghcr.io/williamdeng3244/llm-wiki-backend:${TAG:-latest}
-    # The Celery worker also calls the LLM (ingest / lint tasks) — keep it
-    # on the same external API model as the backend.
+    # The Celery worker also calls the LLM (ingest / lint tasks) AND re-embeds
+    # pages on ingest — keep it on the same external API model + embeddings
+    # provider as the backend.
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
       CHAT_MODEL: ${CHAT_MODEL:-claude-sonnet-4-6}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-openai}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-text-embedding-3-small}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
+      EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
     volumes: !override
       - ./vault:/vault
       - ./raw:/raw

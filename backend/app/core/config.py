@@ -82,8 +82,34 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 1800     # 30 min — bounce stale connections
 
     chat_model: str = "claude-sonnet-4-6"
-    # Local embedding model (sentence-transformers all-MiniLM-L6-v2 = 384-dim).
-    embedding_dim: int = 384
+
+    # ── Embeddings ─────────────────────────────────────────────────────
+    # Vector embeddings for search / RAG. Default provider is the EXTERNAL
+    # OpenAI-compatible /v1/embeddings API (the wiki is API-only in prod;
+    # the legacy local sentence-transformers model is no longer shipped).
+    #   openai → hosted OpenAI-compatible API (OpenAI, Azure OpenAI, an
+    #            internal gateway, ...). Set EMBEDDINGS_API_KEY + _BASE_URL.
+    #   fake   → deterministic, dependency-free pseudo-vectors. For CI / dev
+    #            without a key. NOT semantic — never use in production.
+    #   local  → sentence-transformers, if you `pip install` it yourself
+    #            (deliberately not in the prod image).
+    embeddings_provider: Literal["openai", "fake", "local"] = "openai"
+    # The embedding model id ("可指定模型"). text-embedding-3-small (1536) and
+    # -3-large (3072) both honour the `dimensions` param below.
+    embeddings_model: str = "text-embedding-3-small"
+    # Embedding creds. Blank → fall back to the OpenAI *chat* creds, so one
+    # OpenAI account serves both. Set these to point embeddings at a
+    # different endpoint (e.g. Azure) than the chat LLM.
+    embeddings_api_key: str = ""
+    embeddings_base_url: str = ""
+    # Send the OpenAI `dimensions` request param (supported by
+    # text-embedding-3-*). Set false for models/providers that reject it —
+    # then make embedding_dim equal the model's native output dimension.
+    embeddings_use_dimensions: bool = True
+    # pgvector column width. MUST equal the embedding model's output dim
+    # (1536 = text-embedding-3-small). Changing it requires a re-embed:
+    # `python -m app.scripts.backfill_embeddings`.
+    embedding_dim: int = 1536
 
     # Global MCP server kill switch. Defaults to enabled; flip to false in
     # .env (MCP_ENABLED=false) to instantly cut all external MCP traffic

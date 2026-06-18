@@ -28,7 +28,11 @@ markdownify==1.2.2
 authlib==1.7.2
 PyJWT==2.13.0
 python-multipart==0.0.32
-sentence-transformers==3.2.1
+# Embeddings are API-only: the OpenAI-compatible /v1/embeddings endpoint via the
+# `openai` package above (see app/services/embeddings.py). The old local
+# sentence-transformers + torch stack (~2 GB) is intentionally NOT installed. For
+# an optional local embedder, set EMBEDDINGS_PROVIDER=local and
+# `pip install sentence-transformers` yourself.
 diff-match-patch==20241021
 
 # Tests (artifact smoke suite). pytest is a dev-only dep but lives in
