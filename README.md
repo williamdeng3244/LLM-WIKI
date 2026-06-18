@@ -60,8 +60,9 @@ user whose token they hold — no separate "agent users".
     cites pages.
 - **Markdown export** — `scripts/git-export.sh` mirrors current published state
   to disk for git commit.
-- **Local embeddings** — `sentence-transformers/all-MiniLM-L6-v2` runs inside
-  the backend container. No second API key needed for retrieval.
+- **API embeddings** — search/RAG embeddings come from an external
+  OpenAI-compatible endpoint (`text-embedding-3-small` by default); the
+  container ships no local ML model.
 
 ## Quickstart
 
@@ -88,17 +89,13 @@ Then:
 - Try suggesting an edit, reviewing it, asking the chat panel a question, or
   uploading a markdown file in the Sources panel and clicking Ingest.
 
-The embedding model (`all-MiniLM-L6-v2`, ~90 MB) is **baked into the backend
-image at build time** and loaded **offline** at runtime (`HF_HOME=/opt/models`,
-`HF_HUB_OFFLINE=1`) — the container never calls huggingface.co, so the first
-publish/search are instant even where HuggingFace is blocked or throttled.
-
-- **Pulling pre-built images** (recommended in restricted networks): the model
-  is already inside — nothing to download.
-- **Building locally**: the build downloads the model once (tries huggingface.co,
-  then `hf-mirror.com`). The step is non-fatal; if your build host can't reach
-  either, set `HF_HUB_OFFLINE=0` on the backend so it downloads at first use, or
-  build behind a reachable `HF_ENDPOINT` mirror.
+Both chat **and embeddings** call external APIs — no ML models run in the
+container, so the backend image is ~550 MB (down from ~3 GB). Set
+`ANTHROPIC_API_KEY` (chat) and `EMBEDDINGS_API_KEY` (embeddings) in `.env`;
+embeddings default to OpenAI's `text-embedding-3-small` (1536-dim) and accept any
+OpenAI-compatible endpoint via `EMBEDDINGS_BASE_URL` (Azure, an internal gateway,
+...). See `.env.example` for the full `EMBEDDINGS_*` knobs. If the embeddings API
+is unreachable, search degrades gracefully to lexical matching.
 
 ### Running pre-built images (no local build)
 
@@ -241,16 +238,15 @@ Provider-specific notes:
 Caveats with non-Anthropic providers:
 
 - **Tool calling is required** for ingest + lint (both use forced function
-  calls). Pick a model that supports tools — most modern hosted models do;
-  some local models do not.
+  calls). Pick a model that supports tools — most modern hosted models do.
 - **PDF ingest** uses Anthropic's native document block. On OpenAI providers
   the backend falls back to text extraction via `pypdf` — scanned/image-only
   PDFs degrade to "[no extractable text]". Convert to markdown first for best
   results.
 - **Image ingest** is sent as a data-URI `image_url` block; only vision-capable
   models will read it.
-- Embeddings are local (sentence-transformers, 384-dim) and unaffected by the
-  provider switch.
+- Embeddings use a separate external API (`EMBEDDINGS_*`, OpenAI-compatible,
+  1536-dim by default) and are independent of the chat provider above.
 
 ## Connecting Claude Desktop / Claude Code via MCP
 
