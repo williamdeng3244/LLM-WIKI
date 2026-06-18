@@ -766,7 +766,7 @@ export default function Home() {
   return (
     <div className="relative z-10 h-screen flex flex-col">
       {/* Top bar */}
-      <header className="h-12 border-b border-white/[0.06] bg-panel/85 backdrop-blur flex items-center px-3 gap-3 text-[0.9286rem] relative z-20">
+      <header className="topbar h-12 border-b border-white/[0.06] bg-panel/85 backdrop-blur flex items-center px-3 gap-3 text-[0.9286rem] relative z-20">
         <div className="flex items-center gap-2 px-2">
           <BookOpen size={16} className="text-accent" />
           <span className="font-display font-medium tracking-[0.02em] text-[1rem] text-ink">{t('topbar.brand')}</span>
