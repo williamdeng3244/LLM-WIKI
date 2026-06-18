@@ -82,22 +82,25 @@ class Settings(BaseSettings):
     db_pool_recycle: int = 1800     # 30 min — bounce stale connections
 
     chat_model: str = "claude-sonnet-4-6"
-    # Local embedding model (sentence-transformers all-MiniLM-L6-v2 = 384-dim).
-    embedding_dim: int = 384
+
+    # ── Embeddings (OpenAI-compatible API; no local model / torch) ─────
+    # Vectors come from an embeddings endpoint, not an in-process model.
+    # Defaults target OpenAI text-embedding-3-small (1536-dim). Point
+    # embedding_base_url / embedding_api_key at any OpenAI-compatible
+    # server (Azure, vLLM, Together, ...); when blank they fall back to
+    # the openai_* creds above, so one OPENAI_BASE_URL/OPENAI_API_KEY
+    # covers both chat and embeddings. embedding_dim MUST match the model
+    # (1536 for text-embedding-3-small / -3-large@1536). Changing it
+    # requires a schema migration + re-embed (see scripts/backfill_embeddings).
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dim: int = 1536
+    embedding_base_url: str = ""   # blank → openai_base_url
+    embedding_api_key: str = ""    # blank → openai_api_key
 
     # Global MCP server kill switch. Defaults to enabled; flip to false in
     # .env (MCP_ENABLED=false) to instantly cut all external MCP traffic
     # without revoking individual user tokens.
     mcp_enabled: bool = True
-
-    # MinerU sidecar — high-fidelity PDF parsing (layout-aware, OCR,
-    # table extraction). When enabled, every uploaded PDF is sent to the
-    # MinerU service for Markdown extraction BEFORE the agent sees it;
-    # the LLM then receives clean Markdown text instead of the native
-    # PDF document block. Disabled by default because the first boot
-    # pulls multi-GB of ML model weights and CPU parsing is slow.
-    mineru_enabled: bool = False
-    mineru_url: str = "http://mineru:8080"
 
     # Public-facing base URL used for share links returned by the API
     # and MCP tools (e.g. https://wiki.enflame.internal). Defaults to the

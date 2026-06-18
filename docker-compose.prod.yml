@@ -38,12 +38,3 @@ services:
     image: ghcr.io/williamdeng3244/llm-wiki-frontend:${TAG:-latest}
     command: !reset null
     volumes: !override []
-
-  # MinerU sidecar — opt-in. The image bundles MinerU 3.x's pipeline
-  # backend (DocLayout-YOLO + transformers OCR); first parse downloads
-  # ~1 GB of model weights into the `mineru_models` volume.
-  # Enable by setting MINERU_ENABLED=true in .env (defaults to off so
-  # the backend uses Anthropic's native PDF block instead).
-  mineru:
-    build: !reset null
-    image: ghcr.io/williamdeng3244/llm-wiki-mineru:${TAG:-latest}

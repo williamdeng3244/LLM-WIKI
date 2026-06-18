@@ -53,8 +53,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
-      MINERU_ENABLED: ${MINERU_ENABLED:-false}
-      MINERU_URL: ${MINERU_URL:-http://mineru:8080}
+      # Embeddings via an OpenAI-compatible API. EMBEDDING_BASE_URL /
+      # EMBEDDING_API_KEY fall back to the OPENAI_* values when blank, so
+      # the same endpoint serves chat + embeddings by default.
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       VAULT_PATH: /vault
       SEED_EXAMPLES: ${SEED_EXAMPLES:-false}
       EXAMPLES_VAULT_PATH: /examples/vault
@@ -126,8 +131,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
-      MINERU_ENABLED: ${MINERU_ENABLED:-false}
-      MINERU_URL: ${MINERU_URL:-http://mineru:8080}
+      # Embeddings via an OpenAI-compatible API. EMBEDDING_BASE_URL /
+      # EMBEDDING_API_KEY fall back to the OPENAI_* values when blank, so
+      # the same endpoint serves chat + embeddings by default.
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       VAULT_PATH: /vault
       SEED_EXAMPLES: ${SEED_EXAMPLES:-false}
       EXAMPLES_VAULT_PATH: /examples/vault
@@ -176,36 +186,7 @@ services:
       retries: 5
       start_period: 60s
 
-  # MinerU sidecar — high-fidelity PDF → Markdown. CPU-only.
-  # First build pulls multi-GB of torch + paddleocr + layout-model
-  # dependencies; first parse downloads ~5GB of model weights to
-  # /data/.cache (persisted by the mineru_models volume below).
-  # The backend talks to it on the internal network at http://mineru:8080.
-  # To enable: set MINERU_ENABLED=true in .env, then
-  #   docker compose build mineru && docker compose up -d mineru
-  mineru:
-    build: ./mineru
-    restart: unless-stopped
-    environment:
-      HOME: /data
-      MINERU_DEVICE_MODE: cpu
-    volumes:
-      - mineru_models:/data
-    # start_period is large because first parse pulls model weights.
-    # After that, the /health endpoint responds in ms.
-    healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8080/health\")' || exit 1"]
-      interval: 60s
-      timeout: 5s
-      retries: 3
-      start_period: 120s
-    # Optionally expose for local poking. Backend talks via the docker
-    # network and doesn't need this.
-    ports:
-      - "8081:8080"
-
 volumes:
   db_data:
   redis_data:
-  mineru_models:
   artifacts_data:

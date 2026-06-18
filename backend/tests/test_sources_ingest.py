@@ -102,14 +102,10 @@ def test_FR_ING_009_worker_tasks_are_directly_callable():
         assert task.max_retries == 0
 
 
-def test_FR_ING_006_mime_to_block_matrix(monkeypatch):
+def test_FR_ING_006_mime_to_block_matrix():
     """FR-ING-006 — the MIME→content-block dispatch: text/json→text, image→image,
-    pdf→native document block (MinerU off), office→hard error, anything
+    pdf→native document block, office→hard error, anything
     else→unsupported, missing file→error."""
-    async def _no_mineru(*a, **k):
-        return None
-    monkeypatch.setattr(ingest, "convert_via_mineru", _no_mineru)
-
     created: list = []
 
     def _rs(mime: str, content: bytes) -> RawSource:
@@ -132,11 +128,11 @@ def test_FR_ING_006_mime_to_block_matrix(monkeypatch):
             block, err = run(ingest._read_raw_source_block(_rs(mime, content)))
             assert err is None and block and block["type"] == expect, (mime, block, err)
 
-        # Office formats need MinerU; with it off → a hard, explanatory error.
+        # Office formats have no converter → a hard, explanatory error.
         block, err = run(ingest._read_raw_source_block(_rs(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             b"PK\x03\x04")))
-        assert block is None and err and "MinerU" in err
+        assert block is None and err and "convert" in err.lower()
 
         # An unknown type → unsupported.
         block, err = run(ingest._read_raw_source_block(_rs("application/zip", b"PK\x03\x04")))

@@ -17,9 +17,8 @@ router = APIRouter()
 
 # (Bug #4.) If a `planning` or `applying` run hasn't progressed in this
 # many minutes, the worker is presumed dead and the run is marked failed
-# so the user can retry. Bumped to 45 min to accommodate MinerU's
-# CPU-only PDF parsing (which can take 10–30 min per multi-page paper)
-# plus the Anthropic plan call on top.
+# so the user can retry. 45 min leaves generous headroom for the LLM
+# plan call on large multi-page documents.
 STALE_RUN_TIMEOUT_MIN = 45
 
 

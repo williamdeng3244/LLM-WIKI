@@ -30,7 +30,6 @@ from app.models import (
     Page, PageStability, RawSource, Revision, RevisionProvenance,
     RevisionStatus, Role, User,
 )
-from app.services.converters import convert_via_mineru
 from app.services.llm_client import active_model, tool_call as llm_tool_call
 from app.services.retrieval import RetrievalContext, gather_context
 from app.services.workflow import create_draft, submit_for_review
@@ -40,10 +39,11 @@ log = logging.getLogger(__name__)
 MAX_EDITS = 20  # v1 hard cap; excess get logged in run.summary
 TEXT_MIME_PREFIXES = ("text/", "application/json", "application/x-yaml")
 PDF_MIME = "application/pdf"
-# MIME types MinerU 3.x can convert to Markdown when enabled.
-# Office formats are handled via mammoth (docx) / python-pptx (pptx) /
-# openpyxl (xlsx) plus its layout pipeline.
-MINERU_OFFICE_MIMES = {
+# Office formats have no native LLM document block and no longer have a
+# local converter (MinerU was removed). Listed here only so the upload
+# allow-list can reject them up front with a clear "convert to PDF" 415
+# instead of storing a file that would fail later at ingest.
+OFFICE_MIMES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",  # .pptx
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # .xlsx
@@ -252,15 +252,14 @@ def is_supported_ingest_mime(mime: str) -> bool:
     return (
         m.startswith(TEXT_MIME_PREFIXES)
         or m == PDF_MIME
-        or m in MINERU_OFFICE_MIMES
+        or m in OFFICE_MIMES
         or m.startswith("image/")
     )
 
 
 async def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optional[str]]:
-    """Async because PDF ingest may detour through the MinerU sidecar
-    (high-fidelity Markdown extraction). Falls back to the native
-    Anthropic document block if MinerU is disabled or unreachable."""
+    """Build a provider-neutral content block for the raw source. PDFs go
+    straight to the LLM document block; the model reads them directly."""
     path = Path(settings.raw_path) / rs.disk_filename
     if not path.exists():
         return None, f"Raw file missing on disk: {path}"
@@ -286,48 +285,21 @@ async def _read_raw_source_block(rs: RawSource) -> tuple[Optional[dict], Optiona
         return {"type": "text", "text": f"--- raw source ({rs.original_filename}) ---\n{text}"}, None
 
     if mime == PDF_MIME:
-        # If MinerU is enabled, route through it first for layout-aware
-        # Markdown (preserves tables, multi-column reading order, OCR
-        # for scans). Returns None on failure → fall through to the
-        # native Anthropic document block so ingest still works.
-        md = await convert_via_mineru(raw_bytes, rs.original_filename, mime)
-        if md:
-            return (
-                {
-                    "type": "text",
-                    "text": (
-                        f"--- raw source ({rs.original_filename}, "
-                        f"parsed by MinerU) ---\n{md}"
-                    ),
-                },
-                None,
-            )
+        # Hand the PDF to the LLM as a native document block. For OpenAI
+        # (no document block) llm_client extracts text via pypdf; for
+        # Anthropic the model reads the PDF directly.
         return {
             "type": "document",
             "media_type": "application/pdf",
             "data_base64": base64.b64encode(raw_bytes).decode("ascii"),
         }, None
 
-    # DOCX / PPTX / XLSX: only MinerU can handle these — there is no
-    # native Anthropic block type for Office formats. If MinerU is
-    # disabled or the call fails, return a hard error so the user knows
-    # they need to enable MinerU or convert the file to PDF/text first.
-    if mime in MINERU_OFFICE_MIMES:
-        md = await convert_via_mineru(raw_bytes, rs.original_filename, mime)
-        if md:
-            return (
-                {
-                    "type": "text",
-                    "text": (
-                        f"--- raw source ({rs.original_filename}, "
-                        f"parsed by MinerU) ---\n{md}"
-                    ),
-                },
-                None,
-            )
+    # DOCX / PPTX / XLSX: no native LLM block type and no local converter.
+    # Return a hard error telling the user to convert to PDF/text first.
+    if mime in OFFICE_MIMES:
         return None, (
-            f"Office format {mime} requires MinerU. Enable it "
-            f"(MINERU_ENABLED=true) or convert to PDF/markdown first."
+            f"Office format {mime} is not supported directly — "
+            f"convert it to PDF or Markdown/text first."
         )
 
     if mime.startswith("image/"):

@@ -60,8 +60,9 @@ user whose token they hold — no separate "agent users".
     cites pages.
 - **Markdown export** — `scripts/git-export.sh` mirrors current published state
   to disk for git commit.
-- **Local embeddings** — `sentence-transformers/all-MiniLM-L6-v2` runs inside
-  the backend container. No second API key needed for retrieval.
+- **API embeddings** — retrieval vectors come from an OpenAI-compatible
+  embeddings endpoint (default `text-embedding-3-small`, 1536-dim). No local
+  model, so the backend image ships with no torch/CUDA.
 
 ## Quickstart
 
@@ -88,17 +89,17 @@ Then:
 - Try suggesting an edit, reviewing it, asking the chat panel a question, or
   uploading a markdown file in the Sources panel and clicking Ingest.
 
-The embedding model (`all-MiniLM-L6-v2`, ~90 MB) is **baked into the backend
-image at build time** and loaded **offline** at runtime (`HF_HOME=/opt/models`,
-`HF_HUB_OFFLINE=1`) — the container never calls huggingface.co, so the first
-publish/search are instant even where HuggingFace is blocked or throttled.
+Embeddings are computed via an OpenAI-compatible API, not a local model.
+By default `EMBEDDING_*` falls back to the `OPENAI_*` settings, so a single
+`OPENAI_BASE_URL` / `OPENAI_API_KEY` serves both chat and embeddings; point
+`EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` at a different endpoint to split
+them. `EMBEDDING_DIM` must match the model (1536 for `text-embedding-3-small`);
+changing the model/dim requires a re-embed:
 
-- **Pulling pre-built images** (recommended in restricted networks): the model
-  is already inside — nothing to download.
-- **Building locally**: the build downloads the model once (tries huggingface.co,
-  then `hf-mirror.com`). The step is non-fatal; if your build host can't reach
-  either, set `HF_HUB_OFFLINE=0` on the backend so it downloads at first use, or
-  build behind a reachable `HF_ENDPOINT` mirror.
+```bash
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m app.scripts.backfill_embeddings
+```
 
 ### Running pre-built images (no local build)
 
@@ -249,8 +250,9 @@ Caveats with non-Anthropic providers:
   results.
 - **Image ingest** is sent as a data-URI `image_url` block; only vision-capable
   models will read it.
-- Embeddings are local (sentence-transformers, 384-dim) and unaffected by the
-  provider switch.
+- **Embeddings** call an OpenAI-compatible endpoint. By default they reuse the
+  `OPENAI_*` settings; set `EMBEDDING_*` to use a different provider/model for
+  retrieval than for chat.
 
 ## Connecting Claude Desktop / Claude Code via MCP
 

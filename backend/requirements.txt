@@ -28,7 +28,9 @@ markdownify==1.2.2
 authlib==1.7.2
 PyJWT==2.13.0
 python-multipart==0.0.32
-sentence-transformers==3.2.1
+# Embeddings are produced via the OpenAI-compatible API (see
+# app/services/embeddings.py) using the `openai` client pinned above —
+# no local model, so no sentence-transformers/torch/CUDA in this image.
 diff-match-patch==20241021
 
 # Tests (artifact smoke suite). pytest is a dev-only dep but lives in
@@ -39,9 +41,6 @@ diff-match-patch==20241021
 # pre-existing 500 in POST /api/mcp-tokens).
 pytest==8.3.3
 psycopg[binary]==3.2.3
-# Author xlsx/docx fixtures for the MinerU office live-e2e test (test_ingest_e2e).
-openpyxl>=3.1
-python-docx>=1.1
 
 # Schema migrations (added 2026-06-12)
 alembic>=1.13

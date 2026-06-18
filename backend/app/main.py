@@ -198,6 +198,29 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE IF EXISTS artifacts "
             "ADD COLUMN IF NOT EXISTS is_bundle BOOLEAN NOT NULL DEFAULT FALSE"
         ))
+        # Embeddings moved from the local 384-dim model to the OpenAI
+        # embeddings API (1536-dim by default). On installs created before
+        # the switch, chunks.embedding is still vector(384); create_all
+        # won't re-type an existing column, so do it here. The old vectors
+        # are incompatible — null them, then re-type. Re-embed afterwards
+        # with `python -m app.scripts.backfill_embeddings`. atttypmod holds
+        # the declared dimension for a pgvector column; skip when it
+        # already matches so this is a no-op on subsequent boots.
+        await conn.execute(text(
+            f"""
+            DO $$
+            DECLARE cur_dim int;
+            BEGIN
+                SELECT atttypmod INTO cur_dim FROM pg_attribute
+                 WHERE attrelid = 'chunks'::regclass AND attname = 'embedding'
+                   AND NOT attisdropped;
+                IF cur_dim IS NOT NULL AND cur_dim <> {int(settings.embedding_dim)} THEN
+                    UPDATE chunks SET embedding = NULL;
+                    EXECUTE 'ALTER TABLE chunks ALTER COLUMN embedding TYPE vector({int(settings.embedding_dim)})';
+                END IF;
+            END $$;
+            """
+        ))
     # Bootstrap admin + categories + import vault
     async with SessionLocal() as session:
         admin = await ensure_default_admin(session)
