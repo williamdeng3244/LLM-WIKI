@@ -53,11 +53,11 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
-      # Embeddings (see app/core/config.py). Dev + CI default to the
-      # dependency-free `fake` provider so the suite is green with NO key;
-      # set EMBEDDINGS_PROVIDER=openai + EMBEDDINGS_API_KEY for real semantic
-      # search. docker-compose.prod.yml pins `openai`.
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-fake}
+      # Embeddings (see app/core/config.py). Dev + CI default to `none`
+      # (embeddings disabled -> lexical search) so the suite is green with NO
+      # key; set EMBEDDINGS_PROVIDER=openai + EMBEDDINGS_API_KEY for real
+      # semantic search. docker-compose.prod.yml pins `openai`.
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-none}
       EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-text-embedding-3-small}
       EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
       EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
@@ -136,8 +136,8 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
       # Embeddings — the worker re-embeds on ingest; keep it on the same
-      # provider as the backend (dev/CI default `fake`; prod pins `openai`).
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-fake}
+      # provider as the backend (dev/CI default `none`; prod pins `openai`).
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-none}
       EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-text-embedding-3-small}
       EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY:-}
       EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}

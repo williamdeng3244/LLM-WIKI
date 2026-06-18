@@ -89,11 +89,12 @@ class Settings(BaseSettings):
     # the legacy local sentence-transformers model is no longer shipped).
     #   openai → hosted OpenAI-compatible API (OpenAI, Azure OpenAI, an
     #            internal gateway, ...). Set EMBEDDINGS_API_KEY + _BASE_URL.
-    #   fake   → deterministic, dependency-free pseudo-vectors. For CI / dev
-    #            without a key. NOT semantic — never use in production.
+    #   none   → embeddings disabled; search falls back to lexical (ILIKE)
+    #            matching. No key / network / ML — the CI / offline default.
+    #            Not semantic, but finds tokens that appear in page text.
     #   local  → sentence-transformers, if you `pip install` it yourself
     #            (deliberately not in the prod image).
-    embeddings_provider: Literal["openai", "fake", "local"] = "openai"
+    embeddings_provider: Literal["openai", "none", "local"] = "openai"
     # The embedding model id ("可指定模型"). text-embedding-3-small (1536) and
     # -3-large (3072) both honour the `dimensions` param below.
     embeddings_model: str = "text-embedding-3-small"

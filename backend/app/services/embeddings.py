@@ -4,7 +4,10 @@ API-only by default: the ``openai`` provider calls an external OpenAI-compatible
 ``/v1/embeddings`` endpoint (OpenAI, Azure OpenAI, an internal gateway, ...).
 Two non-production providers exist for CI / offline dev:
 
-  * ``fake``  — deterministic, dependency-free pseudo-vectors (no semantics).
+  * ``none``  — embeddings disabled. Chunks are stored with a NULL vector and
+                search degrades to the lexical (ILIKE) fallback (which finds
+                tokens that appear in page text). No key, no network, no ML —
+                this is the CI / offline default.
   * ``local`` — sentence-transformers, *if* you ``pip install`` it yourself
                 (deliberately not shipped in the prod image).
 
@@ -14,15 +17,13 @@ Pick the provider + model via env (see ``app/core/config.py``):
 
 Interface kept stable so callers don't change: ``embed_texts(list[str])``
 returns ``list[list[float]]``, ``embed_query(str)`` returns ``list[float]``.
-Every vector is ``settings.embedding_dim`` wide; the pgvector column must match
-or inserts will raise. Callers already handle failures (the indexer stores a
-NULL embedding, search falls back to lexical ILIKE), so this module lets
-provider/transport errors propagate.
+Callers already handle the disabled/error case (the indexer stores a NULL
+embedding, search falls back to lexical ILIKE), so the ``none`` provider stores
+NULL vectors on the index path and raises on the query path to take that
+fallback.
 """
 import asyncio
-import hashlib
 import logging
-import struct
 
 from app.core.config import settings
 
@@ -31,6 +32,11 @@ log = logging.getLogger(__name__)
 # OpenAI accepts large input arrays; bound the batch so a huge page can't build
 # one oversized request.
 _BATCH = 256
+
+
+class EmbeddingsDisabled(RuntimeError):
+    """Raised by embed_query when EMBEDDINGS_PROVIDER=none, so rag.retrieve()
+    takes its lexical fallback path."""
 
 
 # ── provider: openai (default — external API) ───────────────────────────────
@@ -62,31 +68,6 @@ async def _openai_encode(texts: list[str]) -> list[list[float]]:
             kwargs["dimensions"] = settings.embedding_dim
         resp = await client.embeddings.create(**kwargs)
         out.extend(d.embedding for d in resp.data)
-    return out
-
-
-# ── provider: fake (deterministic, no deps — CI / offline) ──────────────────
-def _fake_encode(texts: list[str]) -> list[list[float]]:
-    """Stable pseudo-random unit-ish vectors from a SHA-256 of each text.
-
-    Deterministic (same text → same vector) so cosine ordering is reproducible
-    across runs, but carries NO semantic meaning. For tests / offline dev only.
-    """
-    dim = settings.embedding_dim
-    out: list[list[float]] = []
-    for t in texts:
-        seed = t.encode("utf-8")
-        vals: list[float] = []
-        counter = 0
-        while len(vals) < dim:
-            block = hashlib.sha256(seed + struct.pack(">I", counter)).digest()
-            for j in range(0, len(block), 4):
-                if len(vals) >= dim:
-                    break
-                u = struct.unpack(">I", block[j : j + 4])[0]
-                vals.append(u / 2147483648.0 - 1.0)  # → [-1, 1)
-            counter += 1
-        out.append(vals)
     return out
 
 
@@ -123,8 +104,10 @@ async def embed_texts(texts: list[str], input_type: str = "document") -> list[li
     provider = settings.embeddings_provider
     if provider == "openai":
         return await _openai_encode(texts)
-    if provider == "fake":
-        return _fake_encode(texts)
+    if provider == "none":
+        # Embeddings disabled → NULL vectors. The indexer stores these as-is;
+        # search then has no vectors to match and uses the lexical fallback.
+        return [None] * len(texts)  # type: ignore[list-item]
     if provider == "local":
         async with _lock:  # serialize CPU-bound encodes
             return await asyncio.to_thread(_local_encode, texts)
@@ -132,5 +115,10 @@ async def embed_texts(texts: list[str], input_type: str = "document") -> list[li
 
 
 async def embed_query(text: str) -> list[float]:
+    if settings.embeddings_provider == "none":
+        # Force rag.retrieve()'s lexical fallback (which finds tokens in text).
+        raise EmbeddingsDisabled(
+            "EMBEDDINGS_PROVIDER=none — semantic search disabled; using lexical fallback."
+        )
     vecs = await embed_texts([text], input_type="query")
     return vecs[0]
