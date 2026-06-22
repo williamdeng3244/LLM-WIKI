@@ -43,11 +43,27 @@ async def embed_texts(texts: list[str], input_type: str = "document") -> list[li
     if not texts:
         return []
     client = _get_client()
-    resp = await client.embeddings.create(model=settings.embedding_model, input=texts)
+    # text-embedding-3-* models accept an optional `dimensions` arg. Without it,
+    # text-embedding-3-large defaults to 3072 while our pgvector column is
+    # sized by settings.embedding_dim (1536 by default) — mismatch 500s on
+    # publish/reindex. Pass the configured dim so API output matches the DB.
+    kwargs: dict = {"model": settings.embedding_model, "input": texts}
+    if settings.embedding_model.startswith("text-embedding-3"):
+        kwargs["dimensions"] = settings.embedding_dim
+    resp = await client.embeddings.create(**kwargs)
     # Be defensive about ordering: sort by the index the API echoes back so
     # the returned vectors line up with `texts` regardless of server order.
     items = sorted(resp.data, key=lambda d: d.index)
-    return [list(d.embedding) for d in items]
+    vecs = [list(d.embedding) for d in items]
+    for i, v in enumerate(vecs):
+        if len(v) != settings.embedding_dim:
+            raise ValueError(
+                f"embedding[{i}] has {len(v)} dims, expected {settings.embedding_dim} "
+                f"(model={settings.embedding_model!r}). "
+                "Set EMBEDDING_DIM to match the model output, or pick a model "
+                "that supports the configured dimension."
+            )
+    return vecs
 
 
 async def embed_query(text: str) -> list[float]:

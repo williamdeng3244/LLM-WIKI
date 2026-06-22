@@ -1,15 +1,20 @@
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wiki}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wiki}
       POSTGRES_DB: ${POSTGRES_DB:-wiki}
+    privileged: true
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
+    deploy:
+      resources:
+        limits:
+          memory: 32G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-wiki}"]
       interval: 5s
@@ -17,7 +22,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis:7-alpine
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -31,11 +36,16 @@ services:
 
   backend:
     build: ./backend
+    # The host default runtime is `enflame`, which blocks pthread creation
+    # inside Python containers (RuntimeError: can't start new thread).
+    # asyncpg/SQLAlchemy need a thread pool, so the lifespan DB probe
+    # retries forever and the service stays unhealthy.
+    runtime: runc
     restart: unless-stopped
     # Dev-only command override: image CMD is the prod multi-worker uvicorn
     # (no --reload). For dev workflow with bind-mounted source, swap in
     # --reload + single worker so file edits hot-reload.
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       db:
         condition: service_healthy
@@ -105,6 +115,7 @@ services:
 
   worker:
     build: ./backend
+    runtime: runc
     restart: unless-stopped
     depends_on:
       db:
@@ -160,6 +171,7 @@ services:
 
   frontend:
     build: ./frontend
+    runtime: runc
     restart: unless-stopped
     # Dev override: image CMD is `npm start` (prod). For dev with bind-mount
     # we want the dev server (hot reload + fast refresh).
@@ -177,10 +189,10 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - "3000:3000"
+      - "3001:3000"
     # wget is in busybox (default in node:alpine).
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3001/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

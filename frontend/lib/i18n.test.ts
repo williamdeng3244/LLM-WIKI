@@ -23,9 +23,9 @@ describe('MESSAGES (translation table)', () => {
 describe('useLanguage', () => {
   beforeEach(() => localStorage.clear());
 
-  it('defaults to en and t() returns a string for a known key', () => {
+  it('defaults to zh and t() returns a string for a known key', () => {
     const { result } = renderHook(() => useLanguage());
-    expect(result.current.lang).toBe('en');
+    expect(result.current.lang).toBe('zh');
     const key = Object.keys(MESSAGES.en)[0] as Parameters<typeof result.current.t>[0];
     expect(typeof result.current.t(key)).toBe('string');
   });

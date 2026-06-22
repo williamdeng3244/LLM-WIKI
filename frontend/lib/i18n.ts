@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 export type Lang = 'en' | 'zh';
 
 const KEY = 'wiki:lang';
+const DEFAULT_LANG: Lang = 'zh';
 
 /**
  * Language hook. Persists choice to localStorage, sets <html lang> so
@@ -20,18 +21,14 @@ export function useLanguage(): {
   toggle: () => void;
   t: (key: keyof Messages) => string;
 } {
-  const [lang, setLangState] = useState<Lang>('en');
+  const [lang, setLangState] = useState<Lang>(DEFAULT_LANG);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = localStorage.getItem(KEY) as Lang | null;
-    let value: Lang = 'en';
+    let value: Lang = DEFAULT_LANG;
     if (saved === 'en' || saved === 'zh') {
       value = saved;
-    } else {
-      // First visit: take a hint from the browser. Chinese (any region) → zh.
-      const nav = (navigator.language || '').toLowerCase();
-      if (nav.startsWith('zh')) value = 'zh';
     }
     setLangState(value);
     document.documentElement.setAttribute('lang', value === 'zh' ? 'zh-Hans' : 'en');
@@ -80,7 +77,7 @@ export function useLanguage(): {
   }, [lang, setLang]);
 
   const t = useCallback(
-    (key: keyof Messages) => MESSAGES[lang][key] ?? MESSAGES.en[key] ?? String(key),
+    (key: keyof Messages) => MESSAGES[lang][key] ?? MESSAGES.zh[key] ?? MESSAGES.en[key] ?? String(key),
     [lang],
   );
 

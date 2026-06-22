@@ -226,6 +226,19 @@ async def dev_login(
         session.add(user)
         await session.commit()
         await session.refresh(user)
+    else:
+        # Embed / SSO re-login may refresh the display name from the parent app.
+        display_name = name or email.split("@")[0]
+        changed = False
+        if display_name and user.name != display_name:
+            user.name = display_name
+            changed = True
+        if user.role != Role(role):
+            user.role = Role(role)
+            changed = True
+        if changed:
+            await session.commit()
+            await session.refresh(user)
     return {"token": make_session_jwt(user), "user": UserOut.model_validate(user).model_dump()}
 
 

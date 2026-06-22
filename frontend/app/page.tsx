@@ -44,6 +44,11 @@ import MovePageDialog from '@/components/MovePageDialog';
 import { useTheme } from '@/lib/theme';
 import { useLanguage } from '@/lib/i18n';
 import { api, type Page, type Role, type User } from '@/lib/api';
+import {
+  isWikiEmbedded,
+  listenForDolphinAuth,
+  requestParentAuth,
+} from '@/lib/dolphin-bridge';
 import { useGraphSettings } from '@/lib/graphSettings';
 
 // Default SWR options: don't refetch on focus everywhere, keep previous data
@@ -51,6 +56,10 @@ const SWR_OPTS = { revalidateOnFocus: false, keepPreviousData: true };
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
+  // Detect iframe embed only after mount so SSR and the first client
+  // render produce identical markup (avoids hydration mismatch).
+  const [embedded, setEmbedded] = useState(false);
+  const displayName = user?.name || '…';
 
   // Tab state replaces the old selected / centerMode / graphMode trio.
   const tabs = useTabs();
@@ -91,6 +100,7 @@ export default function Home() {
     localStorage.removeItem('wiki:jwt');
     localStorage.removeItem('wiki:email');
     localStorage.removeItem('wiki:role');
+    localStorage.removeItem('wiki:displayName');
     // Block the stub-mode auto-re-auth so sign-out actually sticks.
     localStorage.setItem('wiki:signed-out', '1');
     fetch(`${process.env.NEXT_PUBLIC_API_BASE || '/api'}/auth/logout`, {
@@ -299,15 +309,20 @@ export default function Home() {
 
   const loadIdentity = useCallback(() => {
     setNeedsLogin(false);
+    const isEmb = isWikiEmbedded();
     // Explicit sign-out wins over the stub auto-auth convenience.
     // The user clicked Sign out and we honor it until they log in.
     const explicitlySignedOut = typeof window !== 'undefined'
       && localStorage.getItem('wiki:signed-out') === '1';
     if (explicitlySignedOut) {
-      window.location.href = '/login';
+      if (!isEmb) window.location.href = '/login';
       return;
     }
     api.whoami().then((u) => { setUser(u); setNeedsLogin(false); }).catch(() => {
+      if (isEmb) {
+        requestParentAuth();
+        return;
+      }
       api.authConfig().then((cfg) => {
         if (cfg.mode === 'oidc') {
           // Send the user to the dedicated login page rather than a
@@ -328,7 +343,31 @@ export default function Home() {
     });
   }, []);
 
-  useEffect(() => { loadIdentity(); }, [loadIdentity]);
+  useEffect(() => {
+    setEmbedded(isWikiEmbedded());
+    loadIdentity();
+  }, [loadIdentity]);
+
+  // Dolphin iframe embed: listen for parent auth and retry the handshake.
+  useEffect(() => {
+    if (!isWikiEmbedded()) return undefined;
+    const retryTimers = [0, 300, 800, 1500].map((delay) =>
+      window.setTimeout(() => requestParentAuth(), delay),
+    );
+    const stop = listenForDolphinAuth(
+      (u) => {
+        setUser(u);
+        setNeedsLogin(false);
+      },
+      () => {
+        // Parent may not be ready yet; requestParentAuth retries cover this.
+      },
+    );
+    return () => {
+      retryTimers.forEach((id) => window.clearTimeout(id));
+      stop();
+    };
+  }, []);
 
   // Apply the account-saved appearance (theme + mode) ONCE per user, when they
   // sign in. It must NOT depend on the current theme/mode — otherwise it would
@@ -823,19 +862,21 @@ export default function Home() {
           >
             {lang === 'en' ? '中' : 'EN'}
           </button>
-          {/* Dev: role switcher */}
-          <select
-            className="h-8 px-2 text-[0.8214rem] border border-line rounded-md bg-elev text-ink"
-            value={user?.role || 'admin'}
-            onChange={(e) => changeRole(e.target.value as Role)}
-            title={t('topbar.role.title')}
-          >
-            <option value="reader">{t('topbar.role.reader')}</option>
-            <option value="contributor">{t('topbar.role.contributor')}</option>
-            <option value="editor">{t('topbar.role.editor')}</option>
-            <option value="admin">{t('topbar.role.admin')}</option>
-          </select>
-          {user && (
+          {/* Dev: role switcher (hidden when embedded in Dolphin) */}
+          {!embedded && (
+            <select
+              className="h-8 px-2 text-[0.8214rem] border border-line rounded-md bg-elev text-ink"
+              value={user?.role || 'admin'}
+              onChange={(e) => changeRole(e.target.value as Role)}
+              title={t('topbar.role.title')}
+            >
+              <option value="reader">{t('topbar.role.reader')}</option>
+              <option value="contributor">{t('topbar.role.contributor')}</option>
+              <option value="editor">{t('topbar.role.editor')}</option>
+              <option value="admin">{t('topbar.role.admin')}</option>
+            </select>
+          )}
+          {!embedded && user && (
             <button
               className="h-8 px-2 text-[0.8214rem] border border-line rounded-md bg-elev text-muted hover:text-ink"
               title={`Sign out (${user.email})`}
@@ -960,8 +1001,12 @@ export default function Home() {
             )}
           </div>
 
-          <div className="text-[0.8214rem] text-muted ml-1.5 truncate max-w-[120px]" title={user?.email}>
-            {user?.name || '…'}
+          <div
+            className="text-[0.8214rem] text-ink ml-1.5 truncate max-w-[160px] font-medium"
+            title={user?.email}
+            suppressHydrationWarning
+          >
+            {displayName}
           </div>
         </div>
       </header>

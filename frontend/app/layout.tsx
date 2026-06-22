@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-Hans" suppressHydrationWarning>
       <body>
         {/* Apply the saved theme + mode before first paint (no flash). */}
         <script
