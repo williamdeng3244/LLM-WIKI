@@ -99,24 +99,6 @@ export default function Home() {
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Chat panel collapse: hydrate from localStorage on mount, persist on
-  // every flip. Mirrors the useTheme/useLanguage pattern.
-  const [chatCollapsed, setChatCollapsed] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const saved = localStorage.getItem('wiki:chat-collapsed');
-      if (saved === '1') setChatCollapsed(true);
-    } catch { /* localStorage unavailable */ }
-  }, []);
-  const toggleChat = useCallback(() => {
-    setChatCollapsed((prev) => {
-      const next = !prev;
-      try { localStorage.setItem('wiki:chat-collapsed', next ? '1' : '0'); } catch {}
-      return next;
-    });
-  }, []);
-
   // Resizable file tree (left sidebar). Width persists across reloads.
   // Bounds: 180px (cramped floor) – 480px (don't dominate the layout).
   // Default 240px matches the literal width used before this change.
@@ -211,10 +193,14 @@ export default function Home() {
 
   // Resizable chat panel (right), mirroring the file tree above — but the
   // handle sits on the panel's LEFT edge, so dragging left WIDENS it (delta
-  // sign inverted). Collapse (chatCollapsed) still rails it to 40px.
+  // sign inverted). No collapse button — drag the handle in to shrink it; once
+  // it crosses CHAT_RAIL_W the content snaps to a thin rail (like the old
+  // collapse) live during the drag. MIN is the rail width; drag out to restore.
   const CHAT_DEFAULT_W = 320;
-  const CHAT_MIN_W = 280;
+  const CHAT_MIN_W = 48;
   const CHAT_MAX_W = 620;
+  // Below this the ChatPanel swaps to its rail (keep in sync with ChatPanel).
+  const CHAT_RAIL_W = 250;
   const clampChatW = (n: number) =>
     Math.max(CHAT_MIN_W, Math.min(CHAT_MAX_W, Math.round(n)));
   const [chatWidth, setChatWidth] = useState<number>(CHAT_DEFAULT_W);
@@ -246,8 +232,16 @@ export default function Home() {
       // Right panel: cursor moving LEFT (smaller clientX) widens it.
       const next = clampChatW(ctx.startWidth - (ev.clientX - ctx.startX));
       if (next === ctx.lastWidth) return;
+      // Swap ChatPanel rail <-> full LIVE when the drag crosses CHAT_RAIL_W, so
+      // the content snaps away/in at the threshold instead of squishing the
+      // whole way and only snapping on release. One React render per crossing;
+      // the imperative `transition:none` set above survives it (React only
+      // manages the style-object keys), so the column still tracks the cursor.
+      const crossedRail =
+        (ctx.lastWidth < CHAT_RAIL_W) !== (next < CHAT_RAIL_W);
       ctx.lastWidth = next;
       if (container) container.style.setProperty('--chat-w', `${next}px`);
+      if (crossedRail) setChatWidth(next);
     };
     const teardown = () => {
       window.removeEventListener('mousemove', onMove);
@@ -1039,7 +1033,7 @@ export default function Home() {
           // off the same value the grid uses for the tree column —
           // no React state needed to keep them in sync.
           ['--tree-w' as string]: `${treeWidth}px`,
-          ['--chat-w' as string]: chatCollapsed ? '40px' : `${chatWidth}px`,
+          ['--chat-w' as string]: `${chatWidth}px`,
           gridTemplateColumns: 'var(--tree-w) 1fr var(--chat-w)',
           // Pin row height to the available space. Without this, the
           // implicit grid row defaults to `auto` which sizes to
@@ -1077,28 +1071,27 @@ export default function Home() {
         </div>
 
         {/* Chat-resize gutter — mirrors the tree one, pinned to the
-            chat/main boundary (right: --chat-w). Hidden while collapsed. */}
-        {!chatCollapsed && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-valuenow={chatWidth}
-            aria-valuemin={CHAT_MIN_W}
-            aria-valuemax={CHAT_MAX_W}
-            aria-label="Resize chat panel"
-            tabIndex={0}
-            className="absolute top-0 bottom-0 w-1.5 z-20 cursor-col-resize group"
-            style={{ right: 'var(--chat-w)', transform: 'translateX(3px)' }}
-            onMouseDown={startChatDrag}
-            onDoubleClick={resetChatWidth}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeChatWidth(16); }
-              else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeChatWidth(-16); }
-            }}
-          >
-            <div className="h-full w-px mx-auto bg-transparent group-hover:bg-accent/40 group-focus-visible:bg-accent/50 transition-colors duration-100" />
-          </div>
-        )}
+            chat/main boundary (right: --chat-w). Always present (no collapse);
+            drag it to narrow the chat down to CHAT_MIN_W. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={chatWidth}
+          aria-valuemin={CHAT_MIN_W}
+          aria-valuemax={CHAT_MAX_W}
+          aria-label="Resize chat panel"
+          tabIndex={0}
+          className="absolute top-0 bottom-0 w-1.5 z-20 cursor-col-resize group"
+          style={{ right: 'var(--chat-w)', transform: 'translateX(3px)' }}
+          onMouseDown={startChatDrag}
+          onDoubleClick={resetChatWidth}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeChatWidth(16); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeChatWidth(-16); }
+          }}
+        >
+          <div className="h-full w-px mx-auto bg-transparent group-hover:bg-accent/40 group-focus-visible:bg-accent/50 transition-colors duration-100" />
+        </div>
 
         <aside className="border-r border-white/[0.06] bg-panel/60 overflow-y-auto scroll-thin">
           <div className="tree-actions px-2 pt-2 pb-1.5 flex items-center justify-end gap-0.5 sticky top-0 bg-panel/85 backdrop-blur z-10 border-b border-white/[0.04]">
@@ -1325,8 +1318,7 @@ export default function Home() {
           <ChatPanel
             onCitationClick={navigate}
             knownPaths={allPaths}
-            collapsed={chatCollapsed}
-            onToggleCollapse={toggleChat}
+            width={chatWidth}
           />
         </aside>
       </div>

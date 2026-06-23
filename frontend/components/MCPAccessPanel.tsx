@@ -38,6 +38,8 @@ export default function MCPAccessPanel({
   const [newToken, setNewToken] = useState<string | null>(null);
   const [copiedKind, setCopiedKind] = useState<'token' | 'config' | null>(null);
   const [revealed, setRevealed] = useState(true);
+  // Which listed token's config template is expanded (the eye in Your tokens).
+  const [templateFor, setTemplateFor] = useState<number | null>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
@@ -104,6 +106,26 @@ export default function MCPAccessPanel({
         },
       }, null, 2)
     : null;
+
+  // Re-viewable config for an EXISTING listed token: the server URL + header
+  // shape with a placeholder, since the raw token is one-time (hash-only) and
+  // can't be re-shown. Surfaced by the eye in the Your-tokens list.
+  const mcpUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin.replace(/:\d+$/, ':8000')}/mcp`
+      : '/mcp';
+  const configTemplate = JSON.stringify(
+    {
+      mcpServers: {
+        'enflame-wiki': {
+          url: mcpUrl,
+          headers: { Authorization: 'Bearer <paste-your-saved-token>' },
+        },
+      },
+    },
+    null,
+    2,
+  );
 
   return (
     <div
@@ -215,18 +237,41 @@ export default function MCPAccessPanel({
                 ) : (
                   <div className="border border-white/[0.06] rounded-md overflow-hidden">
                     {tokens.map((tok, i) => (
-                      <div key={tok.id} className={`px-4 py-3 text-[0.9286rem] flex items-center gap-3 ${i > 0 ? 'border-t border-white/[0.04]' : ''}`}>
-                        <Plug size={13} className="text-accent shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="truncate">{tok.name}</div>
-                          <div className="text-[0.7857rem] text-muted truncate">
-                            {t('mcp.created')} {new Date(tok.created_at).toLocaleString()}
-                            {tok.last_used_at && <> · {t('mcp.lastUsed')} {new Date(tok.last_used_at).toLocaleString()}</>}
+                      <div key={tok.id} className={`text-[0.9286rem] ${i > 0 ? 'border-t border-white/[0.04]' : ''}`}>
+                        <div className="px-4 py-3 flex items-center gap-3">
+                          <Plug size={13} className="text-accent shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate">{tok.name}</div>
+                            <div className="text-[0.7857rem] text-muted truncate">
+                              {t('mcp.created')} {new Date(tok.created_at).toLocaleString()}
+                              {tok.last_used_at && <> · {t('mcp.lastUsed')} {new Date(tok.last_used_at).toLocaleString()}</>}
+                            </div>
                           </div>
+                          <button
+                            className="btn btn-icon"
+                            onClick={() => setTemplateFor(templateFor === tok.id ? null : tok.id)}
+                            title={t('mcp.showConfig')}
+                            aria-label={t('mcp.showConfig')}
+                          >
+                            {templateFor === tok.id ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                          <button className="btn btn-icon" onClick={() => revoke(tok.id)} title={t('mcp.revoke')}>
+                            <Trash2 size={13} />
+                          </button>
                         </div>
-                        <button className="btn btn-icon" onClick={() => revoke(tok.id)} title={t('mcp.revoke')}>
-                          <Trash2 size={13} />
-                        </button>
+                        {templateFor === tok.id && (
+                          <div className="px-4 pb-3">
+                            <div className="text-[0.7857rem] text-muted mb-1.5">{t('mcp.templateNote')}</div>
+                            <div className="flex items-start gap-2">
+                              <pre className="flex-1 bg-[#0a0f1e] border border-line rounded p-3 text-[0.7857rem] font-mono text-ink/85 overflow-x-auto">
+{configTemplate}
+                              </pre>
+                              <button className="btn shrink-0" onClick={() => copy(configTemplate, 'config')}>
+                                {copiedKind === 'config' ? <><Check size={13} /> {t('mcp.tokenCopied')}</> : <><Copy size={13} /> {t('mcp.configCopy')}</>}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
