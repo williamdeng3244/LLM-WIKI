@@ -207,14 +207,21 @@ export default function ChatPanel({
         )}
       </div>
 
-      <div className="border-t border-black/8 p-3 flex gap-2">
+      <div className="border-t border-black/8 p-3 flex gap-2 items-end">
         <textarea
           ref={inputRef}
-          rows={1}
-          className="form-input form-textarea flex-1 h-9 py-2"
+          rows={3}
+          className="form-input form-textarea flex-1 max-h-[220px] py-2 resize-none leading-snug"
           placeholder="Ask the wiki…"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            // Auto-grow: fit the box to its content up to a cap, so long
+            // questions stay visible instead of scrolling inside one row.
+            const el = e.currentTarget;
+            el.style.height = 'auto';
+            el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();

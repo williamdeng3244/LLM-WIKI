@@ -25,6 +25,10 @@ export default function BackgroundLayer() {
     return () => obs.disconnect();
   }, []);
 
-  if (themeId === DEFAULT_THEME_ID) return <VideoBackground />;
+  // Aurora is the bespoke video background (hardcoded /bg.mp4 + light/dark
+  // invert). It is no longer the default, so route on the literal id rather
+  // than DEFAULT_THEME_ID — every other theme (including the Slate default,
+  // which is type:'css') falls through to the registry-driven renderer.
+  if (themeId === 'aurora') return <VideoBackground />;
   return <ThemeBackground theme={getTheme(themeId)} />;
 }

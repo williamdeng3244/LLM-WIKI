@@ -107,9 +107,11 @@ export const THEMES: ThemeDef[] = [
   },
 ];
 
-export const DEFAULT_THEME_ID = 'aurora';
+export const DEFAULT_THEME_ID = 'slate';
 
-/** Look up a theme by id, falling back to the first (Aurora). */
+/** Look up a theme by id, falling back to the default theme (then the first). */
 export function getTheme(id: string | null | undefined): ThemeDef {
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+  return THEMES.find((t) => t.id === id)
+    ?? THEMES.find((t) => t.id === DEFAULT_THEME_ID)
+    ?? THEMES[0];
 }
