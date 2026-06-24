@@ -356,6 +356,20 @@ select option { background: var(--bg-panel); color: var(--text); }
 [data-theme="light"] .theme-scrim { background-color: rgba(255, 255, 255, 0.28); }
 [data-theme="light"] .reading-wash { background-color: rgba(255, 255, 255, 0.72); }
 
+/* Aurora (default theme) background video — light mode.
+   Instead of a separate, flatter light clip, light reuses the SAME dark
+   starfield (`bg.mp4`) and inverts its luminance: invert(1) turns deep space
+   into bright sky, and hue-rotate(180deg) puts the aurora's blues/greens/violets
+   back roughly in family; brightness/saturate/contrast soften it into a pale
+   aurora so it stays visually aligned with the dark version (same motion +
+   structure). The base rule makes the light↔dark swap a calm fade rather than a
+   hard cut. Tune the five filter numbers to taste — dark mode is unfiltered and
+   unchanged. */
+.aurora-bg-video { transition: filter 320ms ease; }
+[data-theme="light"] .aurora-bg-video {
+  filter: invert(1) hue-rotate(180deg) brightness(1.06) saturate(0.82) contrast(0.9);
+}
+
 /* ── Sakura theme ───────────────────────────────────────────────────────
    Cherry-blossom zen garden. Recolors the accent system, base background,
    body glow, and scrim; the translucent panels pick up each background's tint
@@ -466,6 +480,51 @@ select option { background: var(--bg-panel); color: var(--text); }
 /* Synthwave LIGHT: make the side panels (file tree) more translucent so the
    misty city shows through. Higher specificity beats the global light rule. */
 [data-theme-id="synthwave"][data-theme="light"] .bg-panel\/60 { background-color: rgba(244, 242, 248, 0.45); }
+
+/* ── Frog Pond theme ────────────────────────────────────────────────────
+   A cozy lily pond (video). Sunny green day, moonlit night with fireflies.
+   Recolors the accent system, base background, body glow, and scrim;
+   translucent panels pick up the video's tint on their own. Other themes
+   untouched (higher specificity). */
+
+/* Frog Pond — DARK (moonlit night pond): deep forest-teal base, jade-green
+   accent, warm firefly-gold glow. */
+[data-theme-id="frog"][data-theme="dark"] {
+  --bg: #0b1512;
+  --accent: #74c69d;
+  --accent-glow: #e9d98a;
+  --accent-rgb: 116 198 157;
+  --glow-rgb: 233 217 138;
+}
+[data-theme-id="frog"][data-theme="dark"] body {
+  background-image:
+    radial-gradient(ellipse 1200px 800px at 78% -10%, rgba(130, 200, 230, 0.08), transparent 60%),
+    radial-gradient(ellipse 900px 700px at 8% 110%, rgba(116, 198, 157, 0.09), transparent 60%);
+}
+[data-theme-id="frog"][data-theme="dark"] .theme-scrim { background-color: rgba(11, 21, 18, 0.42); }
+
+/* Frog Pond — LIGHT (sunny day pond): warm pale-green base, fresh leaf-green
+   accent kept deep enough to stay legible over the bright video. */
+[data-theme-id="frog"][data-theme="light"] {
+  --bg: #eaf1dc;
+  --accent: #3f8f63;
+  --accent-glow: #8cc56e;
+  --accent-rgb: 63 143 99;
+  --glow-rgb: 140 197 110;
+}
+/* Light scrim kept very light + neutral so the bright pond video shows through
+   true-to-source — the heavier tinted scrim read as a washed-out "filter". */
+[data-theme-id="frog"][data-theme="light"] .theme-scrim { background-color: rgba(255, 255, 255, 0.08); }
+
+/* Frog Pond: tint the file-tree row labels AND the top-bar icons + words with the
+   green accent (both modes), to match the folders. The search input keeps its
+   normal text color so what you type stays legible. */
+[data-theme-id="frog"] .file-tree button { color: var(--accent); }
+[data-theme-id="frog"] .topbar,
+[data-theme-id="frog"] .topbar svg,
+[data-theme-id="frog"] .topbar .text-ink,
+[data-theme-id="frog"] .topbar .text-muted { color: var(--accent); }
+[data-theme-id="frog"] .topbar input { color: var(--text); }
 
 /* ── Rainbow theme ──────────────────────────────────────────────────────
    Dark = Dracula (#282a36), light = Alucard (#fffbeb); minimal texture image

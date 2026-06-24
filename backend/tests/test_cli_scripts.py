@@ -13,6 +13,8 @@ import subprocess
 
 import pytest
 
+from tests.conftest import publish_page
+
 
 def _run(module: str, *args: str, timeout: int = 120) -> subprocess.CompletedProcess:
     # By default run the script as its real entry point (`python -m module`).
@@ -32,17 +34,24 @@ def _run(module: str, *args: str, timeout: int = 120) -> subprocess.CompletedPro
     )
 
 
-def test_export_to_disk_writes_published_pages(tmp_path):
+def test_export_to_disk_writes_published_pages(tmp_path, contributor):
+    # Publish a known page first so the assertion holds regardless of whether
+    # the example vault was seeded. (CI runs unseeded — this previously relied
+    # on the seeded people/aristotle.md and failed there.)
+    p = publish_page(
+        contributor, title="Export Probe", body="exported content body", stability="open"
+    )
+
     target = str(tmp_path / "vault-export")
     r = _run("app.scripts.export_to_disk", target)
     assert r.returncode == 0, r.stderr
     assert "Exported" in r.stdout, r.stdout
     mds = glob.glob(os.path.join(target, "**", "*.md"), recursive=True)
     assert len(mds) > 0, "export produced no markdown files"
-    # a known real page round-trips to disk with frontmatter
-    aristotle = os.path.join(target, "people", "aristotle.md")
-    assert os.path.exists(aristotle), "expected people/aristotle.md in the export"
-    assert "title:" in open(aristotle, encoding="utf-8").read()
+    # the page we just published round-trips to disk with frontmatter
+    probe = os.path.join(target, *p["path"].split("/")) + ".md"
+    assert os.path.exists(probe), f"expected {p['path']}.md in the export"
+    assert "title:" in open(probe, encoding="utf-8").read()
     shutil.rmtree(target, ignore_errors=True)
 
 

@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sparkles, Send, Trash2, Layers, BookOpen,
-  PanelRightClose, PanelRightOpen,
 } from 'lucide-react';
 import Markdown from './Markdown';
 import { useLanguage } from '@/lib/i18n';
@@ -26,13 +25,11 @@ const SUGGESTIONS = [
 ];
 
 export default function ChatPanel({
-  onCitationClick, knownPaths,
-  collapsed = false, onToggleCollapse,
+  onCitationClick, knownPaths, width = 320,
 }: {
   onCitationClick: (path: string) => void;
   knownPaths: Set<string>;
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
+  width?: number;
 }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
@@ -95,22 +92,15 @@ export default function ChatPanel({
     try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
   }
 
-  // Collapsed state: render a narrow rail with a single toggle button in
-  // the same top-right screen position the expanded header uses. The rest
-  // of the component (history, input, mode, draft text) stays mounted so
-  // reopening preserves state exactly.
-  if (collapsed) {
+  // Dragged narrow → a thin rail (no content, just a chat hint), like the old
+  // collapse but driven by the drag width. Drag the handle (or double-click it)
+  // back out to restore the full panel.
+  if (width < 250) {
     return (
-      <div className="flex flex-col h-full min-h-0 overflow-hidden border-l border-black/8 bg-panel/55">
-        <div className="px-1.5 py-2.5 flex items-center justify-center border-b border-black/8">
-          <button
-            onClick={onToggleCollapse}
-            className="text-muted hover:text-ink p-1 rounded transition-colors"
-            title={t('chat.expand')}
-            aria-label={t('chat.expand')}
-          >
-            <PanelRightOpen size={14} />
-          </button>
+      <div className="flex flex-col items-center h-full min-h-0 overflow-hidden pt-3 gap-2 text-muted select-none">
+        <Sparkles size={16} className="opacity-70" />
+        <div className="text-[0.62rem] tracking-[0.18em] uppercase opacity-55 [writing-mode:vertical-rl] rotate-180">
+          {t('chat.assistant')}
         </div>
       </div>
     );
@@ -157,18 +147,6 @@ export default function ChatPanel({
             <Trash2 size={13} />
           </button>
         )}
-        {/* Collapse button — right-pinned. Same screen position as the
-            collapsed rail's button so the affordance doesn't move. */}
-        {onToggleCollapse && (
-          <button
-            onClick={onToggleCollapse}
-            className="text-muted hover:text-ink shrink-0"
-            title={t('chat.collapse')}
-            aria-label={t('chat.collapse')}
-          >
-            <PanelRightClose size={14} />
-          </button>
-        )}
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-thin px-4 py-3 space-y-5">
@@ -207,14 +185,21 @@ export default function ChatPanel({
         )}
       </div>
 
-      <div className="border-t border-black/8 p-3 flex gap-2">
+      <div className="border-t border-black/8 p-3 flex gap-2 items-end">
         <textarea
           ref={inputRef}
-          rows={1}
-          className="form-input form-textarea flex-1 h-9 py-2"
+          rows={3}
+          className="form-input form-textarea flex-1 max-h-[220px] py-2 resize-none leading-snug"
           placeholder="Ask the wiki…"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            // Auto-grow: fit the box to its content up to a cap, so long
+            // questions stay visible instead of scrolling inside one row.
+            const el = e.currentTarget;
+            el.style.height = 'auto';
+            el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();

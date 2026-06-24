@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import {
-  X, Check, Copy, Plug, Trash2, Lock, Loader2, ShieldCheck, ShieldOff,
+  X, Check, Copy, Plug, Trash2, Lock, Loader2, ShieldCheck, ShieldOff, Eye, EyeOff,
 } from 'lucide-react';
 import { api, type User } from '@/lib/api';
 import { useLanguage } from '@/lib/i18n';
@@ -36,13 +36,20 @@ export default function MCPAccessPanel({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newToken, setNewToken] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedKind, setCopiedKind] = useState<'token' | 'config' | null>(null);
+  const [revealed, setRevealed] = useState(true);
+  // Which listed token's config template is expanded (the eye in Your tokens).
+  const [templateFor, setTemplateFor] = useState<number | null>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // A freshly created token always starts revealed (the eye toggle below can
+  // mask it on screen without destroying it).
+  useEffect(() => { if (newToken) setRevealed(true); }, [newToken]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -76,8 +83,8 @@ export default function MCPAccessPanel({
     }
   }
 
-  async function copy(text: string) {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  async function copy(text: string, kind: 'token' | 'config') {
+    try { await navigator.clipboard.writeText(text); setCopiedKind(kind); setTimeout(() => setCopiedKind(null), 1500); } catch {}
   }
 
   async function toggleUserMcp(u: User) {
@@ -99,6 +106,26 @@ export default function MCPAccessPanel({
         },
       }, null, 2)
     : null;
+
+  // Re-viewable config for an EXISTING listed token: the server URL + header
+  // shape with a placeholder, since the raw token is one-time (hash-only) and
+  // can't be re-shown. Surfaced by the eye in the Your-tokens list.
+  const mcpUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin.replace(/:\d+$/, ':8000')}/mcp`
+      : '/mcp';
+  const configTemplate = JSON.stringify(
+    {
+      mcpServers: {
+        'enflame-wiki': {
+          url: mcpUrl,
+          headers: { Authorization: 'Bearer <paste-your-saved-token>' },
+        },
+      },
+    },
+    null,
+    2,
+  );
 
   return (
     <div
@@ -135,26 +162,51 @@ export default function MCPAccessPanel({
             <>
               {newToken && configSnippet && (
                 <div className="bg-emerald-500/[0.08] border border-emerald-500/30 rounded-md p-3.5">
-                  <div className="text-[0.8929rem] text-emerald-300 font-medium mb-2">
-                    {t('mcp.tokenCreated')}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="text-[0.8929rem] text-emerald-300 font-medium">
+                      {t('mcp.tokenCreated')}
+                    </div>
+                    {revealed && (
+                      <button
+                        className="text-muted hover:text-ink shrink-0"
+                        onClick={() => setRevealed(false)}
+                        title={t('mcp.hide')}
+                        aria-label={t('mcp.hide')}
+                      >
+                        <EyeOff size={15} />
+                      </button>
+                    )}
                   </div>
-                  <div className="flex gap-2 items-stretch">
-                    <code className="flex-1 bg-[#0a0f1e] border border-emerald-500/30 rounded px-3 py-2 text-[0.8214rem] break-all font-mono text-emerald-200">
-                      {newToken}
-                    </code>
-                    <button className="btn shrink-0" onClick={() => copy(newToken)}>
-                      {copied ? <><Check size={13} /> {t('mcp.tokenCopied')}</> : <><Copy size={13} /> {t('mcp.tokenCopy')}</>}
-                    </button>
-                  </div>
-                  <div className="mt-3 text-[0.7857rem] uppercase tracking-[0.18em] text-muted">
-                    {t('mcp.dropConfig')}
-                  </div>
-                  <pre className="mt-1 bg-[#0a0f1e] border border-line rounded p-3 text-[0.8214rem] font-mono text-ink/85 overflow-x-auto">
+                  {revealed ? (
+                    <>
+                      <div className="flex gap-2 items-stretch">
+                        <code className="flex-1 bg-[#0a0f1e] border border-emerald-500/30 rounded px-3 py-2 text-[0.8214rem] break-all font-mono text-emerald-200">
+                          {newToken}
+                        </code>
+                        <button className="btn shrink-0" onClick={() => copy(newToken, 'token')}>
+                          {copiedKind === 'token' ? <><Check size={13} /> {t('mcp.tokenCopied')}</> : <><Copy size={13} /> {t('mcp.tokenCopy')}</>}
+                        </button>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="text-[0.7857rem] uppercase tracking-[0.18em] text-muted">
+                          {t('mcp.dropConfig')}
+                        </div>
+                        <button className="btn shrink-0" onClick={() => copy(configSnippet, 'config')}>
+                          {copiedKind === 'config' ? <><Check size={13} /> {t('mcp.tokenCopied')}</> : <><Copy size={13} /> {t('mcp.configCopy')}</>}
+                        </button>
+                      </div>
+                      <pre className="mt-1 bg-[#0a0f1e] border border-line rounded p-3 text-[0.8214rem] font-mono text-ink/85 overflow-x-auto">
 {configSnippet}
-                  </pre>
-                  <button className="mt-2 text-[0.7857rem] text-muted hover:text-ink underline" onClick={() => setNewToken(null)}>
-                    {t('mcp.hide')}
-                  </button>
+                      </pre>
+                    </>
+                  ) : (
+                    <button
+                      className="text-[0.8214rem] text-muted hover:text-ink flex items-center gap-2"
+                      onClick={() => setRevealed(true)}
+                    >
+                      <Eye size={14} /> {t('mcp.tokenHidden')}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -185,18 +237,41 @@ export default function MCPAccessPanel({
                 ) : (
                   <div className="border border-white/[0.06] rounded-md overflow-hidden">
                     {tokens.map((tok, i) => (
-                      <div key={tok.id} className={`px-4 py-3 text-[0.9286rem] flex items-center gap-3 ${i > 0 ? 'border-t border-white/[0.04]' : ''}`}>
-                        <Plug size={13} className="text-accent shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="truncate">{tok.name}</div>
-                          <div className="text-[0.7857rem] text-muted truncate">
-                            {t('mcp.created')} {new Date(tok.created_at).toLocaleString()}
-                            {tok.last_used_at && <> · {t('mcp.lastUsed')} {new Date(tok.last_used_at).toLocaleString()}</>}
+                      <div key={tok.id} className={`text-[0.9286rem] ${i > 0 ? 'border-t border-white/[0.04]' : ''}`}>
+                        <div className="px-4 py-3 flex items-center gap-3">
+                          <Plug size={13} className="text-accent shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate">{tok.name}</div>
+                            <div className="text-[0.7857rem] text-muted truncate">
+                              {t('mcp.created')} {new Date(tok.created_at).toLocaleString()}
+                              {tok.last_used_at && <> · {t('mcp.lastUsed')} {new Date(tok.last_used_at).toLocaleString()}</>}
+                            </div>
                           </div>
+                          <button
+                            className="btn btn-icon"
+                            onClick={() => setTemplateFor(templateFor === tok.id ? null : tok.id)}
+                            title={t('mcp.showConfig')}
+                            aria-label={t('mcp.showConfig')}
+                          >
+                            {templateFor === tok.id ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                          <button className="btn btn-icon" onClick={() => revoke(tok.id)} title={t('mcp.revoke')}>
+                            <Trash2 size={13} />
+                          </button>
                         </div>
-                        <button className="btn btn-icon" onClick={() => revoke(tok.id)} title={t('mcp.revoke')}>
-                          <Trash2 size={13} />
-                        </button>
+                        {templateFor === tok.id && (
+                          <div className="px-4 pb-3">
+                            <div className="text-[0.7857rem] text-muted mb-1.5">{t('mcp.templateNote')}</div>
+                            <div className="flex items-start gap-2">
+                              <pre className="flex-1 bg-[#0a0f1e] border border-line rounded p-3 text-[0.7857rem] font-mono text-ink/85 overflow-x-auto">
+{configTemplate}
+                              </pre>
+                              <button className="btn shrink-0" onClick={() => copy(configTemplate, 'config')}>
+                                {copiedKind === 'config' ? <><Check size={13} /> {t('mcp.tokenCopied')}</> : <><Copy size={13} /> {t('mcp.configCopy')}</>}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -91,11 +91,27 @@ export const THEMES: ThemeDef[] = [
       dark: { type: 'image', src: '/themes/rainbow/dark.png' },
     },
   },
+  {
+    id: 'frog',
+    name: 'Frog Pond',
+    description: 'A cozy lily pond with a little frog — sunny day, moonlit night.',
+    preview: {
+      light: { bg: '#eaf1dc', accent: '#3f8f63' },
+      dark: { bg: '#0b1512', accent: '#74c69d' },
+    },
+    background: {
+      // Light runs at 0.8× for a calmer drift; dark plays at native speed.
+      light: { type: 'video', src: '/themes/frog/light.mp4', rate: 0.8 },
+      dark: { type: 'video', src: '/themes/frog/dark.mp4' },
+    },
+  },
 ];
 
-export const DEFAULT_THEME_ID = 'aurora';
+export const DEFAULT_THEME_ID = 'slate';
 
-/** Look up a theme by id, falling back to the first (Aurora). */
+/** Look up a theme by id, falling back to the default theme (then the first). */
 export function getTheme(id: string | null | undefined): ThemeDef {
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+  return THEMES.find((t) => t.id === id)
+    ?? THEMES.find((t) => t.id === DEFAULT_THEME_ID)
+    ?? THEMES[0];
 }

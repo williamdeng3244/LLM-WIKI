@@ -109,24 +109,6 @@ export default function Home() {
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Chat panel collapse: hydrate from localStorage on mount, persist on
-  // every flip. Mirrors the useTheme/useLanguage pattern.
-  const [chatCollapsed, setChatCollapsed] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const saved = localStorage.getItem('wiki:chat-collapsed');
-      if (saved === '1') setChatCollapsed(true);
-    } catch { /* localStorage unavailable */ }
-  }, []);
-  const toggleChat = useCallback(() => {
-    setChatCollapsed((prev) => {
-      const next = !prev;
-      try { localStorage.setItem('wiki:chat-collapsed', next ? '1' : '0'); } catch {}
-      return next;
-    });
-  }, []);
-
   // Resizable file tree (left sidebar). Width persists across reloads.
   // Bounds: 180px (cramped floor) – 480px (don't dominate the layout).
   // Default 240px matches the literal width used before this change.
@@ -215,6 +197,89 @@ export default function Home() {
     setTreeWidth((w) => {
       const next = clampTreeW(w + delta);
       try { localStorage.setItem('wiki:tree-width', String(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  // Resizable chat panel (right), mirroring the file tree above — but the
+  // handle sits on the panel's LEFT edge, so dragging left WIDENS it (delta
+  // sign inverted). No collapse button — drag the handle in to shrink it; once
+  // it crosses CHAT_RAIL_W the content snaps to a thin rail (like the old
+  // collapse) live during the drag. MIN is the rail width; drag out to restore.
+  const CHAT_DEFAULT_W = 320;
+  const CHAT_MIN_W = 48;
+  const CHAT_MAX_W = 620;
+  // Below this the ChatPanel swaps to its rail (keep in sync with ChatPanel).
+  const CHAT_RAIL_W = 250;
+  const clampChatW = (n: number) =>
+    Math.max(CHAT_MIN_W, Math.min(CHAT_MAX_W, Math.round(n)));
+  const [chatWidth, setChatWidth] = useState<number>(CHAT_DEFAULT_W);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wiki:chat-width');
+      const n = raw ? parseInt(raw, 10) : NaN;
+      if (Number.isFinite(n)) setChatWidth(clampChatW(n));
+    } catch { /* localStorage unavailable */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const chatDragRef = useRef<{
+    startX: number; startWidth: number; lastWidth: number;
+  } | null>(null);
+
+  const startChatDrag = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    chatDragRef.current = {
+      startX: e.clientX, startWidth: chatWidth, lastWidth: chatWidth,
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const container = gridContainerRef.current;
+    if (container) container.style.transition = 'none';
+    const onMove = (ev: MouseEvent) => {
+      const ctx = chatDragRef.current;
+      if (!ctx) return;
+      // Right panel: cursor moving LEFT (smaller clientX) widens it.
+      const next = clampChatW(ctx.startWidth - (ev.clientX - ctx.startX));
+      if (next === ctx.lastWidth) return;
+      // Swap ChatPanel rail <-> full LIVE when the drag crosses CHAT_RAIL_W, so
+      // the content snaps away/in at the threshold instead of squishing the
+      // whole way and only snapping on release. One React render per crossing;
+      // the imperative `transition:none` set above survives it (React only
+      // manages the style-object keys), so the column still tracks the cursor.
+      const crossedRail =
+        (ctx.lastWidth < CHAT_RAIL_W) !== (next < CHAT_RAIL_W);
+      ctx.lastWidth = next;
+      if (container) container.style.setProperty('--chat-w', `${next}px`);
+      if (crossedRail) setChatWidth(next);
+    };
+    const teardown = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', teardown);
+      window.removeEventListener('blur', teardown);
+      document.removeEventListener('mouseleave', teardown);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (container) container.style.transition = '';
+      const finalWidth = chatDragRef.current?.lastWidth ?? chatWidth;
+      chatDragRef.current = null;
+      setChatWidth(finalWidth);
+      try { localStorage.setItem('wiki:chat-width', String(finalWidth)); } catch {}
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', teardown);
+    window.addEventListener('blur', teardown);
+    document.addEventListener('mouseleave', teardown);
+  }, [chatWidth]);
+
+  const resetChatWidth = useCallback(() => {
+    setChatWidth(CHAT_DEFAULT_W);
+    try { localStorage.setItem('wiki:chat-width', String(CHAT_DEFAULT_W)); } catch {}
+  }, []);
+  const nudgeChatWidth = useCallback((delta: number) => {
+    setChatWidth((w) => {
+      const next = clampChatW(w + delta);
+      try { localStorage.setItem('wiki:chat-width', String(next)); } catch {}
       return next;
     });
   }, []);
@@ -805,7 +870,7 @@ export default function Home() {
   return (
     <div className="relative z-10 h-screen flex flex-col">
       {/* Top bar */}
-      <header className="h-12 border-b border-white/[0.06] bg-panel/85 backdrop-blur flex items-center px-3 gap-3 text-[0.9286rem] relative z-20">
+      <header className="topbar h-12 border-b border-white/[0.06] bg-panel/85 backdrop-blur flex items-center px-3 gap-3 text-[0.9286rem] relative z-20">
         <div className="flex items-center gap-2 px-2">
           <BookOpen size={16} className="text-accent" />
           <span className="font-display font-medium tracking-[0.02em] text-[1rem] text-ink">{t('topbar.brand')}</span>
@@ -886,15 +951,13 @@ export default function Home() {
             </button>
           )}
 
-          {user && user.role !== 'reader' && (
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowPropose(true)}
-              title={t('topbar.suggest.title')}
-            >
-              <Pencil size={13} /> {t('topbar.suggest')}
-            </button>
-          )}
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowSources(true)}
+            title={t('topbar.sources.title')}
+          >
+            <Files size={14} /> {t('topbar.sources.title')}
+          </button>
 
           {canReview && (
             <button
@@ -943,14 +1006,6 @@ export default function Home() {
               />
             )}
           </div>
-
-          <button
-            className="btn btn-icon"
-            onClick={() => setShowSources(true)}
-            title={t('topbar.sources.title')}
-          >
-            <Files size={14} />
-          </button>
 
           <button
             className="btn btn-icon"
@@ -1023,7 +1078,7 @@ export default function Home() {
           // off the same value the grid uses for the tree column —
           // no React state needed to keep them in sync.
           ['--tree-w' as string]: `${treeWidth}px`,
-          ['--chat-w' as string]: chatCollapsed ? '40px' : '320px',
+          ['--chat-w' as string]: `${chatWidth}px`,
           gridTemplateColumns: 'var(--tree-w) 1fr var(--chat-w)',
           // Pin row height to the available space. Without this, the
           // implicit grid row defaults to `auto` which sizes to
@@ -1057,6 +1112,29 @@ export default function Home() {
           {/* Thin visual line — invisible at rest, accent-tinted on
               hover/focus. The 1px stripe is centered inside the 6px
               hit area so it overlaps the existing border. */}
+          <div className="h-full w-px mx-auto bg-transparent group-hover:bg-accent/40 group-focus-visible:bg-accent/50 transition-colors duration-100" />
+        </div>
+
+        {/* Chat-resize gutter — mirrors the tree one, pinned to the
+            chat/main boundary (right: --chat-w). Always present (no collapse);
+            drag it to narrow the chat down to CHAT_MIN_W. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={chatWidth}
+          aria-valuemin={CHAT_MIN_W}
+          aria-valuemax={CHAT_MAX_W}
+          aria-label="Resize chat panel"
+          tabIndex={0}
+          className="absolute top-0 bottom-0 w-1.5 z-20 cursor-col-resize group"
+          style={{ right: 'var(--chat-w)', transform: 'translateX(3px)' }}
+          onMouseDown={startChatDrag}
+          onDoubleClick={resetChatWidth}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeChatWidth(16); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeChatWidth(-16); }
+          }}
+        >
           <div className="h-full w-px mx-auto bg-transparent group-hover:bg-accent/40 group-focus-visible:bg-accent/50 transition-colors duration-100" />
         </div>
 
@@ -1285,8 +1363,7 @@ export default function Home() {
           <ChatPanel
             onCitationClick={navigate}
             knownPaths={allPaths}
-            collapsed={chatCollapsed}
-            onToggleCollapse={toggleChat}
+            width={chatWidth}
           />
         </aside>
       </div>
