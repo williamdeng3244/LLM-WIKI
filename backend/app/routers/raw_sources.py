@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import current_user
+from app.core.auth import current_user, current_user_lax
 from app.core.config import settings
 from app.core.db import get_session
 from app.models import (
@@ -225,15 +225,35 @@ async def update_source(
         rs.title = body.title.strip() or rs.title
     if body.description is not None:
         rs.description = body.description.strip() or None
+    # Move between Raw Sources folders. Only touch when explicitly sent;
+    # an empty string clears the folder (back to top-level).
+    if "category" in body.model_fields_set:
+        rs.category = (body.category or "").strip() or None
     await session.commit()
     await session.refresh(rs)
     return rs
 
 
+# File extensions served as text/plain when opened inline, so the browser
+# renders the source in-tab instead of downloading it (many code files are
+# stored as application/octet-stream). Images / PDF / HTML keep their own
+# MIME (they render natively); binary docs fall through and download.
+_INLINE_TEXT_EXTS = {
+    "txt", "md", "markdown", "rst", "log", "csv", "tsv",
+    "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "java", "c", "h",
+    "cpp", "hpp", "cc", "hh", "cs", "go", "rs", "rb", "php", "swift",
+    "kt", "kts", "scala", "sh", "bash", "zsh", "fish", "ps1", "sql",
+    "json", "jsonl", "yaml", "yml", "toml", "ini", "cfg", "conf",
+    "properties", "xml", "css", "scss", "less", "r", "lua", "dart",
+    "vue", "svelte", "gradle", "proto", "graphql", "gql", "tf", "env",
+}
+
+
 @router.get("/{source_id}/download")
 async def download_source(
     source_id: int,
-    user: User = Depends(current_user),
+    inline: bool = False,
+    user: User = Depends(current_user_lax),
     session: AsyncSession = Depends(get_session),
 ):
     del user
@@ -243,10 +263,20 @@ async def download_source(
     path = Path(settings.raw_path) / rs.disk_filename
     if not path.exists():
         raise HTTPException(410, "File missing on disk")
+    # Inline open: coerce code/text files to text/plain so the browser
+    # renders them in-tab rather than downloading. Images/PDF keep theirs.
+    media = rs.mime_type
+    if inline:
+        ext = Path(rs.original_filename).suffix.lower().lstrip(".")
+        if ext in _INLINE_TEXT_EXTS:
+            media = "text/plain; charset=utf-8"
     return FileResponse(
         path,
-        media_type=rs.mime_type,
+        media_type=media,
         filename=rs.original_filename,
+        # `?inline=1` (Raw Sources tree "open file") views the file in the
+        # browser; the default attachment keeps the panel's download button.
+        content_disposition_type="inline" if inline else "attachment",
     )
 
 

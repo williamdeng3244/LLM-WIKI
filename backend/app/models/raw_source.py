@@ -44,6 +44,11 @@ class RawSource(Base):
     # disk file, and a future re-fetch job can detect drift.
     source_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Organizational folder in the Raw Sources tree (e.g. "articles",
+    # "meeting-notes", "archive"). NULL = top-level / uncategorized. A
+    # successful ingest auto-sets this to "archive".
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+
     ingest_status: Mapped[IngestStatus] = mapped_column(
         Enum(IngestStatus), default=IngestStatus.pending, index=True,
     )

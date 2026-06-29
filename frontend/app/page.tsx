@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import {
   Bell, Plug, Pencil, Inbox, Search, BookOpen, Sliders,
   SquarePen, FolderPlus, ArrowDownAZ, ArrowDownZA,
-  ChevronsDownUp, ChevronsUpDown,
+  ChevronsDownUp, ChevronsUpDown, ChevronRight,
   Copy, Clipboard, History, Bookmark, BookmarkCheck, FolderInput, Trash2,
   ExternalLink, FilePlus, Files, BookText, ShieldCheck, Sun, Moon, HelpCircle,
   Share2, Settings,
@@ -32,6 +32,7 @@ import SearchResults from '@/components/SearchResults';
 import NotificationsPanel from '@/components/NotificationsPanel';
 import QuickSwitcher, { pushRecent } from '@/components/QuickSwitcher';
 import SourcesPanel from '@/components/SourcesPanel';
+import SourcesTreeSection from '@/components/SourcesTreeSection';
 import SchemaEditor from '@/components/SchemaEditor';
 import LintPanel from '@/components/LintPanel';
 import UserManual from '@/components/UserManual';
@@ -43,7 +44,7 @@ import LoginModal from '@/components/LoginModal';
 import MovePageDialog from '@/components/MovePageDialog';
 import { useTheme } from '@/lib/theme';
 import { useLanguage } from '@/lib/i18n';
-import { api, type Page, type Role, type User } from '@/lib/api';
+import { api, type Page, type Role, type User, type ArtifactVisibility } from '@/lib/api';
 import {
   isWikiEmbedded,
   listenForDolphinAuth,
@@ -85,7 +86,7 @@ export default function Home() {
   // means the modal is closed. The full management UI now lives on the
   // dedicated /artifacts page (replaces the old ArtifactsPanel drawer).
   const [publishTarget, setPublishTarget] = useState<
-    | { kind: 'page'; pagePath: string; initialName?: string }
+    | { kind: 'page'; pagePath: string; initialName?: string; initialVisibility?: ArtifactVisibility }
     | { kind: 'file' }
     | null
   >(null);
@@ -306,6 +307,32 @@ export default function Home() {
   // current open-folder count (used to flip the collapse/expand toggle).
   const [pendingFolder, setPendingFolder] = useState<{ initial: string } | null>(null);
   const [treeOpenCount, setTreeOpenCount] = useState(0);
+  // WIKI tree section collapse. Default open; collapsing hides the tree
+  // via CSS (not unmount) so treeRef.reveal() + the tree's own open-state
+  // survive a collapse/expand cycle.
+  const [wikiOpen, setWikiOpen] = useState(true);
+  // Extra scroll room at the bottom of the sidebar: when the tree overflows
+  // its column, append a spacer ~1/4 of the tree's height so the last items
+  // (e.g. the Raw Sources section) can be scrolled up off the bottom edge
+  // instead of sitting flush against it. Recomputed by a ResizeObserver
+  // whenever the tree grows/shrinks (folders toggle, data loads, resize).
+  const sidebarRef = useRef<HTMLElement>(null);
+  const treeContentRef = useRef<HTMLDivElement>(null);
+  const [treeSpacer, setTreeSpacer] = useState(0);
+  useEffect(() => {
+    const aside = sidebarRef.current;
+    const content = treeContentRef.current;
+    if (!aside || !content) return;
+    const recompute = () => {
+      const contentH = content.scrollHeight;
+      setTreeSpacer(contentH > aside.clientHeight ? Math.round(contentH * 0.25) : 0);
+    };
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(content);
+    ro.observe(aside);
+    return () => ro.disconnect();
+  }, []);
   const customFolders = useCustomFolders();
   const folderOrder = useFolderOrder();
 
@@ -1138,7 +1165,8 @@ export default function Home() {
           <div className="h-full w-px mx-auto bg-transparent group-hover:bg-accent/40 group-focus-visible:bg-accent/50 transition-colors duration-100" />
         </div>
 
-        <aside className="border-r border-white/[0.06] bg-panel/60 overflow-y-auto scroll-thin">
+        <aside ref={sidebarRef} className="border-r border-white/[0.06] bg-panel/60 overflow-y-auto scroll-thin">
+          <div ref={treeContentRef}>
           <div className="tree-actions px-2 pt-2 pb-1.5 flex items-center justify-end gap-0.5 sticky top-0 bg-panel/85 backdrop-blur z-10 border-b border-white/[0.04]">
             <button
               className="w-7 h-7 rounded grid place-items-center text-muted hover:text-ink hover:bg-white/[0.06] transition-colors disabled:opacity-40"
@@ -1238,25 +1266,53 @@ export default function Home() {
               <div className="h-px mx-2 mt-2 bg-white/[0.06]" />
             </div>
           )}
-          <FileTree
-            ref={treeRef}
-            pages={pages}
-            selected={selected}
-            onSelect={navigate}
-            sort={treeSort}
-            customFolders={customFolders.folders}
-            pendingFolder={pendingFolder}
-            onPendingFolderConfirm={(name) => {
-              customFolders.add(name);
-              setPendingFolder(null);
-            }}
-            onPendingFolderCancel={() => setPendingFolder(null)}
-            onOpenChange={setTreeOpenCount}
-            onContextMenu={onTreeContextMenu}
-            onHover={setHoveredTree}
-            folderOrder={folderOrder.order}
-            onReorderFolders={folderOrder.move}
+          {/* WIKI section header — the concepts / entities / sources /
+              syntheses categories live under this. Collapsing hides the
+              tree via CSS (not unmount) so treeRef.reveal() + the tree's
+              own open-state survive a collapse/expand. */}
+          <div className="px-1.5 mt-1">
+            <button
+              onClick={() => setWikiOpen((o) => !o)}
+              className="w-full flex items-center gap-1 px-2 py-1 text-[0.6875rem] uppercase tracking-[0.12em] text-muted/80 hover:text-ink transition-colors"
+            >
+              <ChevronRight
+                size={11}
+                className={`shrink-0 transition-transform duration-150 ${wikiOpen ? 'rotate-90' : ''}`}
+              />
+              <span className="flex-1 text-left">{t('tree.section.wiki')}</span>
+            </button>
+          </div>
+          <div className={wikiOpen ? '' : 'hidden'}>
+            <FileTree
+              ref={treeRef}
+              pages={pages}
+              selected={selected}
+              onSelect={navigate}
+              sort={treeSort}
+              customFolders={customFolders.folders}
+              pendingFolder={pendingFolder}
+              onPendingFolderConfirm={(name) => {
+                customFolders.add(name);
+                setPendingFolder(null);
+              }}
+              onPendingFolderCancel={() => setPendingFolder(null)}
+              onOpenChange={setTreeOpenCount}
+              onContextMenu={onTreeContextMenu}
+              onHover={setHoveredTree}
+              folderOrder={folderOrder.order}
+              onReorderFolders={folderOrder.move}
+            />
+          </div>
+
+          {/* RAW SOURCES section — the uploaded originals (PDF / Markdown /
+              images / imported URLs) before ingest. Clicking a row opens
+              the full SourcesPanel to preview / download / ingest. */}
+          <SourcesTreeSection
+            enabled={!!user}
+            onOpenPanel={() => setShowSources(true)}
           />
+          </div>
+          <div aria-hidden style={{ height: treeSpacer }} />
         </aside>
 
         <main className="relative overflow-hidden flex flex-col">
@@ -1342,6 +1398,16 @@ export default function Home() {
                 onMovePage={
                   user && (user.role === 'admin' || user.role === 'editor')
                     ? (p) => setMovingPagePath(p)
+                    : undefined
+                }
+                onShareLink={
+                  user
+                    ? (p) => setPublishTarget({
+                        kind: 'page',
+                        pagePath: p,
+                        initialName: getTabTitle(p),
+                        initialVisibility: 'private',
+                      })
                     : undefined
                 }
               />
@@ -1484,6 +1550,9 @@ export default function Home() {
           // disables the flag, the backend returns 403 and the modal shows
           // the error.
           allowPublic={true}
+          initialVisibility={
+            publishTarget.kind === 'page' ? publishTarget.initialVisibility : undefined
+          }
           onClose={() => setPublishTarget(null)}
         />
       )}

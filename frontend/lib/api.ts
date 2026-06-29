@@ -154,6 +154,7 @@ export type RawSource = {
   mime_type: string;
   size_bytes: number;
   source_url: string | null;
+  category: string | null;
   ingest_status: IngestStatus;
   last_ingested_at: string | null;
   last_ingest_notes: string | null;
@@ -503,11 +504,15 @@ export const api = {
     call<Bookmark>(`/bookmarks/${encodeURI(path)}`, { method: 'POST' }),
   removeBookmark: (path: string) =>
     call<void>(`/bookmarks/${encodeURI(path)}`, { method: 'DELETE' }),
-  updateRawSource: (id: number, body: { title?: string; description?: string }) =>
+  updateRawSource: (id: number, body: { title?: string; description?: string; category?: string }) =>
     call<RawSource>(`/raw/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRawSource: (id: number) =>
     call<void>(`/raw/${id}`, { method: 'DELETE' }),
   rawSourceDownloadURL: (id: number) => `${API_BASE}/raw/${id}/download`,
+  // Same file, but asks the backend for inline disposition so the browser
+  // views it (txt / pdf / images render in-tab) instead of downloading —
+  // used by the Raw Sources tree's "open file" row action.
+  rawSourceViewURL: (id: number) => `${API_BASE}/raw/${id}/download?inline=1`,
 
   // ── Gated artifacts ─────────────────────────────────────────────────
   createArtifactFromFile: async (

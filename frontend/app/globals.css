@@ -356,6 +356,14 @@ select option { background: var(--bg-panel); color: var(--text); }
 [data-theme="light"] .theme-scrim { background-color: rgba(255, 255, 255, 0.28); }
 [data-theme="light"] .reading-wash { background-color: rgba(255, 255, 255, 0.72); }
 
+/* Page toolbar (the path + actions strip above a note). Dark by default to
+   match the space theme; the light override below keeps the bright bar.
+   The breadcrumb text follows: light ink on dark, near-black on light. */
+.page-toolbar { background-color: rgba(7, 10, 20, 0.90); }
+.page-crumb { color: rgba(230, 233, 242, 0.75); }
+[data-theme="light"] .page-toolbar { background-color: rgba(255, 255, 255, 0.90); }
+[data-theme="light"] .page-crumb { color: #18181b; }
+
 /* Aurora (default theme) background video — light mode.
    Instead of a separate, flatter light clip, light reuses the SAME dark
    starfield (`bg.mp4`) and inverts its luminance: invert(1) turns deep space

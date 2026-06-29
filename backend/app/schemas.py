@@ -262,6 +262,7 @@ class RawSourceOut(BaseModel):
     mime_type: str
     size_bytes: int
     source_url: Optional[str] = None
+    category: Optional[str] = None
     ingest_status: IngestStatus
     last_ingested_at: Optional[datetime] = None
     last_ingest_notes: Optional[str] = None
@@ -272,6 +273,9 @@ class RawSourceOut(BaseModel):
 class RawSourceUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    # Folder to move the source into; "" / null clears it (back to
+    # top-level). Only applied when the field is explicitly present.
+    category: Optional[str] = None
 
 
 class RawSourceFromUrl(BaseModel):
