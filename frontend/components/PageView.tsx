@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import {
   Flag as FlagIcon, Lock, Unlock, Pencil, MoreVertical,
   FolderInput, Bookmark, BookmarkCheck, GitMerge, FileDown,
-  Clipboard, History, LocateFixed, Trash2, ExternalLink,
+  Clipboard, History, LocateFixed, Trash2, ExternalLink, Share2,
 } from 'lucide-react';
 import Markdown from './Markdown';
 import ContextMenu, { type MenuItem } from './ContextMenu';
@@ -22,7 +22,7 @@ function formatDate(s: string): string {
 export default function PageView({
   page, currentUser, allPaths, users, onPropose, onLock, onNavigate,
   onRevealInTree, onShowVersionHistory,
-  isBookmarked, onToggleBookmark, onDeletePage, onMovePage,
+  isBookmarked, onToggleBookmark, onDeletePage, onMovePage, onShareLink,
 }: {
   page: Page | null;
   currentUser: User | null;
@@ -43,6 +43,9 @@ export default function PageView({
    *  More-actions "Move file to…" item is enabled and clicks open
    *  the parent-managed MovePageDialog. */
   onMovePage?: (path: string) => void;
+  /** Opens the "Publish as gated link" modal pre-set to Private for this
+   *  page, from the More-actions "Share private link" item. */
+  onShareLink?: (path: string) => void;
 }) {
   const [newComment, setNewComment] = useState('');
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number } | null>(null);
@@ -156,6 +159,13 @@ export default function PageView({
       },
       {
         kind: 'item',
+        label: t('menu.page.shareLink'),
+        icon: <Share2 size={13} />,
+        disabled: !onShareLink,
+        onClick: () => onShareLink?.(p.path),
+      },
+      {
+        kind: 'item',
         label: t('menu.page.export'),
         icon: <FileDown size={13} />,
         onClick: () => window.print(),
@@ -209,9 +219,9 @@ export default function PageView({
     <div className="h-full flex flex-col reading-wash">
       {/* Slim sticky toolbar — path + actions only. The title scrolls with
           the body below, Obsidian-style. */}
-      <div className="shrink-0 px-6 py-2 border-b border-black/8 bg-paper/55 backdrop-blur flex items-center justify-between gap-4 z-10">
+      <div className="page-toolbar shrink-0 px-6 py-2 border-b border-black/10 backdrop-blur flex items-center justify-between gap-4 z-10">
         <div
-          className="text-[0.75rem] uppercase tracking-[0.18em] text-muted truncate min-w-0"
+          className="page-crumb text-[0.75rem] uppercase tracking-[0.16em] font-medium truncate min-w-0"
           title={page.path}
         >
           {page.path.split('/').join(' · ')}

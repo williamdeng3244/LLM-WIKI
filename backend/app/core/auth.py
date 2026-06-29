@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -102,6 +102,34 @@ async def current_user(
     user = await _resolve_via_token(authorization, session)
     if user is None and settings.auth_mode == "stub":
         user = await _resolve_via_stub(x_user_email, x_user_role, session)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="User is inactive")
+    return user
+
+
+async def current_user_lax(
+    authorization: Optional[str] = Header(default=None),
+    x_user_email: Optional[str] = Header(default=None),
+    x_user_role: Optional[str] = Header(default=None),
+    wiki_jwt: Optional[str] = Cookie(default=None),
+    wiki_email: Optional[str] = Cookie(default=None),
+    wiki_role: Optional[str] = Cookie(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> User:
+    """current_user, but also honoring the auth COOKIES the frontend mirrors
+    (wiki_jwt / wiki_email + wiki_role). Top-level browser navigations — e.g.
+    opening a raw source's file in a new tab — carry cookies but none of our
+    auth *headers*, so the header-only current_user would 401 them. Use only
+    on read-only GET routes; never on mutating endpoints (cookie auth there
+    would be CSRF-able)."""
+    token = authorization or (f"Bearer {wiki_jwt}" if wiki_jwt else None)
+    user = await _resolve_via_token(token, session)
+    if user is None and settings.auth_mode == "stub":
+        user = await _resolve_via_stub(
+            x_user_email or wiki_email, x_user_role or wiki_role, session,
+        )
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     if not user.is_active:

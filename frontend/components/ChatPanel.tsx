@@ -18,11 +18,10 @@ type Msg = {
 const STORAGE_KEY = 'wiki:chat-history';
 const MODE_KEY = 'wiki:chat-mode';
 
-const SUGGESTIONS = [
-  'How does authentication work?',
-  'What is on the roadmap?',
-  'Summarize the permission model',
-];
+// The three canned questions that used to live here were removed as
+// unhelpful. The (now empty) array stays so re-introducing suggestions
+// later is a one-line change; the empty-state render guards on `.length`.
+const SUGGESTIONS: string[] = [];
 
 export default function ChatPanel({
   onCitationClick, knownPaths, width = 320,
@@ -156,17 +155,19 @@ export default function ChatPanel({
             <div className="mt-1 text-[0.7857rem] text-muted/85">
               {mode === 'wiki' ? t('chat.intro.wiki') : t('chat.intro.sources')}
             </div>
-            <div className="mt-3 space-y-1.5">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  className="block text-left text-accent hover:underline text-[0.8571rem]"
-                  onClick={() => setInput(s)}
-                >
-                  {s} →
-                </button>
-              ))}
-            </div>
+            {SUGGESTIONS.length > 0 && (
+              <div className="mt-3 space-y-1.5">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    className="block text-left text-accent hover:underline text-[0.8571rem]"
+                    onClick={() => setInput(s)}
+                  >
+                    {s} →
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           messages.map((m, i) => <ChatBubble key={i} msg={m} onCitationClick={onCitationClick} knownPaths={knownPaths} />)
@@ -190,7 +191,7 @@ export default function ChatPanel({
           ref={inputRef}
           rows={3}
           className="form-input form-textarea flex-1 max-h-[220px] py-2 resize-none leading-snug"
-          placeholder="Ask the wiki…"
+          placeholder={t('chat.input.placeholder')}
           value={input}
           onChange={(e) => {
             setInput(e.target.value);

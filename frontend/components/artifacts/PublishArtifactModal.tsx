@@ -35,7 +35,7 @@ function presetToISO(preset: ExpiryPreset, customDate: string): string | null {
 }
 
 export default function PublishArtifactModal({
-  mode, allowPublic, onClose, onPublished,
+  mode, allowPublic, onClose, onPublished, initialVisibility,
 }: {
   mode: Mode;
   /** True when ARTIFACTS_ALLOW_PUBLIC=true on the instance — gates the
@@ -46,12 +46,16 @@ export default function PublishArtifactModal({
   /** Fires after a successful publish so the parent can refresh its
    *  artifact list. The modal stays open showing the URL. */
   onPublished?: (resp: ArtifactCreateResponse) => void;
+  /** Pre-selected visibility when the modal opens. The page kebab's
+   *  "Share private link" launches it with 'private' already chosen;
+   *  defaults to 'wiki' when omitted. */
+  initialVisibility?: ArtifactVisibility;
 }) {
   const initialName =
     mode.kind === 'page' ? mode.initialName ?? '' : '';
 
   const [name, setName] = useState(initialName);
-  const [visibility, setVisibility] = useState<ArtifactVisibility>('wiki');
+  const [visibility, setVisibility] = useState<ArtifactVisibility>(initialVisibility ?? 'wiki');
   const [expiry, setExpiry] = useState<ExpiryPreset>('never');
   const [customDate, setCustomDate] = useState<string>('');
   const [file, setFile] = useState<File | null>(null);
@@ -66,6 +70,18 @@ export default function PublishArtifactModal({
   const [result, setResult] = useState<ArtifactCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const firstField = useRef<HTMLInputElement | null>(null);
+
+  // Rebase the server-built URL onto the browser's real origin. The
+  // backend's PUBLIC_BASE_URL defaults to http://localhost:3000, which is
+  // wrong once the wiki is served from anywhere else; the /a/ viewer is
+  // same-origin (proxied through the frontend), so swapping in
+  // window.location.origin yields the correct link wherever it's hosted.
+  const shareUrl = result
+    ? (() => {
+        try { return window.location.origin + new URL(result.url).pathname; }
+        catch { return result.url; }
+      })()
+    : '';
 
   // Esc closes; body scroll lock.
   useEffect(() => {
@@ -119,7 +135,7 @@ export default function PublishArtifactModal({
   async function copyURL() {
     if (!result) return;
     try {
-      await navigator.clipboard.writeText(result.url);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch { /* clipboard blocked */ }
@@ -155,7 +171,7 @@ export default function PublishArtifactModal({
             </p>
             <div className="flex items-stretch gap-2">
               <input
-                readOnly value={result.url}
+                readOnly value={shareUrl}
                 className="flex-1 bg-elev text-ink border border-line focus:border-accent focus:outline-none rounded px-2.5 py-1.5 text-[0.82rem] font-mono"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
@@ -167,7 +183,7 @@ export default function PublishArtifactModal({
                 {copied ? 'Copied' : 'Copy'}
               </button>
               <a
-                href={result.url} target="_blank" rel="noreferrer"
+                href={shareUrl} target="_blank" rel="noreferrer"
                 className="px-2.5 py-1.5 rounded border border-line bg-panel hover:bg-line/40 text-[0.82rem] flex items-center gap-1.5"
               >
                 <ExternalLink size={13} /> Open

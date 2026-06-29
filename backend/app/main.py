@@ -157,6 +157,12 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE IF EXISTS raw_sources "
             "ADD COLUMN IF NOT EXISTS source_url TEXT"
         ))
+        # Raw Sources folders: organizational category (articles /
+        # meeting-notes / archive / custom). NULL = uncategorized.
+        await conn.execute(text(
+            "ALTER TABLE IF EXISTS raw_sources "
+            "ADD COLUMN IF NOT EXISTS category VARCHAR"
+        ))
         # Issue #12 backfill: pre-fix, review_requested notifications
         # were never cleared when the revision left the `proposed`
         # state. Mark all such stale rows as read so existing installs

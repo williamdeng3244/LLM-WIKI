@@ -708,6 +708,10 @@ async def run_apply_phase(
         rs.ingest_status = IngestStatus.failed
     else:  # partially_failed
         rs.ingest_status = IngestStatus.done  # some drafts landed
+    # On a successful ingest, auto-move the source into the Archive folder
+    # — it has served its purpose (now reflected in wiki pages).
+    if rs.ingest_status == IngestStatus.done:
+        rs.category = "archive"
 
     rs.last_ingested_at = datetime.now(timezone.utc)
     rs.last_ingest_notes = (
