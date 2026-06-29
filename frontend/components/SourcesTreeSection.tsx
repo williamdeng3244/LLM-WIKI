@@ -29,13 +29,16 @@ const ARCHIVE = 'archive';
  *  scroll area). The "archive" folder auto-fills when a source's ingest
  *  completes. Shares the SWR key 'raw-sources' with SourcesPanel. */
 export default function SourcesTreeSection({
-  enabled, onOpenPanel, onOpenMarkdown,
+  enabled, onOpenPanel, onOpenMarkdown, canManage,
 }: {
   enabled: boolean;
   onOpenPanel: () => void;
   /** Open a markdown source in-app (rendered in a tab) instead of a new
    *  browser tab. PDFs/images still open externally. */
   onOpenMarkdown?: (s: RawSource) => void;
+  /** Whether the current user may delete raw sources (admin only). Gates the
+   *  row's "Delete source" action; the parent decides the role policy. */
+  canManage?: boolean;
 }) {
   const { t } = useLanguage();
   const rawFolders = useRawFolders();
@@ -102,6 +105,12 @@ export default function SourcesTreeSection({
     await mutate();
   }
 
+  async function deleteSource(s: RawSource) {
+    if (!window.confirm(t('tree.rawCat.deleteSourceConfirm').replace('{title}', s.title))) return;
+    try { await api.deleteRawSource(s.id); }
+    finally { await mutate(); }
+  }
+
   const sectionMenu: MenuItem[] = [
     { kind: 'item', label: t('tree.rawCat.newFolder'), icon: <FolderPlus size={13} />, onClick: promptNewFolder },
   ];
@@ -125,12 +134,26 @@ export default function SourcesTreeSection({
         if (clean) { rawFolders.add(clean); move(s, clean); }
       },
     },
+    ...(canManage ? [
+      { kind: 'divider' as const },
+      {
+        kind: 'item' as const, label: t('tree.rawCat.deleteSource'),
+        icon: <Trash2 size={13} />, danger: true, onClick: () => deleteSource(s),
+      },
+    ] : []),
   ];
 
   const renderRow = (s: RawSource) => {
     const Icon = iconFor(s.mime_type);
     return (
-      <div key={s.id} className="group flex items-center">
+      <div
+        key={s.id}
+        className="group flex items-center"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setCtx({ x: e.clientX, y: e.clientY, source: s });
+        }}
+      >
         <button
           title={s.title}
           onClick={() => {

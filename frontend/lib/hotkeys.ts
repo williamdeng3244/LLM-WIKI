@@ -29,7 +29,11 @@ export const HOTKEYS: HotkeyDef[] = [
   { id: 'switcher', labelKey: 'shortcuts.action.switcher', scope: 'global', default: 'mod+o' },
   { id: 'suggest', labelKey: 'shortcuts.action.suggest', scope: 'global', default: 'mod+e' },
   { id: 'newTab', labelKey: 'shortcuts.action.newTab', scope: 'tabs', default: 'mod+t' },
-  { id: 'closeTab', labelKey: 'shortcuts.action.closeTab', scope: 'tabs', default: 'mod+w' },
+  // Unbound by default: Ctrl/Cmd+W is browser-reserved (close browser tab) and
+  // a web page cannot override it — binding it advertised an in-app "close tab"
+  // that actually closed the whole wiki. Close tabs via the tab's × button or
+  // middle-click; users can assign a custom combo in Settings → Hotkeys.
+  { id: 'closeTab', labelKey: 'shortcuts.action.closeTab', scope: 'tabs', default: '' },
 ];
 
 // Shown in the list but not rebindable (special-cased / system keys).

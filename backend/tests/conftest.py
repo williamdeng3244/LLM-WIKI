@@ -151,3 +151,77 @@ def create_draft(
     r = client.post("/api/pages/draft", json=payload)
     r.raise_for_status()
     return r.json()
+
+
+# ── Test isolation: leave a live/dev stack clean ────────────────────────
+# These black-box tests run against a LIVE backend and create qa/ + mock/
+# pages, throwaway raw sources, and (via the admin tests) overwrite the agent
+# playbook. To stop a run from polluting the dev wiki, snapshot the playbook
+# at session start and restore it at finish, then delete the test namespace
+# at finish. All best-effort: cleanup never fails the run.
+
+_PLAYBOOK_SNAPSHOT: dict = {}
+_TEST_RAW_FILENAMES = {
+    "note.txt", "src.txt", "a.md", "a.pdf", "a.png", "d.txt", "readme.txt",
+    "report.txt", "s.txt", "x.bin", "data.weird", "hypatia.txt",
+}
+
+
+def _admin_client() -> httpx.Client:
+    # Reuse the seeded stub admin so cleanup doesn't create extra users.
+    return _client("admin", "admin@example.com")
+
+
+def pytest_sessionstart(session):  # noqa: ARG001
+    """Snapshot the agent playbook before the admin tests overwrite it."""
+    try:
+        c = _admin_client()
+        try:
+            r = c.get("/api/admin/idea-file")
+            if r.status_code == 200:
+                _PLAYBOOK_SNAPSHOT["content"] = r.json().get("content") or ""
+        finally:
+            c.close()
+    except Exception:
+        pass
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
+    """Restore the playbook and delete every qa/ + mock/ page and throwaway
+    raw source the suite created, so the live wiki is left as it was found."""
+    try:
+        c = _admin_client()
+    except Exception:
+        return
+    try:
+        snap = _PLAYBOOK_SNAPSHOT.get("content")
+        if snap is not None:
+            try:
+                c.put("/api/admin/idea-file", json={"content": snap})
+            except Exception:
+                pass
+        try:
+            r = c.get("/api/pages")
+            if r.status_code == 200:
+                for p in r.json():
+                    path = p.get("path", "")
+                    if path.startswith("qa/") or path.startswith("mock/"):
+                        try:
+                            c.delete(f"/api/pages/{path}")
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        try:
+            r = c.get("/api/raw")
+            if r.status_code == 200:
+                for rs in r.json():
+                    if rs.get("original_filename") in _TEST_RAW_FILENAMES:
+                        try:
+                            c.delete(f"/api/raw/{rs['id']}")
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+    finally:
+        c.close()

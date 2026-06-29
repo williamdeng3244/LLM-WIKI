@@ -1312,6 +1312,7 @@ export default function Home() {
             enabled={!!user}
             onOpenPanel={() => setShowSources(true)}
             onOpenMarkdown={(s) => tabs.openRawSource(s.id, s.title)}
+            canManage={user?.role === 'admin'}
           />
           </div>
           <div aria-hidden style={{ height: treeSpacer }} />
