@@ -35,7 +35,7 @@ export default function NewTab({
           </button>
           <button onClick={onClose} className={`${itemBase} ${link}`}>
             <span>{t('newtab.close')}</span>
-            <span className={kbd}>Ctrl + W</span>
+            <span className="text-[0.7143rem] text-muted/70">{t('newtab.closeHint')}</span>
           </button>
         </div>
       </div>

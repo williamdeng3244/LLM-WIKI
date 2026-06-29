@@ -373,6 +373,7 @@ async def delete_source(
     user: User = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    # Raw-source deletion is admin-only.
     if user.role != Role.admin:
         raise HTTPException(403, "Admins only")
     rs = await session.get(RawSource, source_id)
