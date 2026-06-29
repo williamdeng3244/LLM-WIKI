@@ -369,7 +369,13 @@ async def _call_llm(
         tool_name=INGEST_TOOL_NAME,
         tool_description="Submit the proposed wiki edits for human review.",
         tool_schema=INGEST_TOOL_SCHEMA,
-        max_tokens=8000,
+        # 8000 was too small: the agent writes a full `summary` first, then
+        # runs out of output budget partway through the `edits` array, so the
+        # streamed partial-JSON recovery yields `edits: []` — surfacing as
+        # "agent proposed no edits" even though the summary describes them.
+        # Sonnet 4.x allows up to 64K output tokens; 24000 fits ~15 concise
+        # pages + the summary with headroom.
+        max_tokens=30000,
     )
 
 

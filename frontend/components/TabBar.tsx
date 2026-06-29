@@ -12,6 +12,9 @@ function tabMeta(t: Tab, getTitle: (path: string) => string) {
       Icon: t.graphMode === '3d' ? Box : Network,
     };
   }
+  if (t.kind === 'rawsource') {
+    return { label: t.title, Icon: FileText };
+  }
   return { label: 'New tab', Icon: FilePlus2 };
 }
 

@@ -189,8 +189,8 @@ export default function ChatPanel({
       <div className="border-t border-black/8 p-3 flex gap-2 items-end">
         <textarea
           ref={inputRef}
-          rows={3}
-          className="form-input form-textarea flex-1 max-h-[220px] py-2 resize-none leading-snug"
+          rows={5}
+          className="form-input form-textarea flex-1 max-h-[340px] py-2 resize-none leading-snug"
           placeholder={t('chat.input.placeholder')}
           value={input}
           onChange={(e) => {
@@ -199,7 +199,7 @@ export default function ChatPanel({
             // questions stay visible instead of scrolling inside one row.
             const el = e.currentTarget;
             el.style.height = 'auto';
-            el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
+            el.style.height = `${Math.min(el.scrollHeight, 340)}px`;
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {

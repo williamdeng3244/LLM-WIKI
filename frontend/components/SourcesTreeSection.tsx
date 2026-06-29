@@ -29,10 +29,13 @@ const ARCHIVE = 'archive';
  *  scroll area). The "archive" folder auto-fills when a source's ingest
  *  completes. Shares the SWR key 'raw-sources' with SourcesPanel. */
 export default function SourcesTreeSection({
-  enabled, onOpenPanel,
+  enabled, onOpenPanel, onOpenMarkdown,
 }: {
   enabled: boolean;
   onOpenPanel: () => void;
+  /** Open a markdown source in-app (rendered in a tab) instead of a new
+   *  browser tab. PDFs/images still open externally. */
+  onOpenMarkdown?: (s: RawSource) => void;
 }) {
   const { t } = useLanguage();
   const rawFolders = useRawFolders();
@@ -130,7 +133,12 @@ export default function SourcesTreeSection({
       <div key={s.id} className="group flex items-center">
         <button
           title={s.title}
-          onClick={() => window.open(api.rawSourceViewURL(s.id), '_blank', 'noopener,noreferrer')}
+          onClick={() => {
+            const isMarkdown = s.mime_type === 'text/markdown'
+              || /\.(md|markdown)$/i.test(s.original_filename || '');
+            if (isMarkdown && onOpenMarkdown) onOpenMarkdown(s);
+            else window.open(api.rawSourceViewURL(s.id), '_blank', 'noopener,noreferrer');
+          }}
           className="flex-1 min-w-0 text-left px-2 py-[3px] rounded text-[0.8929rem] flex items-center gap-1.5 text-muted hover:text-ink hover:bg-white/[0.05] transition-colors"
         >
           <Icon size={12} className="shrink-0 text-accent/70" />

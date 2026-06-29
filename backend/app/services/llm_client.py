@@ -303,6 +303,14 @@ async def tool_call(
         async for _event in stream:
             pass
         final = await stream.get_final_message()
+    if getattr(final, "stop_reason", None) == "max_tokens":
+        log.warning(
+            "Tool call %s hit max_tokens=%d — the model's output was truncated, "
+            "so the parsed tool input is likely incomplete (e.g. an empty or "
+            "partial `edits` array). Raise max_tokens or have the agent emit "
+            "fewer/shorter items.",
+            tool_name, max_tokens,
+        )
     for block in final.content:
         if getattr(block, "type", None) == "tool_use" and block.name == tool_name:
             return block.input  # type: ignore[no-any-return,return-value]
