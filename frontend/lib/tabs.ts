@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 export type Tab =
   | { id: string; kind: 'page'; path: string }
   | { id: string; kind: 'graph'; graphMode: '2d' | '3d' }
+  | { id: string; kind: 'rawsource'; sourceId: number; title: string }
   | { id: string; kind: 'new' };
 
 const KEY = 'wiki:tabs';
@@ -106,6 +107,18 @@ export function useTabs() {
     });
   }, [update]);
 
+  // Open a raw source (markdown) in-app, rendered in the main area — used by
+  // the Raw Sources tree so .md files render in a tab instead of dumping raw
+  // text into a new browser tab. Replaces the active tab, like opening a page.
+  const openRawSource = useCallback((sourceId: number, title: string) => {
+    update((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === s.activeId ? { id: t.id, kind: 'rawsource', sourceId, title } : t
+      ),
+      activeId: s.activeId,
+    }));
+  }, [update]);
+
   const newTab = useCallback(() => {
     update((s) => {
       const id = makeId();
@@ -140,6 +153,7 @@ export function useTabs() {
     openPage,
     rewritePagePath,
     openGraph,
+    openRawSource,
     newTab,
     closeTab,
     activate,

@@ -308,6 +308,29 @@ const FileTree = forwardRef<FileTreeHandle, {
     for (const c of tree.children) if (!c.isFile) s.add(c.path);
     return s;
   });
+  // Folders we've already surfaced. A `pages` refetch — after a draft is
+  // published/approved, or ingest creates new category pages — rebuilds the
+  // tree; previously brand-new top-level folders were never added to
+  // `openSet`, so they rendered collapsed and looked like the category had
+  // "disappeared" after publish. Auto-expand only genuinely-new folders so
+  // folders the user deliberately collapsed stay collapsed.
+  const seenFoldersRef = useRef<Set<string>>(
+    new Set(tree.children.filter((c) => !c.isFile).map((c) => c.path)),
+  );
+  useEffect(() => {
+    setOpenSet((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const c of tree.children) {
+        if (!c.isFile && !seenFoldersRef.current.has(c.path)) {
+          seenFoldersRef.current.add(c.path);
+          next.add(c.path);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tree]);
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Top-level folder reorder via drag. Local state holds the drag

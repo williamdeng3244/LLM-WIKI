@@ -33,6 +33,7 @@ import NotificationsPanel from '@/components/NotificationsPanel';
 import QuickSwitcher, { pushRecent } from '@/components/QuickSwitcher';
 import SourcesPanel from '@/components/SourcesPanel';
 import SourcesTreeSection from '@/components/SourcesTreeSection';
+import RawSourceView from '@/components/RawSourceView';
 import SchemaEditor from '@/components/SchemaEditor';
 import LintPanel from '@/components/LintPanel';
 import UserManual from '@/components/UserManual';
@@ -1265,6 +1266,7 @@ export default function Home() {
           <SourcesTreeSection
             enabled={!!user}
             onOpenPanel={() => setShowSources(true)}
+            onOpenMarkdown={(s) => tabs.openRawSource(s.id, s.title)}
           />
           </div>
           <div aria-hidden style={{ height: treeSpacer }} />
@@ -1365,6 +1367,13 @@ export default function Home() {
                       })
                     : undefined
                 }
+              />
+            ) : activeTab?.kind === 'rawsource' ? (
+              <RawSourceView
+                sourceId={activeTab.sourceId}
+                title={activeTab.title}
+                knownPaths={allPaths}
+                onNavigate={navigate}
               />
             ) : (
               <NewTab

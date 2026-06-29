@@ -206,6 +206,11 @@ export const MESSAGES = {
     'tree.rawCat.rename': 'Rename folder',
     'tree.rawCat.renamePrompt': 'Rename folder to:',
     'tree.rawCat.delete': 'Delete folder',
+    'newtab.heading': 'New tab',
+    'newtab.createNote': 'Create new note',
+    'newtab.goToFile': 'Go to file',
+    'newtab.close': 'Close',
+    'newtab.cantCreate': 'Readers cannot create notes',
 
     // File right-click context menu
     'menu.file.openNewTab': 'Open in new tab',
@@ -837,6 +842,11 @@ export const MESSAGES = {
     'tree.rawCat.rename': '重命名文件夹',
     'tree.rawCat.renamePrompt': '重命名为：',
     'tree.rawCat.delete': '删除文件夹',
+    'newtab.heading': '新标签页',
+    'newtab.createNote': '新建笔记',
+    'newtab.goToFile': '跳转到文件',
+    'newtab.close': '关闭',
+    'newtab.cantCreate': '只读用户无法创建笔记',
 
     // File right-click context menu
     'menu.file.openNewTab': '在新标签页打开',

@@ -513,6 +513,15 @@ export const api = {
   // views it (txt / pdf / images render in-tab) instead of downloading —
   // used by the Raw Sources tree's "open file" row action.
   rawSourceViewURL: (id: number) => `${API_BASE}/raw/${id}/download?inline=1`,
+  // Fetch a raw source's bytes as text (authed) for in-app rendering of
+  // markdown sources in a tab, instead of opening a new browser tab.
+  rawSourceText: async (id: number): Promise<string> => {
+    const res = await fetch(`${API_BASE}/raw/${id}/download?inline=1`, {
+      headers: authHeaders(), credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.text();
+  },
 
   // ── Gated artifacts ─────────────────────────────────────────────────
   createArtifactFromFile: async (
