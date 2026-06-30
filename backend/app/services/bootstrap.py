@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.models import Category, Page, PageStability, Revision, RevisionStatus, User, Role
 from app.services.indexer import reindex_page, resolve_all_links
 from app.services.linker import extract_tags
-from app.services.vault import list_files, read_file
+from app.services.vault import canonical_page_path, list_files, read_file
 
 log = logging.getLogger(__name__)
 
@@ -96,20 +96,24 @@ async def import_disk_vault(
     cats = await ensure_categories(session)
     created = 0
     for rel in list_files(base=base_path):
-        # Existing?
+        # The vault stores `concepts/foo.md`; the DB identity is the bare
+        # `concepts/foo` (Bug #19). Canonicalise before the existence check
+        # AND when creating, so a restart can't re-import a page that already
+        # exists under its no-`.md` path as a `.md` twin.
+        canonical = canonical_page_path(rel)
         existing = (await session.execute(
-            select(Page).where(Page.path == rel)
+            select(Page).where(Page.path == canonical)
         )).scalar_one_or_none()
         if existing:
             continue
         vf = read_file(rel, base=base_path)
         if vf is None:
             continue
-        category_slug = rel.split("/")[0] if "/" in rel else "sources"
+        category_slug = canonical.split("/")[0] if "/" in canonical else "sources"
         cat = cats.get(category_slug)
         all_tags = list(dict.fromkeys((vf.tags or []) + extract_tags(vf.body)))
         page = Page(
-            path=rel, title=vf.title,
+            path=canonical, title=vf.title,
             category_id=cat.id if cat else None,
             stability=PageStability.stable,
             tags=all_tags,

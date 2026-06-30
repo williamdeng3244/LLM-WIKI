@@ -33,6 +33,7 @@ from app.models import (
 from app.services.converters import convert_via_mineru
 from app.services.llm_client import active_model, tool_call as llm_tool_call
 from app.services.retrieval import RetrievalContext, gather_context
+from app.services.vault import canonical_page_path
 from app.services.workflow import create_draft, submit_for_review
 
 log = logging.getLogger(__name__)
@@ -407,6 +408,44 @@ async def _call_llm(
     )
 
 
+# Bug #18: the ingest model (e.g. claude-sonnet-4-x) intermittently returns an
+# empty `edits` array while narrating the pages it "created" in the prose
+# `summary`, violating the playbook ("text in `summary` creates nothing"). The
+# pages are fully enumerated in the summary, so a single corrective re-call
+# recovers them. `run_plan_phase` retries once on an empty plan; this constant
+# is the correction appended to the system prompt. Model-agnostic — it also
+# rescues any provider that drops the structured array.
+_EMPTY_EDITS_CORRECTION = (
+    "RETRY — CONTRACT VIOLATION. Your previous response returned an EMPTY "
+    "`edits` array while describing pages you 'created' in `summary`. Per the "
+    "playbook, prose in `summary` creates NOTHING — only objects in the "
+    "`edits` array become wiki pages. You clearly intend to create the pages "
+    "you listed, so re-emit NOW: every page you described must appear as a "
+    "full edit object (kind, path, title, body, rationale) inside `edits`. "
+    "Only return an empty `edits` array if the document genuinely warrants "
+    "zero changes — which your own summary contradicts."
+)
+
+
+def _clean_edits(result: dict, run_id: int) -> list[dict]:
+    """Filter the agent's `edits` to well-formed objects, writing the cleaned
+    list back onto `result`. The model occasionally emits bare strings ("No
+    edits needed") instead of objects despite the schema (Bug #14); drop those
+    so downstream `e.get(...)` never runs against a string."""
+    raw_edits = result.get("edits") or []
+    if not isinstance(raw_edits, list):
+        raw_edits = []
+    dropped = sum(1 for e in raw_edits if not isinstance(e, dict))
+    edits = [e for e in raw_edits if isinstance(e, dict)]
+    if dropped:
+        log.warning(
+            "Ingest run %d: dropped %d non-dict edit entries from agent output",
+            run_id, dropped,
+        )
+    result["edits"] = edits
+    return edits
+
+
 # ── PLAN PHASE ─────────────────────────────────────────────────────────────
 
 async def run_plan_phase(
@@ -440,23 +479,37 @@ async def run_plan_phase(
             rs, ctx, source_block, reject_feedback=reject_feedback,
         )
 
-        # Defensive shape validation (Bug #14). When the source has
-        # very little novel content, the agent sometimes emits `edits`
-        # as a list of bare strings ("No edits needed", etc.) rather
-        # than a list of edit-objects, despite the JSON schema. Filter
-        # those out so the post-processing below doesn't crash on
-        # `e.get(...)` against a string.
-        raw_edits = result.get("edits") or []
-        if not isinstance(raw_edits, list):
-            raw_edits = []
-        dropped_strings = sum(1 for e in raw_edits if not isinstance(e, dict))
-        edits = [e for e in raw_edits if isinstance(e, dict)]
-        if dropped_strings:
+        edits = _clean_edits(result, run_id)
+
+        # Bug #18: empty edits + a substantive summary means the agent narrated
+        # its pages in prose instead of emitting them. Retry ONCE with a
+        # corrective (reusing the same context); the pages are enumerated in
+        # the summary, so this recovers them without changing the model. A
+        # genuine no-op has a terse summary, so the length gate avoids a
+        # needless second call.
+        prior_summary = (result.get("summary") or "").strip()
+        if not edits and len(prior_summary) >= 200:
             log.warning(
-                "Ingest run %d: dropped %d non-dict edit entries from agent output",
-                run_id, dropped_strings,
+                "Ingest run %d: agent returned 0 edits with a %d-char summary "
+                "describing pages — retrying once with a corrective.",
+                run_id, len(prior_summary),
             )
-        result["edits"] = edits
+            correction = (
+                _EMPTY_EDITS_CORRECTION
+                + "\n\nYour previous (rejected) summary:\n" + prior_summary
+            )
+            feedback = (
+                reject_feedback + "\n\n" + correction
+                if reject_feedback else correction
+            )
+            result = await _call_llm(
+                rs, ctx, source_block, reject_feedback=feedback,
+            )
+            edits = _clean_edits(result, run_id)
+            log.info(
+                "Ingest run %d: corrective retry produced %d edits.",
+                run_id, len(edits),
+            )
 
         # Counts for the preview UI.
         run.edits_count = len(edits)
@@ -596,7 +649,10 @@ async def run_apply_phase(
 
         try:
             kind = e.get("kind")
-            path = (e.get("path") or "").strip().lstrip("/")
+            # Canonicalise (strip a trailing `.md`/slash) so an agent that
+            # emits `concepts/foo.md` updates the existing `concepts/foo`
+            # instead of creating a `.md` twin (Bug #19).
+            path = canonical_page_path(e.get("path") or "")
             title = (e.get("title") or "").strip()
             body = e.get("body") or ""
             tags = list(e.get("tags") or [])
