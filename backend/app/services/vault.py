@@ -41,6 +41,29 @@ def _derive_title(rel_path: str, body: str) -> str:
     return Path(rel_path).stem.replace("-", " ").replace("_", " ").title()
 
 
+def canonical_page_path(path: str) -> str:
+    """The canonical DB identity for a page path.
+
+    The on-disk vault mirror always carries a `.md` extension, but the
+    database stores the bare slug — the agent ingest and manual proposals
+    write `concepts/foo`, never `concepts/foo.md`. Without canonicalising,
+    re-importing the vault (or an agent emitting a `.md` path) creates a
+    second page differing only by the suffix (Bug #19). Strip a trailing
+    `.md` and any trailing slash so every create/import flow converges on one
+    identity; `_resolve_page` already does the matching read side."""
+    path = (path or "").strip().lstrip("/")
+    if path.endswith(".md"):
+        path = path[:-3]
+    return path.rstrip("/")
+
+
+def _vault_rel(rel: str) -> str:
+    """On-disk mirror filename for a canonical page path: the DB stores
+    `concepts/foo` but the vault file is always `concepts/foo.md` (Bug #19,
+    matching write_file). Idempotent if `rel` already ends in `.md`."""
+    return rel if rel.endswith(".md") else rel + ".md"
+
+
 def read_file(rel_path: str, base: Optional[Path] = None) -> Optional[VaultFile]:
     abs_path = (base or settings.vault_path) / rel_path
     if not abs_path.exists() or not abs_path.is_file():
@@ -83,14 +106,17 @@ def delete_file(rel_path: str) -> bool:
     existed and was deleted, False if it didn't exist (so a delete that
     races with a manual rm doesn't fail the API call).
 
-    Empty parent dirs are intentionally NOT pruned: a user could have
+    The DB path is canonical (no `.md`); map it to the mirror name, and also
+    try the verbatim path so a legacy file written without the suffix is still
+    removed. Empty parent dirs are intentionally NOT pruned: a user could have
     custom-folder placeholders we don't want to silently delete."""
-    abs_path = settings.vault_path / rel_path
-    try:
-        abs_path.unlink()
-        return True
-    except FileNotFoundError:
-        return False
+    for rel in (_vault_rel(rel_path), rel_path):
+        try:
+            (settings.vault_path / rel).unlink()
+            return True
+        except FileNotFoundError:
+            continue
+    return False
 
 
 def move_file(old_rel: str, new_rel: str) -> bool:
@@ -101,8 +127,9 @@ def move_file(old_rel: str, new_rel: str) -> bool:
 
     Refuses to silently overwrite an existing destination; that case
     should be caught at the route layer before we touch disk."""
-    src = settings.vault_path / old_rel
-    dst = settings.vault_path / new_rel
+    # Both paths are canonical (no `.md`); map them to the mirror names.
+    src = settings.vault_path / _vault_rel(old_rel)
+    dst = settings.vault_path / _vault_rel(new_rel)
     if not src.exists():
         return False
     if dst.exists() and src.resolve() != dst.resolve():
