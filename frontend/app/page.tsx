@@ -870,7 +870,7 @@ export default function Home() {
           <div className="relative">
             <input
               ref={searchInputRef}
-              className="form-input h-8 pl-3 pr-16 text-[0.9286rem]"
+              className="form-input h-8 pl-3 pr-9 text-[0.9286rem]"
               placeholder={t('topbar.search.placeholder')}
               value={searchQuery}
               onChange={(e) => {
@@ -879,9 +879,6 @@ export default function Home() {
               }}
               onFocus={() => setShowSearch(true)}
             />
-            <kbd className="absolute right-9 top-1/2 -translate-y-1/2 text-[0.7143rem] text-muted bg-black/5 border border-black/10 rounded px-1.5 py-0.5 font-mono pointer-events-none">
-              ⌘K
-            </kbd>
             <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           </div>
           {showSearch && (
