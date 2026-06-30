@@ -206,7 +206,7 @@ export const MESSAGES = {
     'tree.rawCat.deleteSource': 'Delete source',
     'tree.rawCat.deleteSourceConfirm': 'Delete "{title}"? This permanently removes the uploaded file.',
     'newtab.heading': 'New tab',
-    'newtab.createNote': 'Create new note',
+    'newtab.createNote': 'Upload source',
     'newtab.goToFile': 'Go to file',
     'newtab.close': 'Close',
     'newtab.cantCreate': 'Readers cannot create notes',
@@ -525,7 +525,7 @@ export const MESSAGES = {
     'review.selectRevision': 'Select a revision to review.',
 
     // Propose dialog
-    'propose.title.new': 'Propose a new page',
+    'propose.title.new': 'Propose new source',
     'propose.title.edit': 'Suggest edit',
     'propose.edit': 'Edit',
     'propose.split': 'Split',
@@ -845,7 +845,7 @@ export const MESSAGES = {
     'tree.rawCat.deleteSource': '删除原始资料',
     'tree.rawCat.deleteSourceConfirm': '删除"{title}"？将永久移除已上传的文件。',
     'newtab.heading': '新标签页',
-    'newtab.createNote': '新建笔记',
+    'newtab.createNote': '上传资料',
     'newtab.goToFile': '跳转到文件',
     'newtab.close': '关闭',
     'newtab.cantCreate': '只读用户无法创建笔记',
@@ -1164,7 +1164,7 @@ export const MESSAGES = {
     'review.selectRevision': '选择一个修订进行审阅。',
 
     // Propose dialog
-    'propose.title.new': '提议新页面',
+    'propose.title.new': '提议新资料',
     'propose.title.edit': '建议编辑',
     'propose.edit': '编辑',
     'propose.split': '分屏',

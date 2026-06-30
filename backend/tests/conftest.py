@@ -223,5 +223,42 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
                             pass
         except Exception:
             pass
+        # No hard-delete-user API exists, so drop the stub-auth test users
+        # straight at the DB layer (after the page cleanup cleared their refs).
+        _cleanup_test_users_via_db()
     finally:
         c.close()
+
+
+def _cleanup_test_users_via_db() -> None:
+    """Delete the stub-auth test users the suite creates — every @example.com /
+    @ex.com / @b.com account except the bare dev role logins and the agents.
+    Runs at the DB layer (no hard-delete-user API). Only users with no remaining
+    RESTRICT reference (revisions/comments/flags) are removed, so it never fails
+    or touches real content; a fresh engine avoids reusing the app's event loop."""
+    try:
+        import asyncio
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from app.core.config import settings
+
+        async def _run() -> None:
+            eng = create_async_engine(settings.database_url)
+            try:
+                async with eng.begin() as conn:
+                    await conn.execute(text(
+                        "DELETE FROM users WHERE NOT is_agent "
+                        "AND (email LIKE '%@example.com' OR email LIKE '%@ex.com' "
+                        "OR email LIKE '%@b.com') "
+                        "AND email NOT IN ('admin@example.com','contributor@example.com',"
+                        "'editor@example.com','reader@example.com') "
+                        "AND id NOT IN (SELECT author_id FROM revisions WHERE author_id IS NOT NULL) "
+                        "AND id NOT IN (SELECT author_id FROM comments WHERE author_id IS NOT NULL) "
+                        "AND id NOT IN (SELECT raised_by_id FROM flags WHERE raised_by_id IS NOT NULL)"
+                    ))
+            finally:
+                await eng.dispose()
+
+        asyncio.run(_run())
+    except Exception:
+        pass
