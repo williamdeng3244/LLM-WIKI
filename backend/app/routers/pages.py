@@ -16,6 +16,7 @@ from app.schemas import (
     DraftCreate, MovePageBody, NewPageSpec, PageOut, PageSummary, RevisionOut,
 )
 from app.services.indexer import resolve_all_links
+from app.services.vault import canonical_page_path
 from app.services.vault import delete_file as vault_delete_file
 from app.services.vault import move_file as vault_move_file
 from app.services.workflow import create_draft, lock_page
@@ -73,9 +74,7 @@ async def list_revisions(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(current_user),
 ):
-    page = (await session.execute(
-        select(Page).where(Page.path == page_path)
-    )).scalar_one_or_none()
+    page = await _resolve_page(session, page_path)
     if not page:
         raise HTTPException(404, "Page not found")
     # Drafts are private to their author (mirrors the single-revision guard in
@@ -110,6 +109,10 @@ async def create_draft_endpoint(
     elif payload.new_page:
         # Propose a new page
         spec = payload.new_page
+        # Canonicalise (strip a trailing `.md`/slash) so a manual create uses
+        # the same identity as ingest/import and doesn't 404 on the canonical
+        # form later (page-inaccessible-after-create).
+        spec.path = canonical_page_path(spec.path)
         existing = (await session.execute(
             select(Page).where(Page.path == spec.path)
         )).scalar_one_or_none()
@@ -168,9 +171,7 @@ async def backlinks(
     user: User = Depends(current_user),
 ):
     """Return all published pages that link to this one."""
-    page = (await session.execute(
-        select(Page).where(Page.path == page_path)
-    )).scalar_one_or_none()
+    page = await _resolve_page(session, page_path)
     if not page:
         raise HTTPException(404, "Page not found")
     rows = (await session.execute(
@@ -302,9 +303,7 @@ async def get_page(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(current_user),
 ):
-    page = (await session.execute(
-        select(Page).where(Page.path == page_path)
-    )).scalar_one_or_none()
+    page = await _resolve_page(session, page_path)
     if not page:
         raise HTTPException(404, "Page not found")
     body = ""

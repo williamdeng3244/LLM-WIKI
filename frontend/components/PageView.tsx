@@ -10,6 +10,7 @@ import Markdown from './Markdown';
 import ContextMenu, { type MenuItem } from './ContextMenu';
 import { useLanguage } from '@/lib/i18n';
 import { api, type Page, type PageSummary, type Comment, type Flag, type Revision, type User } from '@/lib/api';
+import { copyToClipboard } from '@/lib/clipboard';
 
 function formatDate(s: string): string {
   try {
@@ -113,7 +114,7 @@ export default function PageView({
 
   function buildPageMenu(p: Page): MenuItem[] {
     const copyPath = async () => {
-      try { await navigator.clipboard.writeText(p.path); } catch { /* ignore */ }
+      await copyToClipboard(p.path);
     };
     // Trimmed list — removed Reading view / Add property / Find /
     // Replace / Open linked view, all of which were either informational
