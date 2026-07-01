@@ -5,6 +5,7 @@ import { Share2, X, Upload, Check, Copy, ExternalLink, Loader2 } from 'lucide-re
 import {
   api, type ArtifactCreateResponse, type ArtifactVisibility,
 } from '@/lib/api';
+import { copyToClipboard } from '@/lib/clipboard';
 
 /** "Publish as gated link" — modal dialog shared by the FileTree
  * right-click action (mode='page'), the Page-tab kebab (mode='page'),
@@ -134,11 +135,10 @@ export default function PublishArtifactModal({
 
   async function copyURL() {
     if (!result) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
+    if (await copyToClipboard(shareUrl)) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
-    } catch { /* clipboard blocked */ }
+    }
   }
 
   return (

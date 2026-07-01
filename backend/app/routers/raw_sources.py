@@ -54,6 +54,17 @@ def _disk_filename_for(original: str) -> str:
     return f"{uuid.uuid4().hex}{_safe_extension(original)}"
 
 
+def _sanitize_text(value: str | None) -> str | None:
+    """Strip NUL (0x00) and other C0 control chars that Postgres text columns
+    reject (SQLSTATE 22021). Without this, a filename/title carrying a stray
+    control byte fails the insert and the global DBAPIError handler surfaces it
+    as a confusing 400 "Invalid input." (md upload/url-import, Bug #6). Keeps
+    tab/newline; drops everything else below 0x20."""
+    if value is None:
+        return None
+    return "".join(ch for ch in value if ch in ("\n", "\t") or ord(ch) >= 0x20)
+
+
 @router.get("", response_model=list[RawSourceOut])
 async def list_sources(
     user: User = Depends(current_user),
@@ -119,10 +130,12 @@ async def upload_source(
             f"JSON/YAML, PDF, Office docs (.docx/.pptx/.xlsx), and images.",
         )
 
+    clean_title = (_sanitize_text(title) or "").strip()
+    clean_fname = _sanitize_text(file.filename) or disk_name
     rs = RawSource(
-        title=(title.strip() or (file.filename or disk_name)),
-        description=description.strip() or None,
-        original_filename=file.filename or disk_name,
+        title=(clean_title or clean_fname),
+        description=(_sanitize_text(description) or "").strip() or None,
+        original_filename=clean_fname,
         disk_filename=disk_name,
         mime_type=client_mime,
         size_bytes=size,
@@ -165,7 +178,7 @@ async def import_from_url(
     target = raw_dir / disk_name
     target.write_bytes(fetched.content)
 
-    display_title = (
+    display_title = _sanitize_text(
         (body.title or "").strip()
         or fetched.title
         or fetched.filename
@@ -173,8 +186,8 @@ async def import_from_url(
     )
     rs = RawSource(
         title=display_title,
-        description=(body.description or "").strip() or None,
-        original_filename=fetched.filename,
+        description=(_sanitize_text(body.description) or "").strip() or None,
+        original_filename=_sanitize_text(fetched.filename),
         disk_filename=disk_name,
         mime_type=fetched.mime_type,
         size_bytes=len(fetched.content),

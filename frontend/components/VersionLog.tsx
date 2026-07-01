@@ -62,9 +62,16 @@ export default function VersionLog() {
     }
     let cancelled = false;
     (async () => {
+      // Cap the request at 3s: on an internal/air-gapped network
+      // api.github.com is unroutable and a plain fetch would hang until the OS
+      // TCP timeout (tens of seconds), leaving the release check spinning.
+      // Abort fast and fall back to "check failed" instead of blocking.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 3000);
       try {
         const r = await fetch(RELEASES_URL, {
           headers: { 'Accept': 'application/vnd.github+json' },
+          signal: ctrl.signal,
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = (await r.json()) as GhRelease[];
@@ -75,6 +82,8 @@ export default function VersionLog() {
         }
       } catch {
         if (!cancelled) setFetchError(true);
+      } finally {
+        clearTimeout(timer);
       }
     })();
     return () => { cancelled = true; };

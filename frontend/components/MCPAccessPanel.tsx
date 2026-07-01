@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api, type User } from '@/lib/api';
 import { useLanguage } from '@/lib/i18n';
+import { copyToClipboard } from '@/lib/clipboard';
 
 type Token = {
   id: number; name: string; last_used_at: string | null;
@@ -84,7 +85,10 @@ export default function MCPAccessPanel({
   }
 
   async function copy(text: string, kind: 'token' | 'config') {
-    try { await navigator.clipboard.writeText(text); setCopiedKind(kind); setTimeout(() => setCopiedKind(null), 1500); } catch {}
+    if (await copyToClipboard(text)) {
+      setCopiedKind(kind);
+      setTimeout(() => setCopiedKind(null), 1500);
+    }
   }
 
   async function toggleUserMcp(u: User) {

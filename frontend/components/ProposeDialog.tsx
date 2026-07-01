@@ -123,6 +123,16 @@ export default function ProposeDialog({
     return null;
   }, [page, stability, t]);
 
+  // Which required fields are still empty — drives the disabled state and an
+  // inline hint + tooltip so the user knows *why* Submit is greyed out.
+  const missingFields = useMemo(() => {
+    const m: string[] = [];
+    if (!title.trim()) m.push(t('propose.field.title'));
+    if (!body.trim()) m.push(t('propose.field.body'));
+    if (mode === 'new' && !newPath.trim()) m.push(t('propose.field.path'));
+    return m;
+  }, [title, body, newPath, mode, t]);
+
   return (
     <div
       className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
@@ -287,14 +297,17 @@ export default function ProposeDialog({
                 onChange={(e) => setRationale(e.target.value)}
               />
               <button className="btn" onClick={onClose}>{t('propose.cancel')}</button>
+              {missingFields.length > 0 && (
+                <span className="text-[0.7857rem] text-amber-300 self-center">
+                  {t('propose.missing.prefix')} {missingFields.join(', ')}
+                </span>
+              )}
               <button
                 data-testid="propose-submit"
                 className="btn btn-primary"
                 onClick={submit}
-                disabled={
-                  submitting || !title.trim() || !body.trim() ||
-                  (mode === 'new' && !newPath.trim())
-                }
+                disabled={submitting || missingFields.length > 0}
+                title={missingFields.length > 0 ? `${t('propose.missing.prefix')} ${missingFields.join(', ')}` : undefined}
               >
                 {submitting ? t('propose.submitting') : t('propose.submit.action')}
               </button>

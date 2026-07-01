@@ -21,6 +21,7 @@ import VersionHistory from '@/components/VersionHistory';
 import TabBar from '@/components/TabBar';
 import NewTab from '@/components/NewTab';
 import { useTabs } from '@/lib/tabs';
+import { copyToClipboard as copyText } from '@/lib/clipboard';
 import GraphView from '@/components/GraphView';
 import GraphSettings from '@/components/GraphSettings';
 import PageView from '@/components/PageView';
@@ -504,6 +505,17 @@ export default function Home() {
   // `hotkeyBindings`); the ⌘? shortcut sheet keeps its special slash logic.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Don't let page-level hotkeys fire while the user is typing in an
+      // input / textarea / contentEditable — a bare Backspace/Delete/letter
+      // must never trigger closeTab etc. and tear a dialog out from under the
+      // user (multi-select-delete-loses-input bug). Modifier combos still pass.
+      const tgt = e.target as HTMLElement | null;
+      const typing =
+        !!tgt &&
+        (tgt.tagName === 'INPUT' ||
+          tgt.tagName === 'TEXTAREA' ||
+          tgt.isContentEditable);
+      if (typing && !(e.metaKey || e.ctrlKey || e.altKey)) return;
       if (matchesCombo(e, hotkeyBindings.search)) {
         e.preventDefault();
         searchInputRef.current?.focus();
@@ -678,13 +690,18 @@ export default function Home() {
   }, [refetchPages, refetchGraph, refetchPage, refetchQueue, refetchNotifs, refetchUnread]);
 
   async function copyToClipboard(text: string) {
-    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+    await copyText(text);
   }
 
   async function makePageCopy(path: string) {
     try {
       const full = await api.getPage(path);
-      const newPath = `${path}-copy`;
+      // Pick the first free "<path>-copy[-N]" so duplicating a page more than
+      // once doesn't 409 on the fixed "-copy" path (right-click copy failing).
+      const all = await api.listPages();
+      const taken = new Set(all.map((p) => p.path));
+      let newPath = `${path}-copy`;
+      for (let n = 2; taken.has(newPath); n++) newPath = `${path}-copy-${n}`;
       const draft = await api.createDraft({
         new_page: { path: newPath, stability: 'stable' },
         title: `${full.title} (copy)`,
@@ -695,7 +712,8 @@ export default function Home() {
       await api.submitRevision(draft.id);
       await refreshAfterMutation();
     } catch (e: unknown) {
-      alert((e as Error).message);
+      const msg = (e as Error).message ?? '';
+      alert(msg.includes('already exists') ? 'A copy already exists — please try again.' : msg);
     }
   }
 

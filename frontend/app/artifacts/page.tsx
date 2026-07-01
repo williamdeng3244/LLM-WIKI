@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 
 import PublishArtifactModal from '@/components/artifacts/PublishArtifactModal';
+import { copyToClipboard } from '@/lib/clipboard';
 import { useTheme } from '@/lib/theme';
 import { useLanguage } from '@/lib/i18n';
 import {
@@ -192,11 +193,10 @@ export default function ArtifactsPage() {
 
   async function copyURL(item: ArtifactMeta) {
     const url = `${window.location.origin}/a/${item.short_id}-${item.slug}`;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyToClipboard(url)) {
       setCopiedSid(item.short_id);
       window.setTimeout(() => setCopiedSid(null), 1500);
-    } catch { /* clipboard blocked */ }
+    }
   }
 
   function openInNewTab(item: ArtifactMeta) {

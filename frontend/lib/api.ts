@@ -319,11 +319,11 @@ export const api = {
 
   // Pages
   listPages: () => call<PageSummary[]>('/pages'),
-  getPage: (path: string) => call<Page>(`/pages/${path}`),
-  listRevisions: (path: string) => call<Revision[]>(`/pages/${path}/revisions`),
-  backlinks: (path: string) => call<PageSummary[]>(`/pages/${path}/backlinks`),
+  getPage: (path: string) => call<Page>(`/pages/${encodeURI(path)}`),
+  listRevisions: (path: string) => call<Revision[]>(`/pages/${encodeURI(path)}/revisions`),
+  backlinks: (path: string) => call<PageSummary[]>(`/pages/${encodeURI(path)}/backlinks`),
   lockPage: (path: string, locked: boolean) =>
-    call<Page>(`/pages/${path}/lock?locked=${locked}`, { method: 'POST' }),
+    call<Page>(`/pages/${encodeURI(path)}/lock?locked=${locked}`, { method: 'POST' }),
 
   // Drafts and review
   createDraft: (payload: {
@@ -362,14 +362,14 @@ export const api = {
   },
 
   // Comments and flags
-  listComments: (path: string) => call<Comment[]>(`/pages/${path}/comments`),
+  listComments: (path: string) => call<Comment[]>(`/pages/${encodeURI(path)}/comments`),
   createComment: (path: string, body: string, revision_id?: number, anchor?: string) =>
-    call<Comment>(`/pages/${path}/comments`, {
+    call<Comment>(`/pages/${encodeURI(path)}/comments`, {
       method: 'POST', body: JSON.stringify({ body, revision_id, anchor }),
     }),
-  listFlags: (path: string) => call<Flag[]>(`/pages/${path}/flags`),
+  listFlags: (path: string) => call<Flag[]>(`/pages/${encodeURI(path)}/flags`),
   createFlag: (path: string, kind: FlagKind, body: string) =>
-    call<Flag>(`/pages/${path}/flags`, {
+    call<Flag>(`/pages/${encodeURI(path)}/flags`, {
       method: 'POST', body: JSON.stringify({ kind, body }),
     }),
   resolveFlag: (id: number, dismiss = false) =>
