@@ -1,8 +1,10 @@
 """Fetch a public URL and turn it into a RawSource-friendly blob.
 
 Backs `POST /api/raw/url` (issue #6). The HTTP fetch has three guard
-rails: scheme allowlist, IP allowlist (rejects RFC1918/loopback by
-default), and a streaming size cap. text/html responses are run
+rails: scheme allowlist, an SSRF IP check (blocks the link-local /
+cloud-metadata range by default; private/loopback intranet hosts are
+allowed so company links import — URL_INGEST_ALLOW_PRIVATE=true lifts it
+entirely), and a streaming size cap. text/html responses are run
 through readability + markdownify to strip nav/chrome before storage,
 so the downstream ingest pipeline gets clean markdown. PDFs and
 plain markdown/text are stored as-is and handled by the existing
@@ -57,25 +59,24 @@ def _validate_url(url: str) -> tuple[str, str]:
         raise HTTPException(400, "URL has no hostname")
     if settings.url_ingest_allow_private:
         return parsed.hostname, url
-    # Resolve every address the hostname maps to and reject if any falls
-    # in a private range. This is the standard one-shot SSRF check; it
-    # doesn't cover DNS rebinding (the IP at validate-time may differ at
-    # connect-time) — a fuller fix would route httpx through a custom
-    # transport that re-validates per connection, which we'll layer in
-    # later if abuse becomes a real concern.
+    # This is an internal-only wiki whose whole point is importing from
+    # company links, so private/RFC1918 + loopback hosts are ALLOWED. What
+    # stays blocked is the link-local range (169.254.0.0/16 — the cloud
+    # metadata / IMDS endpoint, the highest-impact SSRF target: it can leak
+    # instance credentials), plus multicast/unspecified. Set
+    # URL_INGEST_ALLOW_PRIVATE=true to lift the check entirely. (One-shot
+    # check; it doesn't cover DNS rebinding — a per-connection transport
+    # would, layered in later if abuse becomes a real concern.)
     try:
         infos = socket.getaddrinfo(parsed.hostname, None)
     except socket.gaierror as e:
         raise HTTPException(400, f"Cannot resolve hostname: {e}") from e
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private or ip.is_loopback or ip.is_link_local
-            or ip.is_reserved or ip.is_multicast or ip.is_unspecified
-        ):
+        if ip.is_link_local or ip.is_multicast or ip.is_unspecified:
             raise HTTPException(
                 403,
-                f"Refusing to fetch from private/loopback address {ip}. "
+                f"Refusing to fetch from link-local/metadata address {ip}. "
                 "Set URL_INGEST_ALLOW_PRIVATE=true to override.",
             )
     return parsed.hostname, url

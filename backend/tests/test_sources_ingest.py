@@ -407,9 +407,13 @@ def test_FR_RAW_005_non_http_scheme_400(contributor):
     assert r.status_code == 400, r.text
 
 
-def test_FR_RAW_005_ssrf_loopback_403(contributor):
+def test_FR_RAW_005_loopback_allowed_for_intranet(contributor):
+    # Intranet imports: private/loopback hosts pass the SSRF guard (only the
+    # link-local/cloud-metadata range stays blocked). 127.0.0.1 has nothing
+    # listening in CI, so the fetch fails downstream — but NOT with the 403
+    # SSRF rejection.
     r = contributor.post("/api/raw/url", json={"url": "http://127.0.0.1/"})
-    assert r.status_code == 403, r.text
+    assert r.status_code != 403, r.text
 
 
 def test_FR_RAW_005_ssrf_link_local_metadata_403(contributor):

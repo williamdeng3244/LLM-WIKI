@@ -38,10 +38,19 @@ def test_validate_url_rejects_unresolvable_host():
     assert e.value.status_code == 400
 
 
-def test_validate_url_rejects_loopback_as_ssrf():
+def test_validate_url_rejects_link_local_metadata_as_ssrf():
+    # Cloud-metadata / IMDS (169.254.0.0/16) stays blocked even though
+    # private/loopback intranet hosts are now allowed by default.
     with pytest.raises(HTTPException) as e:
-        _validate_url("http://127.0.0.1/admin")
+        _validate_url("http://169.254.169.254/latest/meta-data/")
     assert e.value.status_code == 403
+
+
+def test_validate_url_allows_loopback_and_private_by_default():
+    # Internal wiki: private/RFC1918 + loopback hosts pass the guard without
+    # the URL_INGEST_ALLOW_PRIVATE override, so company links import.
+    assert _validate_url("http://127.0.0.1/admin")[0] == "127.0.0.1"
+    assert _validate_url("http://10.1.2.3/internal")[0] == "10.1.2.3"
 
 
 def test_validate_url_allows_public_ip_literal():
