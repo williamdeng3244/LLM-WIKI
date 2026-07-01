@@ -82,7 +82,11 @@ export default function PageView({
   const latestRev = revisions
     .filter((r) => r.status === 'accepted' || r.status === 'superseded')[0];
 
-  if (!page) {
+  // Guard `!page.path` too: a malformed/partial page object (e.g. a stale
+  // client tab, or an older cached shape) would otherwise reach the toolbar
+  // `page.path.split('/')` below and crash the whole app with
+  // "Cannot read properties of undefined (reading 'split')".
+  if (!page || !page.path) {
     return (
       <div className="h-full flex items-center justify-center text-muted text-sm px-8 text-center">
         Select a page from the tree, or click a node in the graph.
