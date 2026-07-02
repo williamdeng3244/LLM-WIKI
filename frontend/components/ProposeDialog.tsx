@@ -27,6 +27,20 @@ function deriveCategories(
   return Array.from(seen).sort();
 }
 
+
+function slugifyPath(name: string): string {
+  // Turn a free-typed note name into a safe path segment: lowercase, and
+  // spaces / path- or URL-breaking chars → hyphens. Keeps letters/digits
+  // (including CJK) so a Chinese note name still produces a usable path.
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[\\/#%?]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 export default function ProposeDialog({
   page, allPaths, customFolders, onClose, initialPath,
 }: {
@@ -50,20 +64,25 @@ export default function ProposeDialog({
   const [body, setBody] = useState(page?.body || '');
   const [tags, setTags] = useState((page?.tags || []).join(', '));
   const [rationale, setRationale] = useState('');
-  const [newPath, setNewPath] = useState(initialPath || '');
-
   const categories = useMemo(
     () => deriveCategories(allPaths, customFolders || []),
     [allPaths, customFolders],
   );
 
-  const [newCategory, setNewCategory] = useState(() => {
-    // Pre-pick the category if the initial path starts with one we know about.
+  // New-page location is chosen as folder + name — no manual path typing.
+  // The folder dropdown lists existing folders and also becomes the page's
+  // category; the name is slugified into the final path segment.
+  const [newFolder, setNewFolder] = useState(() => {
     const guess = (initialPath || '').split('/')[0];
     return guess && (categories.includes(guess) || SEED_CATEGORIES.includes(guess as typeof SEED_CATEGORIES[number]))
       ? guess
-      : 'engineering';
+      : (categories[0] || 'engineering');
   });
+  const [newName, setNewName] = useState(() => {
+    const segs = (initialPath || '').split('/').filter(Boolean);
+    return segs.length > 1 ? segs.slice(1).join('-') : '';
+  });
+  const newPath = newName.trim() ? `${newFolder}/${slugifyPath(newName)}` : '';
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<{ revisionId: number; status: string } | null>(null);
 
@@ -102,7 +121,7 @@ export default function ProposeDialog({
         mode === 'edit-existing' && page
           ? { page_path: page.path, title, body, tags: tagList, rationale }
           : {
-              new_page: { path: newPath, category_slug: newCategory, stability: 'stable' },
+              new_page: { path: newPath, category_slug: newFolder, stability: 'stable' },
               title, body, tags: tagList, rationale,
             },
       );
@@ -133,9 +152,9 @@ export default function ProposeDialog({
     const m: string[] = [];
     if (!title.trim()) m.push(t('propose.field.title'));
     if (!body.trim()) m.push(t('propose.field.body'));
-    if (mode === 'new' && !newPath.trim()) m.push(t('propose.field.path'));
+    if (mode === 'new' && !newName.trim()) m.push(t('propose.field.name'));
     return m;
-  }, [title, body, newPath, mode, t]);
+  }, [title, body, newName, mode, t]);
 
   return (
     <div
@@ -220,22 +239,13 @@ export default function ProposeDialog({
             }`}>
               {mode === 'new' && (
                 <>
-                  <div className="col-span-4">
-                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.path')}</label>
-                    <input
-                      data-testid="propose-path"
-                      className="form-input mt-0.5 h-8 text-[0.8929rem]"
-                      value={newPath}
-                      onChange={(e) => setNewPath(e.target.value)}
-                      placeholder={t('propose.field.path.placeholder')}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.category')}</label>
+                  <div className="col-span-3">
+                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.folder')}</label>
                     <select
+                      data-testid="propose-folder"
                       className="form-input mt-0.5 h-8 text-[0.8929rem]"
-                      value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value)}
+                      value={newFolder}
+                      onChange={(e) => setNewFolder(e.target.value)}
                     >
                       {categories.map((c) => {
                         // Show translated label for seed categories;
@@ -252,6 +262,21 @@ export default function ProposeDialog({
                         );
                       })}
                     </select>
+                  </div>
+                  <div className="col-span-3">
+                    <label className="text-[0.7143rem] uppercase tracking-[0.12em] text-muted">{t('propose.field.name')}</label>
+                    <input
+                      data-testid="propose-name"
+                      className="form-input mt-0.5 h-8 text-[0.8929rem]"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      placeholder={t('propose.field.name.placeholder')}
+                    />
+                    {newPath && (
+                      <div className="text-[0.6786rem] text-muted mt-0.5 truncate font-mono" title={newPath}>
+                        {newPath}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
