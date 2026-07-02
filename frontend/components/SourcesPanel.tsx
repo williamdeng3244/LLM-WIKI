@@ -113,7 +113,10 @@ export default function SourcesPanel({
       setUrlInput('');
       setUrlTitle('');
     } catch (e: unknown) {
-      setError((e as Error).message);
+      const msg = (e as Error).message ?? '';
+      // A blocked/erroring upstream comes back as "NNN: Upstream returned M
+      // for …". Show an actionable hint instead of that raw string.
+      setError(/Upstream returned/.test(msg) ? t('sources.err.urlUpstream') : msg);
     } finally {
       setImporting(false);
     }

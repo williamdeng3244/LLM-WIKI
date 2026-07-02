@@ -82,3 +82,41 @@ def test_html_to_markdown_runs_and_returns_str():
     assert isinstance(md, str)
     # title is extracted from <title> when present
     assert title is None or "Title" in title
+
+
+def test_fetch_url_maps_upstream_4xx_to_502(monkeypatch):
+    """Any upstream >=400 must surface as OUR 502 (with the upstream code in
+    the detail), not a relayed 4xx that makes the wiki endpoint look broken."""
+    import asyncio
+    import app.services.url_fetcher as uf
+
+    class _Resp:
+        status_code = 403
+        url = "http://8.8.8.8/x"
+        headers: dict = {}
+
+    class _Stream:
+        async def __aenter__(self):
+            return _Resp()
+
+        async def __aexit__(self, *a):
+            return False
+
+    class _Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def stream(self, method, url):
+            return _Stream()
+
+    monkeypatch.setattr(uf.httpx, "AsyncClient", _Client)
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(uf.fetch_url("http://8.8.8.8/x"))
+    assert e.value.status_code == 502
+    assert "Upstream returned 403" in str(e.value.detail)
