@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Eye, Edit3 } from 'lucide-react';
 import Markdown from './Markdown';
 import { useLanguage } from '@/lib/i18n';
@@ -40,6 +40,10 @@ export default function ProposeDialog({
   initialPath?: string;
 }) {
   const { t } = useLanguage();
+  // Tracks whether a click sequence began on the backdrop itself (vs a text
+  // drag that started inside the dialog) so we only close on a real backdrop
+  // click — see the onMouseDown/onClick handlers on the overlay below.
+  const backdropMouseDown = useRef(false);
   const [mode, setMode] = useState<'edit-existing' | 'new'>(page ? 'edit-existing' : 'new');
   const [view, setView] = useState<ViewMode>('edit');
   const [title, setTitle] = useState(page?.title || '');
@@ -136,7 +140,16 @@ export default function ProposeDialog({
   return (
     <div
       className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-      onClick={onClose}
+      onMouseDown={(e) => { backdropMouseDown.current = e.target === e.currentTarget; }}
+      onClick={(e) => {
+        // Only close on a genuine backdrop click. Without the mousedown check,
+        // a text-selection drag that STARTS inside the dialog and releases out
+        // here fires a click on the backdrop → onClose → the user loses
+        // everything they were typing (the "multi-select delete closes the
+        // dialog" bug).
+        if (backdropMouseDown.current && e.target === e.currentTarget) onClose();
+        backdropMouseDown.current = false;
+      }}
     >
       <div
         className="bg-panel border border-line rounded-lg w-[1280px] max-w-[97vw] h-[88vh] flex flex-col shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7),0_0_60px_-20px_rgba(124,156,255,0.25)]"
