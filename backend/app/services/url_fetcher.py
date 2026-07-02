@@ -166,8 +166,12 @@ async def fetch_url(url: str) -> FetchedResource:
             # buffering then discarding.
             async with client.stream("GET", url) as resp:
                 if resp.status_code >= 400:
+                    # Map ANY upstream error to our own 502. The remote's 4xx/5xx
+                    # is about the fetch to THEM, not a client error against our
+                    # API — relaying a raw 403/400 made the wiki endpoint look
+                    # broken to the user. Keep the upstream code in the detail.
                     raise HTTPException(
-                        resp.status_code if resp.status_code < 500 else 502,
+                        502,
                         f"Upstream returned {resp.status_code} for {url}",
                     )
                 final_url = str(resp.url)

@@ -343,8 +343,12 @@ export default function Home() {
   const [graphSettings, setGraphSettings] = useGraphSettings();
 
   // Data
-  const { data: pages = [], mutate: refetchPages } = useSWR('pages', api.listPages, SWR_OPTS);
-  const { data: graphData, mutate: refetchGraph } = useSWR('graph', api.graph, SWR_OPTS);
+  // Poll pages + graph on the same 30s cadence as the review queue /
+  // notifications, so a page published by someone else (e.g. a reviewer
+  // accepting a contributor's draft) shows up in every already-open session's
+  // tree + graph without a manual refresh.
+  const { data: pages = [], mutate: refetchPages } = useSWR('pages', api.listPages, { ...SWR_OPTS, refreshInterval: 30_000 });
+  const { data: graphData, mutate: refetchGraph } = useSWR('graph', api.graph, { ...SWR_OPTS, refreshInterval: 30_000 });
   const { data: bookmarks = [], mutate: refetchBookmarks } = useSWR(
     user ? 'bookmarks' : null, api.listBookmarks, SWR_OPTS,
   );
@@ -665,16 +669,30 @@ export default function Home() {
       for (let n = 2; taken.has(newPath); n++) newPath = `${path}-copy-${n}`;
       const draft = await api.createDraft({
         new_page: { path: newPath, stability: 'stable' },
-        title: `${full.title} (copy)`,
+        title: `${full.title} ${t('menu.file.copy.suffix')}`,
         body: full.body,
         tags: full.tags,
         rationale: `Copy of ${path}`,
       });
-      await api.submitRevision(draft.id);
+      const submitted = await api.submitRevision(draft.id);
+      // A stable-page copy lands in the review queue, so the tree (which only
+      // lists published pages) wouldn't show it → looked like "nothing
+      // happened". editor/admin can self-accept (the backend allows
+      // reviewer==author) → publish + open the copy immediately; a contributor
+      // is told it's queued instead of staring at an unchanged tree.
+      const canPublish = user?.role === 'admin' || user?.role === 'editor';
+      if (canPublish && submitted.status !== 'accepted') {
+        await api.reviewRevision(draft.id, 'accept');
+      }
       await refreshAfterMutation();
+      if (canPublish) {
+        tabs.openPage(newPath, true);
+      } else {
+        alert(t('menu.file.copy.queued'));
+      }
     } catch (e: unknown) {
       const msg = (e as Error).message ?? '';
-      alert(msg.includes('already exists') ? 'A copy already exists — please try again.' : msg);
+      alert(msg.includes('already exists') ? t('menu.file.copy.exists') : `${t('menu.file.copy.failed')} ${msg}`);
     }
   }
 
@@ -1432,6 +1450,7 @@ export default function Home() {
           users={usersById}
           allPaths={allPaths}
           onNavigate={navigate}
+          onDecided={refreshAfterMutation}
           onClose={async () => {
             setShowReview(false);
             await refreshAfterMutation();

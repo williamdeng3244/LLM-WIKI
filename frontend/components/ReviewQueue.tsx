@@ -13,12 +13,16 @@ import { api, type Revision, type User } from '@/lib/api';
 type Tab = 'diff' | 'preview' | 'raw';
 
 export default function ReviewQueue({
-  users, allPaths, onClose, onNavigate,
+  users, allPaths, onClose, onNavigate, onDecided,
 }: {
   users: Map<number, User>;
   allPaths: Set<string>;
   onClose: () => void;
   onNavigate: (path: string) => void;
+  /** Fired after every accept/reject so the parent can refresh the tree +
+   *  graph immediately — the reviewer sees the just-published page while the
+   *  review dialog is still open, not only after closing it. */
+  onDecided?: () => void | Promise<void>;
 }) {
   const [items, setItems] = useState<Revision[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -98,6 +102,7 @@ export default function ReviewQueue({
         : undefined;
       await api.reviewRevision(selected.id, decision, comment || undefined, extras);
       await load();
+      await onDecided?.();
     } catch (e: unknown) {
       alert((e as Error).message);
     }

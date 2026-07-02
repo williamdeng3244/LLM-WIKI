@@ -217,16 +217,20 @@ export default function ProposeDialog({
         {done ? (
           <div className="p-8 space-y-4 max-w-md">
             <p className="text-[1rem]">
-              Your {mode === 'edit-existing' ? 'edit' : 'new page'} was submitted (revision #{done.revisionId}).
+              {mode === 'edit-existing' ? t('propose.done.submitted.edit') : t('propose.done.submitted.new')}
+              {' '}<span className="text-muted">#{done.revisionId}</span>
             </p>
             <p className="text-[0.8929rem] text-muted">
-              Status: <span className={`badge ${done.status}`}>{done.status}</span>
-              {done.status === 'accepted' &&
-                ' — open page autopublishes; your change is live.'}
-              {done.status === 'proposed' &&
-                ' — an editor or admin will review it. You\'ll be notified.'}
+              {t('propose.done.status')}{' '}
+              <span className={`badge ${done.status}`}>
+                {done.status === 'accepted' ? t('propose.done.badge.accepted')
+                  : done.status === 'proposed' ? t('propose.done.badge.proposed')
+                  : done.status}
+              </span>
+              {done.status === 'accepted' && t('propose.done.hint.accepted')}
+              {done.status === 'proposed' && t('propose.done.hint.proposed')}
             </p>
-            <button className="btn btn-primary" onClick={onClose}>Close</button>
+            <button className="btn btn-primary" onClick={onClose}>{t('propose.done.close')}</button>
           </div>
         ) : (
           <>

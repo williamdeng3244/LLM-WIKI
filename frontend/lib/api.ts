@@ -225,7 +225,16 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`${res.status}: ${text}`);
+    // Surface FastAPI's {"detail": "..."} instead of the raw JSON body, while
+    // keeping the "NNN: " status prefix that callers (e.g. SourcesPanel) match.
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.detail === 'string') detail = parsed.detail;
+    } catch {
+      /* body wasn't JSON — keep the raw text */
+    }
+    throw new Error(`${res.status}: ${detail}`);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
