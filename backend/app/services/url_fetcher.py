@@ -36,6 +36,35 @@ _SUPPORTED_PREFIXES = (
     "application/pdf",
 )
 
+# Present as a real browser so bot-protected sites (Britannica and most
+# Cloudflare-fronted pages) don't 403 the fetch. A bare User-Agent is NOT
+# enough — Cloudflare also checks for the Sec-Fetch-* / Sec-Ch-Ua /
+# Accept-Encoding headers a real Chrome sends. Accept-Encoding is limited to
+# gzip/deflate on purpose: httpx can always decode those (brotli isn't
+# installed) and the server still returns gzip. (Sites behind a full JS
+# challenge may still block — nothing short of a headless browser gets past
+# those, in which case save the page as PDF/markdown and upload it instead.)
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "application/pdf,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+}
+
 
 @dataclass
 class FetchedResource:
@@ -129,10 +158,7 @@ async def fetch_url(url: str) -> FetchedResource:
     async with httpx.AsyncClient(
         timeout=timeout,
         follow_redirects=True,
-        headers={
-            "User-Agent": f"LLM-WIKI-ingest/0.x (+https://github.com/williamdeng3244/LLM-WIKI)",
-            "Accept": "text/html, text/markdown, text/plain, application/pdf",
-        },
+        headers=_BROWSER_HEADERS,
         max_redirects=5,
     ) as client:
         try:
