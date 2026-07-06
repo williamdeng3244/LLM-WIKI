@@ -398,13 +398,23 @@ async def _call_llm(
         tool_name=INGEST_TOOL_NAME,
         tool_description="Submit the proposed wiki edits for human review.",
         tool_schema=INGEST_TOOL_SCHEMA,
-        # 8000 was too small: the agent writes a full `summary` first, then
-        # runs out of output budget partway through the `edits` array, so the
-        # streamed partial-JSON recovery yields `edits: []` — surfacing as
-        # "agent proposed no edits" even though the summary describes them.
-        # Sonnet 4.x allows up to 64K output tokens; 24000 fits ~15 concise
-        # pages + the summary with headroom.
-        max_tokens=30000,
+        # Output-token budget for the ingest tool call.
+        #
+        # History: 8000 was too small — the agent writes a full `summary`
+        # first, then runs out of budget partway through the `edits` array, so
+        # the streamed partial-JSON recovery yields `edits: []` ("agent
+        # proposed no edits"). It was then raised to 30000 for Sonnet 4.x
+        # (64K output ceiling).
+        #
+        # BUT the internal deployment uses an OpenAI-compatible endpoint whose
+        # model caps *completion* tokens at 16384, so 30000 was rejected with
+        #   400 invalid_request_error: "max_tokens is too large: 30000. This
+        #   model supports at most 16384 completion tokens"
+        # and every md import (file OR url) failed at the plan phase. 16000
+        # sits just under that cap and is still 2x the old 8000 — comfortably
+        # enough for ~15 concise pages plus the summary. For providers with a
+        # lower cap still, llm_client clamps and retries once (see tool_call).
+        max_tokens=16000,
     )
 
 

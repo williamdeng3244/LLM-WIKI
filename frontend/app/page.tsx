@@ -22,7 +22,22 @@ import TabBar from '@/components/TabBar';
 import NewTab from '@/components/NewTab';
 import { useTabs } from '@/lib/tabs';
 import { copyToClipboard as copyText } from '@/lib/clipboard';
-import GraphView from '@/components/GraphView';
+import dynamic from 'next/dynamic';
+// GraphView statically imports THREE.js + react-force-graph (~1 MB parsed).
+// Eagerly bundling it blocked first paint of the wiki with a long white
+// screen — then fast on later loads once the browser cached the chunk. It
+// only ever renders on the graph tab and takes no ref, so defer it: the
+// initial bundle no longer carries THREE, and the graph chunk loads on demand
+// when the user opens the graph. ssr:false — the force-graph libs are
+// browser-only (canvas/WebGL).
+const GraphView = dynamic(() => import('@/components/GraphView'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center text-muted text-sm">
+      Loading graph…
+    </div>
+  ),
+});
 import GraphSettings from '@/components/GraphSettings';
 import PageView from '@/components/PageView';
 import ProposeDialog from '@/components/ProposeDialog';
@@ -1438,6 +1453,7 @@ export default function Home() {
           page={proposeAsNew ? null : (selected ? page : null)}
           allPaths={allPaths}
           customFolders={customFolders.folders}
+          onOpenExisting={navigate}
           onClose={async () => {
             setShowPropose(false);
             setProposeAsNew(false);

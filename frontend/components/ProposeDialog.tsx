@@ -42,7 +42,7 @@ function slugifyPath(name: string): string {
 }
 
 export default function ProposeDialog({
-  page, allPaths, customFolders, onClose, initialPath,
+  page, allPaths, customFolders, onClose, initialPath, onOpenExisting,
 }: {
   page: Page | null;
   allPaths: Set<string>;
@@ -52,6 +52,8 @@ export default function ProposeDialog({
   customFolders?: readonly string[];
   onClose: () => void;
   initialPath?: string;
+  /** Navigate to an existing page — used by the 409 "open existing" action. */
+  onOpenExisting?: (path: string) => void;
 }) {
   const { t } = useLanguage();
   // Tracks whether a click sequence began on the backdrop itself (vs a text
@@ -85,6 +87,9 @@ export default function ProposeDialog({
   const newPath = newName.trim() ? `${newFolder}/${slugifyPath(newName)}` : '';
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<{ revisionId: number; status: string } | null>(null);
+  // Inline submit error. `existsPath` set means a 409 (page already exists) —
+  // we then offer an "open existing" affordance instead of a dead-end alert.
+  const [submitError, setSubmitError] = useState<{ msg: string; existsPath?: string } | null>(null);
 
   useEffect(() => {
     if (page) {
@@ -115,6 +120,7 @@ export default function ProposeDialog({
 
   async function submit() {
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
       const rev = await api.createDraft(
@@ -128,7 +134,16 @@ export default function ProposeDialog({
       const submitted = await api.submitRevision(rev.id);
       setDone({ revisionId: rev.id, status: submitted.status });
     } catch (e: unknown) {
-      alert((e as Error).message);
+      const msg = (e as Error).message ?? '';
+      // Backend throws `409: Page already exists at that path` when the target
+      // path is taken — commonly because a prior (still-pending, invisible)
+      // draft already created the Page row. Show a friendly, localized message
+      // with a way out instead of a raw `alert()` of the status code.
+      if (msg.startsWith('409') && mode !== 'edit-existing') {
+        setSubmitError({ msg: t('propose.err.exists').replace('{path}', newPath), existsPath: newPath });
+      } else {
+        setSubmitError({ msg: t('propose.err.generic').replace('{msg}', msg) });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -354,6 +369,22 @@ export default function ProposeDialog({
                 {submitting ? t('propose.submitting') : t('propose.submit.action')}
               </button>
             </div>
+            {submitError && (
+              <div
+                data-testid="propose-error"
+                className="mx-6 mb-4 -mt-1 rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-[0.8214rem] text-red-300 flex items-center gap-3"
+              >
+                <span className="flex-1">{submitError.msg}</span>
+                {submitError.existsPath && onOpenExisting && (
+                  <button
+                    className="btn btn-sm shrink-0"
+                    onClick={() => { onOpenExisting(submitError.existsPath!); onClose(); }}
+                  >
+                    {t('propose.err.exists.open')}
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

@@ -18,6 +18,7 @@ import base64
 import io
 import json
 import logging
+import re
 from typing import Any, Optional
 
 from app.core.config import settings
@@ -77,6 +78,36 @@ def _get_openai():
 
 def active_provider() -> str:
     return settings.llm_provider
+
+
+# Matches the completion-cap hint some OpenAI-compatible servers return, e.g.
+# "max_tokens is too large: 30000. This model supports at most 16384
+#  completion tokens, whereas you provided 30000." We pull the "at most M"
+# figure so a rejected call can be retried at the model's own ceiling.
+_MAX_COMPLETION_RE = re.compile(
+    r"at most\s+(\d+)\s+completion", re.IGNORECASE,
+)
+
+
+def _extract_max_completion_limit(err: Exception) -> Optional[int]:
+    """Best-effort parse of the model's max completion-token cap from an
+    OpenAI-style 400. Returns None when the error is unrelated (so the caller
+    re-raises) or the figure can't be found."""
+    # Only interested in 400 / bad-request style errors.
+    status = getattr(err, "status_code", None)
+    if status is not None and status != 400:
+        return None
+    text = str(getattr(err, "message", "") or "") + " " + str(err)
+    if "max_tokens" not in text and "completion" not in text:
+        return None
+    m = _MAX_COMPLETION_RE.search(text)
+    if not m:
+        return None
+    try:
+        val = int(m.group(1))
+    except ValueError:
+        return None
+    return val if val > 0 else None
 
 
 def active_model() -> str:
@@ -245,20 +276,44 @@ async def tool_call(
             if isinstance(c, list):
                 c = _to_openai_content(c)
             oai.append({"role": role, "content": c})
-        resp = await client.chat.completions.create(
-            model=settings.openai_chat_model,
-            messages=oai,
-            max_tokens=max_tokens,
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": tool_name,
-                    "description": tool_description,
-                    "parameters": tool_schema,
-                },
-            }],
-            tool_choice={"type": "function", "function": {"name": tool_name}},
-        )
+        tools_arg = [{
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "description": tool_description,
+                "parameters": tool_schema,
+            },
+        }]
+        tool_choice_arg = {"type": "function", "function": {"name": tool_name}}
+
+        async def _create(mt: int):
+            return await client.chat.completions.create(
+                model=settings.openai_chat_model,
+                messages=oai,
+                max_tokens=mt,
+                tools=tools_arg,
+                tool_choice=tool_choice_arg,
+            )
+
+        try:
+            resp = await _create(max_tokens)
+        except Exception as e:  # noqa: BLE001
+            # Some OpenAI-compatible endpoints cap *completion* tokens below
+            # what we ask and reject the call outright:
+            #   400 invalid_request_error, param=max_tokens:
+            #   "max_tokens is too large: N. This model supports at most M
+            #    completion tokens"
+            # Rather than fail the whole ingest, parse the model's own stated
+            # ceiling M and retry once at that budget (model-agnostic — no
+            # hardcoded per-model limit, works if the deployment swaps models).
+            capped = _extract_max_completion_limit(e)
+            if capped is None or capped >= max_tokens:
+                raise
+            log.warning(
+                "OpenAI endpoint rejected max_tokens=%d; retrying at the "
+                "model's stated cap of %d.", max_tokens, capped,
+            )
+            resp = await _create(capped)
         msg = resp.choices[0].message
         calls = getattr(msg, "tool_calls", None) or []
         for call in calls:
