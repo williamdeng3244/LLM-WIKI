@@ -61,7 +61,7 @@ import LoginModal from '@/components/LoginModal';
 import MovePageDialog from '@/components/MovePageDialog';
 import { useTheme } from '@/lib/theme';
 import { useLanguage } from '@/lib/i18n';
-import { api, type Page, type Role, type User, type ArtifactVisibility } from '@/lib/api';
+import { api, type Page, type Revision, type Role, type User, type ArtifactVisibility } from '@/lib/api';
 import { useGraphSettings } from '@/lib/graphSettings';
 
 // Default SWR options: don't refetch on focus everywhere, keep previous data
@@ -79,6 +79,9 @@ export default function Home() {
   // When true, ProposeDialog opens in *new* mode regardless of which page
   // the active tab is on — used by the "New note" toolbar buttons.
   const [proposeAsNew, setProposeAsNew] = useState(false);
+  // A bounced (request-changes) draft to resume in ProposeDialog — set by
+  // the PageView draft banner so the author's text is prefilled back.
+  const [resumeDraft, setResumeDraft] = useState<Revision | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const { theme, themeId, setTheme, setThemeId } = useTheme();
@@ -1401,6 +1404,7 @@ export default function Home() {
                 isBookmarked={page ? bookmarkedPaths.has(page.path) : false}
                 onToggleBookmark={user ? handleToggleBookmark : undefined}
                 onDeletePage={user?.role === 'admin' ? handleDeletePage : undefined}
+                onResumeDraft={user ? (rev) => { setResumeDraft(rev); setShowPropose(true); } : undefined}
                 onMovePage={
                   user && (user.role === 'admin' || user.role === 'editor')
                     ? (p) => setMovingPagePath(p)
@@ -1454,9 +1458,11 @@ export default function Home() {
           allPaths={allPaths}
           customFolders={customFolders.folders}
           onOpenExisting={navigate}
+          resumeDraft={resumeDraft}
           onClose={async () => {
             setShowPropose(false);
             setProposeAsNew(false);
+            setResumeDraft(null);
             await refreshAfterMutation();
           }}
         />
