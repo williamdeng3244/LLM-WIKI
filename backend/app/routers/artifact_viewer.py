@@ -131,12 +131,16 @@ async def _load_viewable(
 
 def _login_redirect(token: str) -> RedirectResponse:
     """Send the unauthenticated viewer to the wiki login screen with a
-    `next=` bounce-back. Uses PUBLIC_BASE_URL so the redirect works even
-    when the backend is hit directly during dev (the frontend hosts the
-    login page)."""
-    next_path = f"/a/{token}"
-    target = f"{settings.public_base_url.rstrip('/')}/login?next={next_path}"
-    return RedirectResponse(target, status_code=302)
+    `next=` bounce-back.
+
+    RELATIVE on purpose: the browser resolves it against whatever origin
+    served the artifact link, so the bounce stays correct however the wiki
+    is exposed (10.9.113.145:3001, a future hostname, …) and never depends
+    on PUBLIC_BASE_URL being kept in sync with the deploy (QA 2026-07-07:
+    分享私密链接打开后无法访问). Trade-off: hitting the BACKEND origin
+    directly (dev, :8000) now lands on a 404 /login — go through the
+    frontend origin instead."""
+    return RedirectResponse(f"/login?next=/a/{token}", status_code=302)
 
 
 def _generic_404() -> HTMLResponse:

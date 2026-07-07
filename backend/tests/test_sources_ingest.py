@@ -89,6 +89,21 @@ def _valid_edit(path: str, ref: dict) -> dict:
     }
 
 
+def _seed_plan(run_id: int, edits: list[dict], summary: str = "seeded plan") -> None:
+    """Put a plan directly on the run (status pending_review), bypassing the
+    plan phase. Used to pin the APPLY layer's own field validation: since the
+    plan-phase filter (QA 2026-07-07) invalid edits can no longer reach apply
+    via worker.ingest_plan, but stale/legacy plan_json still can."""
+    async def _go():
+        async with session_scope() as s:
+            r = await s.get(IngestRun, run_id)
+            r.plan_json = {"summary": summary, "edits": edits}
+            r.edits_count = len(edits)
+            r.status = IngestRunStatus.pending_review
+            await s.commit()
+    run(_go())
+
+
 def test_FR_ING_009_worker_tasks_are_directly_callable():
     """FR-ING-009 — the Celery task bodies are directly callable in tests, set
     max_retries=0, and carry their documented names. ping() round-trips."""
@@ -228,25 +243,21 @@ def test_FR_ING_007_apply_creates_drafts_idempotently(
     assert run(_recount()) == 2, "re-apply is idempotent — no duplicate provenance/drafts"
 
 
-def test_FR_ING_008_final_status_partially_failed_on_mixed_edits(
-    contributor, mock_llm_server,
-):
+def test_FR_ING_008_final_status_partially_failed_on_mixed_edits(contributor):
     """FR-ING-008 — the final status reflects per-edit outcomes: one applicable
     edit + one invalid edit (empty body) → applied_count>0 AND failed_count>0,
-    so the run finalizes as partially_failed (not done, not failed)."""
+    so the run finalizes as partially_failed (not done, not failed).
+    The plan is seeded directly: since the plan-phase filter (QA 7/7) an
+    invalid edit can't reach apply via ingest_plan, but legacy plan_json can."""
     src = _upload_ok(contributor, title="mixed-src", content=b"Mixed source.")
     run_id = _make_run(src["id"], uid(contributor))
 
     base = f"mock/mixed/{uuid.uuid4().hex}"
-    mock_llm.STATE["tool_args"] = {
-        "summary": "Mixed plan.",
-        "edits": [
-            _valid_edit(f"{base}/ok", {"quote_or_excerpt": "q"}),
-            {"kind": "create_new", "path": f"{base}/bad", "title": "Bad",
-             "body": "", "rationale": "r", "source_refs": [{"quote_or_excerpt": "q"}]},
-        ],
-    }
-    worker.ingest_plan(run_id)
+    _seed_plan(run_id, [
+        _valid_edit(f"{base}/ok", {"quote_or_excerpt": "q"}),
+        {"kind": "create_new", "path": f"{base}/bad", "title": "Bad",
+         "body": "", "rationale": "r", "source_refs": [{"quote_or_excerpt": "q"}]},
+    ])
     worker.ingest_apply(run_id)
 
     async def _state():
@@ -259,26 +270,21 @@ def test_FR_ING_008_final_status_partially_failed_on_mixed_edits(
     assert applied == 1 and failed == 1, (applied, failed)
 
 
-def test_FR_ING_008b_all_failed_apply_surfaces_reason_in_error(
-    contributor, mock_llm_server,
-):
+def test_FR_ING_008b_all_failed_apply_surfaces_reason_in_error(contributor):
     """FR-ING-008b — when EVERY approved edit fails to apply, the run
     finalizes `failed` and run.error carries the per-edit reasons. The
     plan-preview UI renders run.error in its failed state; the apply phase
     never set it, so an all-failed apply read as "计划失败：未知错误" while
-    the real reasons sat buried in `summary` (QA 2026-07-07)."""
+    the real reasons sat buried in `summary` (QA 2026-07-07). Plan seeded
+    directly — see FR-ING-008."""
     src = _upload_ok(contributor, title="allfail-src", content=b"All-fail source.")
     run_id = _make_run(src["id"], uid(contributor))
 
     base = f"mock/allfail/{uuid.uuid4().hex}"
-    mock_llm.STATE["tool_args"] = {
-        "summary": "All-fail plan.",
-        "edits": [
-            {"kind": "create_new", "path": f"{base}/bad", "title": "Bad",
-             "body": "", "rationale": "r", "source_refs": [{"quote_or_excerpt": "q"}]},
-        ],
-    }
-    worker.ingest_plan(run_id)
+    _seed_plan(run_id, [
+        {"kind": "create_new", "path": f"{base}/bad", "title": "Bad",
+         "body": "", "rationale": "r", "source_refs": [{"quote_or_excerpt": "q"}]},
+    ])
     worker.ingest_apply(run_id)
 
     async def _state():
@@ -291,6 +297,41 @@ def test_FR_ING_008b_all_failed_apply_surfaces_reason_in_error(
     assert (applied, failed) == (0, 1), (applied, failed)
     assert error, "apply-phase failure must surface a reason on run.error"
     assert "missing path/title/body" in error
+
+
+def test_FR_ING_014_plan_rejects_skeleton_edits_with_clear_error(
+    contributor, mock_llm_server,
+):
+    """FR-ING-014 — the plan phase drops edits missing path/title/body and,
+    when nothing usable survives (the mock returns the same skeleton on the
+    corrective retry), fails the run with the actual reason instead of
+    parking a hollow pending_review that dies at apply time as
+    "应用失败：Skipped #0 (missing path/title/body)" (QA 2026-07-07)."""
+    src = _upload_ok(contributor, title="thin-src", content=b"tiny stub")
+    run_id = _make_run(src["id"], uid(contributor))
+
+    mock_llm.STATE["tool_args"] = {
+        "summary": "thin",
+        "edits": [
+            {"kind": "create_new", "path": "mock/skeleton", "title": "T",
+             "body": "", "rationale": "r",
+             "source_refs": [{"quote_or_excerpt": "q"}]},
+        ],
+    }
+    # The plan phase records failed+error on the run, then re-raises so the
+    # Celery layer keeps its retry semantics — tolerate the raise here.
+    with pytest.raises(RuntimeError, match="path/title/body"):
+        worker.ingest_plan(run_id)
+
+    async def _state():
+        async with session_scope() as s:
+            r = await s.get(IngestRun, run_id)
+            return r.status, r.edits_count, r.error
+    status, edits_count, error = run(_state())
+
+    assert status == IngestRunStatus.failed, status
+    assert edits_count == 0
+    assert error and "missing" in error and "path/title/body" in error, error
 
 
 # -- FR-RAW-006: URL content-type allow-list (needs a fetchable host) ----------

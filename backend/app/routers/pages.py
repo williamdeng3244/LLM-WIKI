@@ -134,6 +134,11 @@ async def create_draft_endpoint(
         )).scalar_one_or_none()
         if not page:
             raise HTTPException(404, "Page not found")
+        # A locked page is read-only for everyone but admins — reject the
+        # draft up front instead of letting the edit ride to the review
+        # queue (QA 2026-07-07: "锁定后仍可编辑，期望不可编辑").
+        if page.stability == PageStability.locked and user.role != Role.admin:
+            raise HTTPException(403, "Page is locked — only admins can edit it")
     elif payload.new_page:
         # Propose a new page
         spec = payload.new_page
