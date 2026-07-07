@@ -255,6 +255,40 @@ def test_FR_ING_008_final_status_partially_failed_on_mixed_edits(
     assert applied == 1 and failed == 1, (applied, failed)
 
 
+def test_FR_ING_008b_all_failed_apply_surfaces_reason_in_error(
+    contributor, mock_llm_server,
+):
+    """FR-ING-008b — when EVERY approved edit fails to apply, the run
+    finalizes `failed` and run.error carries the per-edit reasons. The
+    plan-preview UI renders run.error in its failed state; the apply phase
+    never set it, so an all-failed apply read as "计划失败：未知错误" while
+    the real reasons sat buried in `summary` (QA 2026-07-07)."""
+    src = _upload_ok(contributor, title="allfail-src", content=b"All-fail source.")
+    run_id = _make_run(src["id"], uid(contributor))
+
+    base = f"mock/allfail/{uuid.uuid4().hex}"
+    mock_llm.STATE["tool_args"] = {
+        "summary": "All-fail plan.",
+        "edits": [
+            {"kind": "create_new", "path": f"{base}/bad", "title": "Bad",
+             "body": "", "rationale": "r", "source_refs": [{"quote_or_excerpt": "q"}]},
+        ],
+    }
+    worker.ingest_plan(run_id)
+    worker.ingest_apply(run_id)
+
+    async def _state():
+        async with session_scope() as s:
+            r = await s.get(IngestRun, run_id)
+            return r.status, r.applied_count, r.failed_count, r.error
+    status, applied, failed, error = run(_state())
+
+    assert status == IngestRunStatus.failed, status
+    assert (applied, failed) == (0, 1), (applied, failed)
+    assert error, "apply-phase failure must surface a reason on run.error"
+    assert "missing path/title/body" in error
+
+
 # -- FR-RAW-006: URL content-type allow-list (needs a fetchable host) ----------
 
 class _CTHandler(BaseHTTPRequestHandler):

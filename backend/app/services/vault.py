@@ -108,11 +108,29 @@ def delete_file(rel_path: str) -> bool:
 
     The DB path is canonical (no `.md`); map it to the mirror name, and also
     try the verbatim path so a legacy file written without the suffix is still
-    removed. Empty parent dirs are intentionally NOT pruned: a user could have
-    custom-folder placeholders we don't want to silently delete."""
-    for rel in (_vault_rel(rel_path), rel_path):
+    removed. Legacy rows (pre-canonical_page_path) can hold a leading slash or
+    duplicate slashes, so the canonicalised form is tried too. Empty parent
+    dirs are intentionally NOT pruned: a user could have custom-folder
+    placeholders we don't want to silently delete.
+
+    Safety: a malformed stored path must never unlink outside the vault —
+    `Path('/vault') / '/etc/x'` REPLACES the base in pathlib, so absolute or
+    `..`-traversal candidates are skipped, not resolved."""
+    root = settings.vault_path.resolve()
+    canon = canonical_page_path(rel_path)
+    candidates = [_vault_rel(rel_path), rel_path]
+    if canon and canon != rel_path:
+        candidates += [_vault_rel(canon), canon]
+    seen: set[str] = set()
+    for rel in candidates:
+        if not rel or rel in seen:
+            continue
+        seen.add(rel)
+        target = (settings.vault_path / rel).resolve()
+        if not target.is_relative_to(root):
+            continue
         try:
-            (settings.vault_path / rel).unlink()
+            target.unlink()
             return True
         except FileNotFoundError:
             continue

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Eye, Edit3 } from 'lucide-react';
 import Markdown from './Markdown';
 import { useLanguage } from '@/lib/i18n';
-import { api, type Page } from '@/lib/api';
+import { api, type Page, type Revision } from '@/lib/api';
 
 type ViewMode = 'edit' | 'preview';
 
@@ -43,6 +43,7 @@ function slugifyPath(name: string): string {
 
 export default function ProposeDialog({
   page, allPaths, customFolders, onClose, initialPath, onOpenExisting,
+  resumeDraft,
 }: {
   page: Page | null;
   allPaths: Set<string>;
@@ -54,6 +55,9 @@ export default function ProposeDialog({
   initialPath?: string;
   /** Navigate to an existing page — used by the 409 "open existing" action. */
   onOpenExisting?: (path: string) => void;
+  /** A bounced (request-changes) draft to resume: prefills title/body/tags
+   *  with the draft's content instead of the page's published body. */
+  resumeDraft?: Revision | null;
 }) {
   const { t } = useLanguage();
   // Tracks whether a click sequence began on the backdrop itself (vs a text
@@ -62,9 +66,11 @@ export default function ProposeDialog({
   const backdropMouseDown = useRef(false);
   const [mode, setMode] = useState<'edit-existing' | 'new'>(page ? 'edit-existing' : 'new');
   const [view, setView] = useState<ViewMode>('edit');
-  const [title, setTitle] = useState(page?.title || '');
-  const [body, setBody] = useState(page?.body || '');
-  const [tags, setTags] = useState((page?.tags || []).join(', '));
+  // A bounced draft's content wins over the page's published body — that's
+  // the whole point of resuming (the published body may be empty).
+  const [title, setTitle] = useState(resumeDraft?.title ?? (page?.title || ''));
+  const [body, setBody] = useState(resumeDraft?.body ?? (page?.body || ''));
+  const [tags, setTags] = useState(((resumeDraft?.tags ?? page?.tags) || []).join(', '));
   const [rationale, setRationale] = useState('');
   const categories = useMemo(
     () => deriveCategories(allPaths, customFolders || []),
@@ -94,13 +100,13 @@ export default function ProposeDialog({
   useEffect(() => {
     if (page) {
       setMode('edit-existing');
-      setTitle(page.title);
-      setBody(page.body);
-      setTags((page.tags || []).join(', '));
+      setTitle(resumeDraft?.title ?? page.title);
+      setBody(resumeDraft?.body ?? page.body);
+      setTags(((resumeDraft?.tags ?? page.tags) || []).join(', '));
     } else {
       setMode('new');
     }
-  }, [page]);
+  }, [page, resumeDraft]);
 
   // Lock body scroll while modal open
   useEffect(() => {
@@ -266,20 +272,13 @@ export default function ProposeDialog({
                       value={newFolder}
                       onChange={(e) => setNewFolder(e.target.value)}
                     >
-                      {categories.map((c) => {
-                        // Show translated label for seed categories;
-                        // raw folder name for user-derived ones.
-                        const i18nKey = `propose.category.${c}` as
-                          'propose.category.engineering' | 'propose.category.product'
-                          | 'propose.category.design' | 'propose.category.operations'
-                          | 'propose.category.research' | 'propose.category.sources';
-                        const isSeed = (SEED_CATEGORIES as readonly string[]).includes(c);
-                        return (
-                          <option key={c} value={c}>
-                            {isSeed ? t(i18nKey) : c}
-                          </option>
-                        );
-                      })}
+                      {/* Always show the real folder name — it IS the path
+                          segment the page will live under. A localized label
+                          ("运营") next to the operations/… path hint read as
+                          two different folders (QA 2026-07-07). */}
+                      {categories.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="col-span-3">

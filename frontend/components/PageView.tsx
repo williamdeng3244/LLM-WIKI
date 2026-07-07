@@ -11,6 +11,7 @@ import ContextMenu, { type MenuItem } from './ContextMenu';
 import { useLanguage } from '@/lib/i18n';
 import { api, type Page, type PageSummary, type Comment, type Flag, type Revision, type User } from '@/lib/api';
 import { copyToClipboard } from '@/lib/clipboard';
+import { latestOwnDraft } from '@/lib/drafts';
 
 function formatDate(s: string): string {
   try {
@@ -24,6 +25,7 @@ export default function PageView({
   page, currentUser, allPaths, users, onPropose, onLock, onNavigate,
   onRevealInTree, onShowVersionHistory,
   isBookmarked, onToggleBookmark, onDeletePage, onMovePage, onShareLink,
+  onResumeDraft,
 }: {
   page: Page | null;
   currentUser: User | null;
@@ -47,6 +49,9 @@ export default function PageView({
   /** Opens the "Publish as gated link" modal pre-set to Private for this
    *  page, from the More-actions "Share private link" item. */
   onShareLink?: (path: string) => void;
+  /** Reopen the propose dialog prefilled with a bounced (request-changes)
+   *  draft of the current user — wired to the draft banner below. */
+  onResumeDraft?: (rev: Revision) => void;
 }) {
   const [newComment, setNewComment] = useState('');
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number } | null>(null);
@@ -335,6 +340,23 @@ export default function PageView({
           </div>
 
           <div className="border-t border-black/8 mt-6 mb-8" />
+
+          {/* Bounced-draft banner: after a reviewer requests changes the
+              revision falls back to `draft` (content intact) but the page
+              body only renders the *published* revision — empty for a
+              never-accepted proposal. Without this entry point the author's
+              text looked lost ("正文都没了，只剩标题", QA 2026-07-07). */}
+          {(() => {
+            const bounced = onResumeDraft && latestOwnDraft(revisions, currentUser?.id);
+            return bounced ? (
+              <div className="mb-6 px-4 py-3 rounded-md border border-amber-400/30 bg-amber-400/10 text-[0.8929rem] flex items-center justify-between gap-3">
+                <span className="text-amber-200">{t('page.draftBanner')}</span>
+                <button className="btn shrink-0" onClick={() => onResumeDraft(bounced)}>
+                  <Pencil size={13} /> {t('page.draftBanner.resume')}
+                </button>
+              </div>
+            ) : null;
+          })()}
 
           <Markdown knownPaths={allPaths} onWikiLinkClick={onNavigate}>
             {page.body}

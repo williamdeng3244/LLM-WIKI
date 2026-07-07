@@ -1,4 +1,5 @@
 """Page CRUD-ish: list, get, create draft, update draft, list revisions."""
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -46,7 +47,26 @@ async def _resolve_page(session: AsyncSession, page_path: str) -> Optional[Page]
         )).scalar_one_or_none()
         if page:
             return page
+    # Legacy fallback: rows created before canonical_page_path existed can
+    # carry a leading slash or duplicate slashes ('/qa/x', 'qa//x'). The
+    # browser never sends those verbatim — Next.js normalises the URL (308)
+    # before it reaches us — so no exact variant above can hit and the row
+    # became an undeletable ghost. Match on the squashed form instead;
+    # miss-path only, and the pages table is small.
+    want = _squash_path(page_path)
+    if want:
+        rows = (await session.execute(select(Page.id, Page.path))).all()
+        for pid, ppath in rows:
+            if _squash_path(ppath) == want:
+                return await session.get(Page, pid)
     return None
+
+
+def _squash_path(p: str) -> str:
+    """Aggressive normal form used only for legacy-row matching: collapse
+    duplicate slashes, strip leading/trailing slashes and a `.md` suffix."""
+    p = re.sub(r"/{2,}", "/", (p or "").strip()).strip("/")
+    return p[:-3] if p.endswith(".md") else p
 
 router = APIRouter()
 
@@ -256,6 +276,15 @@ async def move_page(
     return out
 
 
+@router.delete("", status_code=204)
+async def delete_page_no_path(user: User = Depends(current_user)):
+    """`DELETE /api/pages` (no path). A client whose page path collapsed to
+    empty after URL normalisation used to fall through to Starlette's bare
+    405 "Method Not Allowed" — meaningless to the user (CP: delete failed
+    405). Turn it into an explicit 400 with the actual cause."""
+    raise HTTPException(400, "Page path is required — got an empty path")
+
+
 @router.delete("/{page_path:path}", status_code=204)
 async def delete_page(
     page_path: str,
@@ -273,6 +302,10 @@ async def delete_page(
     of pointing at a stale row id."""
     if user.role != Role.admin:
         raise HTTPException(403, "Only admins can delete pages")
+    if not canonical_page_path(page_path):
+        # e.g. `DELETE /api/pages/` or a path of just slashes — same clear
+        # message as the no-path route above instead of a confusing 404.
+        raise HTTPException(400, "Page path is required — got an empty path")
     page = await _resolve_page(session, page_path)
     if not page:
         raise HTTPException(404, "Page not found")
