@@ -643,7 +643,14 @@ export default function Home() {
       if (msg.startsWith('404')) {
         alreadyGone = true;
       } else {
-        alert(`Delete failed: ${msg}`);
+        // fetch() rejecting with TypeError('Failed to fetch') means the
+        // request never reached the backend at all (connection dropped,
+        // backend mid-restart after a deploy) — tell the user that instead
+        // of parroting the browser's cryptic message (QA 2026-07-07).
+        const friendly = /failed to fetch|networkerror/i.test(msg)
+          ? t('page.delete.network')
+          : msg;
+        alert(`Delete failed: ${friendly}`);
         return;
       }
     }

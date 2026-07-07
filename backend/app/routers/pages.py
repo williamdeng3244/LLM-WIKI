@@ -32,16 +32,24 @@ async def _resolve_page(session: AsyncSession, page_path: str) -> Optional[Page]
     sometimes write `foo` bare. Pages.path lookups should be forgiving.
 
     Returns the first matching Page or None."""
-    variants = {page_path}
+    # ORDER MATTERS: the verbatim path must be tried first. With legacy
+    # ".md twin" rows ('x' AND 'x.md' both in the DB, pre-v1.2.3 data) the
+    # old set-based iteration was hash-ordered, so DELETE /pages/x.md
+    # sometimes resolved — and deleted — the 'x' twin instead (QA 7/7).
+    variants: list[str] = [page_path]
     if page_path.endswith(".md"):
-        variants.add(page_path[:-3])
+        variants.append(page_path[:-3])
     else:
-        variants.add(page_path + ".md")
+        variants.append(page_path + ".md")
     if page_path.endswith("/"):
-        variants.add(page_path.rstrip("/"))
+        variants.append(page_path.rstrip("/"))
     else:
-        variants.add(page_path + "/")
+        variants.append(page_path + "/")
+    seen: set[str] = set()
     for v in variants:
+        if v in seen:
+            continue
+        seen.add(v)
         page = (await session.execute(
             select(Page).where(Page.path == v)
         )).scalar_one_or_none()

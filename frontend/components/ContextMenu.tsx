@@ -102,6 +102,13 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
     const safeBottomY = H - SAFE_BOTTOM;
     if (menuH >= usableH) {
       el.style.top = `${SAFE_TOP}px`;
+    } else if (y > H / 2) {
+      // Lower half: flip the menu ABOVE the cursor. Inside the dolphin
+      // embed the iframe can be TALLER than the real screen, so the
+      // "viewport bottom" we clamp against is a lie — but the cursor
+      // position is always truly visible, and a menu extending upward
+      // from it stays on-screen (删除按钮点不到, QA 2026-07-07).
+      el.style.top = `${Math.max(SAFE_TOP, y - menuH)}px`;
     } else if (y + menuH > safeBottomY) {
       el.style.top = `${Math.max(SAFE_TOP, safeBottomY - menuH)}px`;
     }
