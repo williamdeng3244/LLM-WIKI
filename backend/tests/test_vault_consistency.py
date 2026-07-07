@@ -52,28 +52,33 @@ def _import_vault() -> None:
 
 def test_vault_reimport_recreates_db_only_deletes():
     tok = uuid.uuid4().hex[:8]
-    rel = f"concepts/vaulttest-{tok}.md"  # rel_path includes the .md (see vault.py)
+    rel = f"concepts/vaulttest-{tok}.md"  # on-disk name carries the .md
+    # Since v1.2.3 (675bc63, .md/no-.md dedup) the DB identity is the
+    # *canonical* path — no `.md` suffix. This test originally asserted the
+    # pre-v1.2.3 identity (rel with .md) and had been failing silently since.
+    canon = vault.canonical_page_path(rel)
     body = f"# Vault Test {tok}\n\nroundtrip body {tok}"
     try:
         # 1. A markdown file appears in the vault...
         vault.write_file(rel, title=f"Vault Test {tok}", tags=[], body=body)
         assert vault.read_file(rel) is not None
-        assert _count(rel) == 0, "precondition: not yet in the DB"
+        assert _count(canon) == 0, "precondition: not yet in the DB"
 
-        # 2. ...and the boot-time import creates the DB page from it.
+        # 2. ...and the boot-time import creates the DB page from it,
+        #    under the canonical (no-.md) path.
         _import_vault()
-        assert _count(rel) == 1, "import_disk_vault should create the page from the vault file"
+        assert _count(canon) == 1, "import_disk_vault should create the page from the vault file"
 
         # 3. Re-import is idempotent — no duplicate.
         _import_vault()
-        assert _count(rel) == 1, "re-import must not duplicate an existing page"
+        assert _count(canon) == 1, "re-import must not duplicate an existing page"
 
         # 4. THE BUG SURFACE: a DB-only delete (vault file left behind)...
-        _delete_db_only(rel)
-        assert _count(rel) == 0, "page should be gone from the DB"
+        _delete_db_only(canon)
+        assert _count(canon) == 0, "page should be gone from the DB"
         # ...is UNDONE by the next vault import (== a backend restart).
         _import_vault()
-        assert _count(rel) == 1, (
+        assert _count(canon) == 1, (
             "REGRESSION: the vault is the source of truth on boot — a DB-only "
             "delete is re-created by the vault import. Cleanup MUST clear the "
             "vault too (this is the bug that re-bloated the graph on restart)."
@@ -81,4 +86,4 @@ def test_vault_reimport_recreates_db_only_deletes():
     finally:
         # Clean up BOTH, or this test itself re-pollutes on the next boot.
         vault.delete_file(rel)
-        _delete_db_only(rel)
+        _delete_db_only(canon)

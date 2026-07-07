@@ -500,8 +500,18 @@ export const api = {
       body: JSON.stringify({ url, title, description }),
     }),
   // ── Pages: delete + move ─────────────────────────────────────────
-  deletePage: (path: string) =>
-    call<void>(`/pages/${encodeURI(path)}`, { method: 'DELETE' }),
+  deletePage: (path: string) => {
+    // Legacy rows can hold a malformed path ('/x', 'a//b', 'a/'). Sent
+    // verbatim, Next.js 308-normalises the URL and the replayed DELETE can
+    // land on bare `/api/pages` → a bewildering "405: Method Not Allowed".
+    // Send the clean form (the backend resolves legacy rows from it) and
+    // fail fast with a real message if the path collapses to nothing.
+    const clean = path.replace(/\/{2,}/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!clean) {
+      return Promise.reject(new Error('400: page path is empty — malformed page row'));
+    }
+    return call<void>(`/pages/${encodeURI(clean)}`, { method: 'DELETE' });
+  },
   movePage: (oldPath: string, newPath: string) =>
     call<Page>(`/pages/${encodeURI(oldPath)}/path`, {
       method: 'PATCH',

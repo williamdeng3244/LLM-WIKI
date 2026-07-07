@@ -767,6 +767,13 @@ async def run_apply_phase(
     else:
         run.status = IngestRunStatus.partially_failed
 
+    if run.status == IngestRunStatus.failed and errors:
+        # The plan-preview's failed state renders run.error — which only the
+        # PLAN phase ever set, so an all-failed APPLY surfaced as
+        # "计划失败：未知错误" with the real reasons buried in `summary`
+        # (QA 2026-07-07). Keep it compact; `summary` keeps the full list.
+        run.error = "; ".join(errors)[:1000]
+
     run.applied_at = run.applied_at or datetime.now(timezone.utc)
     run.finished_at = datetime.now(timezone.utc)
     if errors:

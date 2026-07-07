@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 
-from app.models import Category, CategoryEditor
+from app.models import Category, CategoryEditor, Page
 from tests._inproc import run, session_scope
 from tests.conftest import (
     create_draft,
@@ -233,20 +233,60 @@ def test_FR_PAGE_011_delete_admin_only(contributor, admin):
     assert admin.get(f"/api/pages/{p['path']}").status_code == 404
 
 
-# FR-PAGE-012 — exact path for GET; forgiving (_resolve_page) for delete
-def test_FR_PAGE_012_get_exact_but_delete_forgiving(contributor, admin):
-    """A page stored at 'foo.md' is GET-404 under the bare 'foo' (exact match),
-    yet delete resolves it via _resolve_page (+/-.md)."""
+# FR-PAGE-012 — path resolution is forgiving (±.md) for BOTH get and delete.
+# (GET went lenient in v1.2.4 "Fix 8 issues from internal deployment testing",
+# 02e1405; this test originally pinned the pre-v1.2.4 exact-GET behaviour and
+# had been failing silently since.)
+def test_FR_PAGE_012_get_and_delete_forgiving(contributor, admin):
+    """A page stored at 'foo.md' resolves under the bare 'foo' for GET and
+    DELETE alike via _resolve_page (+/-.md)."""
     base = unique_path("exact")
     stored = base + ".md"
     publish_page(contributor, path=stored)
     # exact GET on the stored path works
     assert contributor.get(f"/api/pages/{stored}").status_code == 200
-    # bare path (no .md) is a 404 on GET (exact matching)
-    assert contributor.get(f"/api/pages/{base}").status_code == 404
-    # ...but DELETE on the bare path resolves to 'base.md' (forgiving) -> 204
+    # bare path (no .md) resolves on GET too (lenient since v1.2.4)
+    assert contributor.get(f"/api/pages/{base}").status_code == 200
+    # ...and DELETE on the bare path resolves to 'base.md' -> 204
     assert admin.delete(f"/api/pages/{base}").status_code == 204
     assert contributor.get(f"/api/pages/{stored}").status_code == 404
+
+
+# FR-PAGE-011b — legacy malformed stored paths (created before
+# canonical_page_path existed) must still be deletable. The UI sends the
+# Next.js-normalised URL (trailing slash stripped by the 308 redirect,
+# duplicate slashes collapsed), so the API sees the *clean* form while the
+# DB row holds the messy one.
+def test_FR_PAGE_011b_delete_legacy_malformed_paths(admin):
+    suffix = uuid.uuid4().hex[:8]
+    messy = [
+        f"/qa/lead-{suffix}",   # leading slash
+        f"qa//dbl-{suffix}",    # duplicate slash
+        f"qa/trail-{suffix}/",  # trailing slash
+    ]
+
+    async def seed() -> None:
+        async with session_scope() as s:
+            for p in messy:
+                s.add(Page(path=p, title=f"legacy {p}"))
+            await s.commit()
+
+    run(seed())
+    # What the browser actually sends after URL normalisation:
+    assert admin.delete(f"/api/pages/qa/lead-{suffix}").status_code == 204
+    assert admin.delete(f"/api/pages/qa/dbl-{suffix}").status_code == 204
+    assert admin.delete(f"/api/pages/qa/trail-{suffix}").status_code == 204
+
+
+# FR-PAGE-011c — DELETE with an empty path must be a clear 400, never a bare
+# 405. (A page row with an empty/mangled path made the UI request
+# `DELETE /api/pages/`; Next.js 308-redirects that to `/api/pages`, where only
+# GET was registered → "405: Method Not Allowed" with no hint of the cause.)
+def test_FR_PAGE_011c_delete_empty_path_400(admin):
+    r = admin.delete("/api/pages")  # the post-redirect form
+    assert r.status_code == 400, r.text
+    r = admin.delete("/api/pages/")  # the direct empty-path form
+    assert r.status_code == 400, r.text
 
 
 # FR-PAGE-013 — empty title/body accepted on draft create

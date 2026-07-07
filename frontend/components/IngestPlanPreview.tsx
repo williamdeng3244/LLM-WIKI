@@ -175,7 +175,14 @@ export default function IngestPlanPreview({
         ) : run?.status === 'failed' ? (
           <div className="flex-1 flex flex-col items-center justify-center text-rose-300 text-[0.9286rem] px-6 text-center">
             <AlertTriangle size={20} className="mb-2" />
-            <div>{t('ingp.planFailed')} {run.error || t('ingp.unknownError')}</div>
+            {/* An apply-phase failure is not a *plan* failure — label it
+                accordingly, and for runs recorded before run.error carried
+                apply reasons, fall back to the Apply notes in `summary`
+                instead of a bare "unknown error". */}
+            <div>
+              {run.applied_at || run.failed_count > 0 ? t('ingp.applyFailed') : t('ingp.planFailed')}{' '}
+              {run.error || run.summary?.split('Apply notes:')[1]?.trim() || t('ingp.unknownError')}
+            </div>
             {(run.applied_count > 0 || (run.approved_edit_indices?.length ?? 0) > 0) && (
               <div className="text-muted mt-2">
                 {t('ingp.applied')} {run.applied_count}/{run.approved_edit_indices?.length ?? run.edits_count}
