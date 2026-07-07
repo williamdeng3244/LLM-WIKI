@@ -4,12 +4,42 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models import Category, Page, PageStability, Revision, RevisionStatus, User, Role
+from app.models import AuditLog, Category, Page, PageStability, Revision, RevisionStatus, User, Role
 from app.services.indexer import reindex_page, resolve_all_links
 from app.services.linker import extract_tags
 from app.services.vault import canonical_page_path, list_files, read_file
 
 log = logging.getLogger(__name__)
+
+
+async def repair_malformed_page_paths(session: AsyncSession) -> int:
+    """Rename page rows whose stored path canonicalises to EMPTY ('', '/',
+    '//'…) to `recovered/page-<id>`.
+
+    Such rows were written by pre-canonicalisation code. They are
+    unreachable through the path-addressed API — no URL can name them, the
+    client refuses to even send the delete ("page path is empty — malformed
+    page row", QA 2026-07-07) — and they render as ghosts in the tree /
+    quick switcher. After the rename they are ordinary pages: visible under
+    recovered/, openable, and deletable. Idempotent; returns rows repaired."""
+    rows = (await session.execute(select(Page))).scalars().all()
+    fixed = 0
+    for p in rows:
+        if canonical_page_path(p.path):
+            continue
+        old = p.path
+        p.path = f"recovered/page-{p.id}"
+        session.add(AuditLog(
+            actor_id=None, action="page.path_repair",
+            target_type="page", target_id=p.id,
+            payload={"old_path": old, "new_path": p.path},
+        ))
+        log.warning("Repaired malformed page path %r -> %s (page id %d)",
+                    old, p.path, p.id)
+        fixed += 1
+    if fixed:
+        await session.commit()
+    return fixed
 
 
 DEFAULT_CATEGORIES = [

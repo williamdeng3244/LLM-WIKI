@@ -132,7 +132,12 @@ def delete_file(rel_path: str) -> bool:
         try:
             target.unlink()
             return True
-        except FileNotFoundError:
+        except OSError:
+            # Missing file, a candidate that is actually a DIRECTORY (a
+            # legacy page path colliding with a real vault folder raised
+            # IsADirectoryError → "Delete failed: 500", QA 2026-07-07),
+            # permissions… — mirror cleanup must never fail the API call;
+            # the DB row is the source of truth.
             continue
     return False
 

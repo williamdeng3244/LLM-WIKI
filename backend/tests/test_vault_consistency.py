@@ -87,3 +87,20 @@ def test_vault_reimport_recreates_db_only_deletes():
         # Clean up BOTH, or this test itself re-pollutes on the next boot.
         vault.delete_file(rel)
         _delete_db_only(canon)
+
+
+def test_delete_file_directory_collision_never_raises():
+    """A page whose path collides with a vault FOLDER (e.g. a legacy page
+    stored at 'Enflame' alongside real 'Enflame/*' pages) must not crash
+    the delete API: unlink() on the directory raised IsADirectoryError,
+    surfacing as "Delete failed: 500" (QA 2026-07-07). delete_file skips
+    undeletable candidates and reports False instead."""
+    tok = uuid.uuid4().hex[:8]
+    folder = f"qa-dircoll-{tok}"
+    inner = f"{folder}/inner-{tok}.md"
+    vault.write_file(inner, title="inner", tags=[], body="x")  # creates the dir
+    try:
+        assert vault.delete_file(folder) is False, "directory candidate must be skipped, not unlinked"
+        assert vault.read_file(inner) is not None, "folder contents stay untouched"
+    finally:
+        vault.delete_file(inner)

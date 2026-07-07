@@ -23,7 +23,7 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-function buildTree(
+export function buildTree(
   pages: PageSummary[], sort: SortMode, customFolders: string[],
   folderOrder: string[] = [],
 ): TreeNode {
@@ -35,7 +35,15 @@ function buildTree(
       const part = parts[i];
       const isLast = i === parts.length - 1;
       const segPath = parts.slice(0, i + 1).join('/');
-      let child = node.children.find((c) => c.path === segPath);
+      // A page can share its exact path with a folder of other pages
+      // (legacy rows: a page stored at 'Enflame' next to real 'Enflame/*'
+      // pages). Intermediate segments must match FOLDER nodes only —
+      // descending into the identically-named leaf swallowed the whole
+      // subtree, so those pages showed in the quick switcher but never in
+      // the tree (QA 2026-07-07). The leaf and the folder now coexist.
+      let child = node.children.find(
+        (c) => c.path === segPath && c.isFile === isLast,
+      );
       if (!child) {
         child = {
           name: isLast ? p.title : part, path: segPath,
