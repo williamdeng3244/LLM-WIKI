@@ -59,6 +59,12 @@ export default function VersionHistory({
         kind: 'ok',
         text: result.status === 'accepted' ? t('history.restoredLive') : t('history.restoredQueued'),
       });
+      if (result.status !== 'accepted') {
+        // Popup on top of the inline banner: a queued restore looked like
+        // "恢复不生效" because nothing loud said it awaits review-queue
+        // approval (QA 2026-07-07).
+        alert(t('history.restoredQueued.alert'));
+      }
       setExpandedId(null);
       await mutate();          // the restore created a new revision — refresh the list
       onRestored?.(result);    // let the page refresh its body / review queue

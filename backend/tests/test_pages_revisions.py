@@ -355,6 +355,33 @@ def test_FR_PAGE_012b_twin_rows_delete_exact_match_first(admin):
     assert run(paths()) == set()
 
 
+# FR-PAGE-014 — a LOCKED page is read-only for non-admins: proposing an edit
+# is rejected up front (403), not merely gated at publish time. (QA 7/7:
+# "锁定后，文件仍可以编辑，期望是不可编辑".) Admins can still edit — someone
+# must be able to maintain locked pages.
+def test_FR_PAGE_014_locked_page_rejects_non_admin_drafts(contributor, admin):
+    suffix = uuid.uuid4().hex[:8]
+    path = f"qa/locked-{suffix}"
+
+    async def seed() -> None:
+        async with session_scope() as s:
+            from app.models import PageStability
+            s.add(Page(path=path, title="locked page",
+                       stability=PageStability.locked))
+            await s.commit()
+
+    run(seed())
+    try:
+        body = {"page_path": path, "title": "t", "body": "b", "tags": []}
+        r = contributor.post("/api/pages/draft", json=body)
+        assert r.status_code == 403, r.text
+        assert "locked" in r.text.lower()
+        r = admin.post("/api/pages/draft", json=body)
+        assert r.status_code == 200, r.text
+    finally:
+        assert admin.delete(f"/api/pages/{path}").status_code == 204
+
+
 # FR-PAGE-013 — empty title/body accepted on draft create
 def test_FR_PAGE_013_empty_title_body_accepted(contributor):
     r = contributor.post(

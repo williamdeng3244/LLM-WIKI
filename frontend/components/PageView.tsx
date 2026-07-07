@@ -62,7 +62,7 @@ export default function PageView({
     () => (page ? api.listComments(page.path) : Promise.resolve([])),
     { revalidateOnFocus: false },
   );
-  const { data: flags = [] } = useSWR<Flag[]>(
+  const { data: flags = [], mutate: refetchFlags } = useSWR<Flag[]>(
     page ? `flags:${page.path}` : null,
     () => (page ? api.listFlags(page.path) : Promise.resolve([])),
     { revalidateOnFocus: false },
@@ -100,7 +100,12 @@ export default function PageView({
   }
 
   const isAdmin = currentUser?.role === 'admin';
-  const canSuggest = currentUser && currentUser.role !== 'reader';
+  // Locked pages are read-only for non-admins (backend enforces the same
+  // rule on /pages/draft) — flags/comments stay available, only editing is
+  // gated (QA 2026-07-07: 锁定后仍可编辑，期望不可编辑).
+  const canSuggest = currentUser && currentUser.role !== 'reader'
+    && (page.stability !== 'locked' || isAdmin);
+  const canResolveFlags = isAdmin || currentUser?.role === 'editor';
   const openFlags = flags.filter((f) => f.status === 'open');
 
   async function postComment() {
@@ -281,7 +286,7 @@ export default function PageView({
       {openFlags.length > 0 && (
         <div className="px-8 py-2 bg-amber-500/[0.08] border-b border-amber-500/30 text-xs text-amber-300 flex items-start gap-2">
           <FlagIcon size={13} className="shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <strong>
               {openFlags.length}{' '}
               {openFlags.length === 1 ? t('page.flags.banner.one') : t('page.flags.banner.many')}:
@@ -289,6 +294,25 @@ export default function PageView({
             {openFlags[0].body}
             {openFlags.length > 1 && ` (+${openFlags.length - 1} ${t('page.flags.banner.more')})`}
           </div>
+          {/* Direct resolve entry — flags used to be raisable but not
+              clearable from the page (QA 2026-07-07: 未处理标记有处理入口吗).
+              Resolves the displayed (oldest open) flag; repeat to clear the
+              rest. Server enforces editor category-scoping. */}
+          {canResolveFlags && (
+            <button
+              className="btn shrink-0"
+              onClick={async () => {
+                try {
+                  await api.resolveFlag(openFlags[0].id);
+                  await refetchFlags();
+                } catch (e) {
+                  alert((e as Error).message);
+                }
+              }}
+            >
+              {t('page.flags.resolve')}
+            </button>
+          )}
         </div>
       )}
 

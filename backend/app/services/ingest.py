@@ -409,23 +409,45 @@ _EMPTY_EDITS_CORRECTION = (
 )
 
 
-def _clean_edits(result: dict, run_id: int) -> list[dict]:
+def _clean_edits(result: dict, run_id: int) -> tuple[list[dict], int]:
     """Filter the agent's `edits` to well-formed objects, writing the cleaned
     list back onto `result`. The model occasionally emits bare strings ("No
     edits needed") instead of objects despite the schema (Bug #14); drop those
-    so downstream `e.get(...)` never runs against a string."""
+    so downstream `e.get(...)` never runs against a string.
+
+    Also drops edits missing a usable path/title/body — smaller models on
+    thin sources emit skeleton edits with an empty body, which used to sail
+    through review and only die at apply time as the baffling
+    "应用失败：Skipped #0 (missing path/title/body)" (QA 2026-07-07).
+    Returns (edits, invalid_count) so the plan phase can retry/fail early."""
     raw_edits = result.get("edits") or []
     if not isinstance(raw_edits, list):
         raw_edits = []
     dropped = sum(1 for e in raw_edits if not isinstance(e, dict))
-    edits = [e for e in raw_edits if isinstance(e, dict)]
+    invalid = 0
+    edits: list[dict] = []
+    for e in raw_edits:
+        if not isinstance(e, dict):
+            continue
+        path = canonical_page_path(e.get("path") or "")
+        title = (e.get("title") or "").strip()
+        body = e.get("body") or ""
+        if not path or not title or not body:
+            invalid += 1
+            continue
+        edits.append(e)
     if dropped:
         log.warning(
             "Ingest run %d: dropped %d non-dict edit entries from agent output",
             run_id, dropped,
         )
+    if invalid:
+        log.warning(
+            "Ingest run %d: dropped %d edit(s) missing path/title/body",
+            run_id, invalid,
+        )
     result["edits"] = edits
-    return edits
+    return edits, invalid
 
 
 # ── PLAN PHASE ─────────────────────────────────────────────────────────────
@@ -461,25 +483,31 @@ async def run_plan_phase(
             rs, ctx, source_block, reject_feedback=reject_feedback,
         )
 
-        edits = _clean_edits(result, run_id)
+        edits, invalid = _clean_edits(result, run_id)
 
         # Bug #18: empty edits + a substantive summary means the agent narrated
         # its pages in prose instead of emitting them. Retry ONCE with a
         # corrective (reusing the same context); the pages are enumerated in
         # the summary, so this recovers them without changing the model. A
         # genuine no-op has a terse summary, so the length gate avoids a
-        # needless second call.
+        # needless second call. Skeleton edits that _clean_edits dropped
+        # (missing path/title/body) also earn the retry — the agent clearly
+        # MEANT to create pages, it just emitted them without content.
         prior_summary = (result.get("summary") or "").strip()
-        if not edits and len(prior_summary) >= 200:
+        if not edits and (invalid or len(prior_summary) >= 200):
             log.warning(
-                "Ingest run %d: agent returned 0 edits with a %d-char summary "
-                "describing pages — retrying once with a corrective.",
-                run_id, len(prior_summary),
+                "Ingest run %d: agent returned no usable edits (%d invalid, "
+                "%d-char summary) — retrying once with a corrective.",
+                run_id, invalid, len(prior_summary),
             )
-            correction = (
-                _EMPTY_EDITS_CORRECTION
-                + "\n\nYour previous (rejected) summary:\n" + prior_summary
-            )
+            correction = _EMPTY_EDITS_CORRECTION
+            if invalid:
+                correction += (
+                    "\n\nAdditionally: every edit object MUST carry a "
+                    "non-empty `path`, `title` AND a full markdown `body`. "
+                    "Skeleton edits without a body are discarded."
+                )
+            correction += "\n\nYour previous (rejected) summary:\n" + prior_summary
             feedback = (
                 reject_feedback + "\n\n" + correction
                 if reject_feedback else correction
@@ -487,10 +515,20 @@ async def run_plan_phase(
             result = await _call_llm(
                 rs, ctx, source_block, reject_feedback=feedback,
             )
-            edits = _clean_edits(result, run_id)
+            edits, invalid = _clean_edits(result, run_id)
             log.info(
-                "Ingest run %d: corrective retry produced %d edits.",
-                run_id, len(edits),
+                "Ingest run %d: corrective retry produced %d edits (%d invalid).",
+                run_id, len(edits), invalid,
+            )
+
+        if not edits and invalid:
+            # Even after the corrective the planner produced ONLY skeleton
+            # edits. Fail the plan with the real reason instead of parking a
+            # hollow pending_review that dies at apply time (QA 2026-07-07).
+            raise RuntimeError(
+                f"planner returned only unusable edits ({invalid} missing "
+                "path/title/body) — the source may be too thin to import; "
+                "try adding content or importing a richer page"
             )
 
         # Counts for the preview UI.
