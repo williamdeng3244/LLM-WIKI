@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from sqlalchemy import select
 
 from app.models import Category, CategoryEditor, Page
 from tests._inproc import run, session_scope
@@ -319,6 +320,39 @@ def test_FR_PAGE_011d_boot_repair_renames_empty_paths(admin):
 
     # Idempotent: nothing left to repair for this row.
     assert run(repair()) == 0
+
+
+# FR-PAGE-012b — legacy ".md twin" rows (same page stored both as 'x' and
+# 'x.md', pre-v1.2.3 Bug #19 data): a delete must remove EXACTLY the row the
+# URL names. _resolve_page iterated a SET of variants, so deleting 'x.md'
+# sometimes removed 'x' instead — the deleted row "stayed" in the tree and
+# read as un-deletable duplicates (QA 2026-07-07). Verbatim match wins now.
+def test_FR_PAGE_012b_twin_rows_delete_exact_match_first(admin):
+    suffix = uuid.uuid4().hex[:8]
+    bare = f"qa/twin-{suffix}"
+    md = f"{bare}.md"
+
+    async def seed() -> None:
+        async with session_scope() as s:
+            s.add(Page(path=bare, title="twin bare"))
+            s.add(Page(path=md, title="twin md"))
+            await s.commit()
+
+    run(seed())
+
+    async def paths() -> set[str]:
+        async with session_scope() as s:
+            rows = (await s.execute(
+                select(Page.path).where(Page.path.in_([bare, md]))
+            )).scalars().all()
+            return set(rows)
+
+    # Deleting the .md row must remove the .md row — not its bare twin.
+    assert admin.delete(f"/api/pages/{md}").status_code == 204
+    assert run(paths()) == {bare}, "the bare twin must survive"
+    # And the bare row deletes verbatim too.
+    assert admin.delete(f"/api/pages/{bare}").status_code == 204
+    assert run(paths()) == set()
 
 
 # FR-PAGE-013 — empty title/body accepted on draft create

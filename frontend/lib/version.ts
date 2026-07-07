@@ -1,6 +1,6 @@
 // Bundled app version. Bump this manually as part of every release; the
 // CI workflow doesn't autopatch it. Format: 'v<semver>' to match git tags.
-export const APP_VERSION = 'v1.3.1';
+export const APP_VERSION = 'v1.3.2';
 
 // Where to fetch release history from. Public GitHub API; rate limit is
 // 60 req/hour per IP for unauthenticated calls, which is plenty since
