@@ -19,6 +19,7 @@ from app.routers import (
 from app.services.bootstrap import (
     ensure_default_admin, ensure_categories,
     import_disk_vault, import_examples_if_enabled,
+    repair_malformed_page_paths,
 )
 
 logging.basicConfig(
@@ -209,6 +210,9 @@ async def lifespan(app: FastAPI):
         admin = await ensure_default_admin(session)
         await ensure_categories(session)
         try:
+            repaired = await repair_malformed_page_paths(session)
+            if repaired:
+                log.warning("Renamed %d malformed page path(s) to recovered/", repaired)
             count = await import_disk_vault(session, admin)
             if count > 0:
                 log.info("Bootstrap imported %d pages from disk", count)

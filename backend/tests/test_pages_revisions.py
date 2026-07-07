@@ -289,6 +289,38 @@ def test_FR_PAGE_011c_delete_empty_path_400(admin):
     assert r.status_code == 400, r.text
 
 
+# FR-PAGE-011d — a row whose path canonicalises to EMPTY ('/', '', '//') is
+# unreachable via the path-addressed API: the client refuses to send the
+# delete ("page path is empty — malformed page row", QA 7/7) and no URL can
+# name it. The boot-time repair renames such rows to recovered/page-<id> so
+# they become visible in the tree and deletable normally.
+def test_FR_PAGE_011d_boot_repair_renames_empty_paths(admin):
+    from app.services.bootstrap import repair_malformed_page_paths
+
+    async def seed() -> int:
+        async with session_scope() as s:
+            p = Page(path="/", title="幽灵页")
+            s.add(p)
+            await s.commit()
+            return p.id
+
+    pid = run(seed())
+
+    async def repair() -> int:
+        async with session_scope() as s:
+            return await repair_malformed_page_paths(s)
+
+    assert run(repair()) >= 1, "the '/' row must be repaired"
+
+    recovered = f"recovered/page-{pid}"
+    r = admin.get(f"/api/pages/{recovered}")
+    assert r.status_code == 200, r.text
+    assert admin.delete(f"/api/pages/{recovered}").status_code == 204
+
+    # Idempotent: nothing left to repair for this row.
+    assert run(repair()) == 0
+
+
 # FR-PAGE-013 — empty title/body accepted on draft create
 def test_FR_PAGE_013_empty_title_body_accepted(contributor):
     r = contributor.post(
